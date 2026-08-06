@@ -272,50 +272,29 @@ export const ControleProcedimentosView: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* CABEÇALHO DO CONTROLE DE PROCEDIMENTOS */}
-      <div className="bg-white rounded-sm p-5 sm:p-6 border border-[#D9D6D0] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-sm bg-[#5C3A22]/10 text-[#5C3A22] border border-[#5C3A22]/20">
-              Catálogo Clínico & Regras de Reativação
-            </span>
-            <span className="text-xs text-[#6E6E6E]">
-              {procedimentos.length} procedimento(s) cadastrado(s)
-            </span>
-          </div>
-          <h2 className="text-lg font-bold text-[#1A1A1A] mt-1">
-            Controle de Procedimentos, Valores & Inteligência de Vendas
-          </h2>
-          <p className="text-xs text-[#6E6E6E] mt-0.5 max-w-3xl">
-            Gerencie a tabela de valores e condições de pagamento para suporte direto do executor
-            com a paciente, configure a duração em dias para disparo automático da aba Reativação e
-            acompanhe quais procedimentos mais atraem e mais convertem.
-          </p>
-        </div>
+      {/* AÇÕES DO CONTROLE DE PROCEDIMENTOS */}
+      <div className="flex items-center justify-end gap-2.5 flex-wrap pb-1">
+        <button
+          type="button"
+          id="btn-executar-reativacao-automatica"
+          onClick={handleExecutarReativacao}
+          disabled={isProcessandoReativacao}
+          className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold uppercase tracking-wider bg-[#F2EFEA] hover:bg-[#E5E0D8] text-[#5C3A22] border border-[#D9D6D0] rounded-sm transition-all shadow-xs cursor-pointer disabled:opacity-50"
+          title="Verifica todos os pacientes em pós-procedimento e transfere automaticamente para a aba Reativação os que atingiram o prazo limite."
+        >
+          <Zap className={`w-3.5 h-3.5 text-[#5C3A22] ${isProcessandoReativacao ? 'animate-spin' : ''}`} />
+          <span>{isProcessandoReativacao ? 'Verificando...' : 'Verificar Reativações'}</span>
+        </button>
 
-        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-          <button
-            type="button"
-            id="btn-executar-reativacao-automatica"
-            onClick={handleExecutarReativacao}
-            disabled={isProcessandoReativacao}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold uppercase tracking-wider bg-[#F2EFEA] hover:bg-[#E5E0D8] text-[#5C3A22] border border-[#D9D6D0] rounded-sm transition-all shadow-xs cursor-pointer disabled:opacity-50"
-            title="Verifica todos os pacientes em pós-procedimento e transfere automaticamente para a aba Reativação os que atingiram o prazo limite."
-          >
-            <Zap className={`w-3.5 h-3.5 text-[#5C3A22] ${isProcessandoReativacao ? 'animate-spin' : ''}`} />
-            <span>{isProcessandoReativacao ? 'Verificando...' : 'Verificar Reativações'}</span>
-          </button>
-
-          <button
-            type="button"
-            id="btn-novo-procedimento"
-            onClick={abrirModalCriacao}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider bg-[#5C3A22] hover:bg-[#4A2E1B] text-white rounded-sm transition-all shadow-xs cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Novo Procedimento</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          id="btn-novo-procedimento"
+          onClick={abrirModalCriacao}
+          className="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider bg-[#5C3A22] hover:bg-[#4A2E1B] text-white rounded-sm transition-all shadow-xs cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Novo Procedimento</span>
+        </button>
       </div>
 
       {/* CARDS DE INTELIGÊNCIA COMERCIAL (DESTAQUES) */}
@@ -697,19 +676,9 @@ export const ControleProcedimentosView: React.FC = () => {
               className="bg-white rounded-sm border border-[#D9D6D0] shadow-xl w-full max-w-xl p-5 sm:p-6 space-y-4 my-8"
             >
               <div className="flex items-center justify-between border-b border-[#D9D6D0] pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-sm bg-[#F2EFEA] text-[#5C3A22] flex items-center justify-center font-bold">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-[#1A1A1A]">
-                      {procedimentoEmEdicao ? 'Editar Procedimento' : 'Novo Procedimento Clínico'}
-                    </h3>
-                    <p className="text-[11px] text-[#6E6E6E]">
-                      Defina valores, roteiro de pagamento e prazo de reativação
-                    </p>
-                  </div>
-                </div>
+                <h3 className="text-sm font-bold uppercase tracking-wide text-[#1A1A1A]">
+                  {procedimentoEmEdicao ? 'Editar Procedimento' : 'Novo Procedimento'}
+                </h3>
                 <button
                   type="button"
                   onClick={fecharModalForm}
@@ -927,17 +896,12 @@ export const ControleProcedimentosView: React.FC = () => {
             >
               <div className="flex items-center justify-between border-b border-[#D9D6D0] pb-3">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-sm bg-[#F2EFEA] text-[#5C3A22] flex items-center justify-center font-bold">
-                    <CreditCard className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-[#1A1A1A]">
-                      {procedimentoDetalhado.nome}
-                    </h3>
-                    <span className="text-[10px] font-semibold text-[#5C3A22]">
-                      {procedimentoDetalhado.categoria}
-                    </span>
-                  </div>
+                  <h3 className="text-sm font-bold uppercase tracking-wide text-[#1A1A1A]">
+                    {procedimentoDetalhado.nome}
+                  </h3>
+                  <span className="text-[10px] font-semibold text-[#5C3A22] bg-[#F2EFEA] px-2 py-0.5 rounded-xs border border-[#D9D6D0]">
+                    {procedimentoDetalhado.categoria}
+                  </span>
                 </div>
                 <button
                   type="button"

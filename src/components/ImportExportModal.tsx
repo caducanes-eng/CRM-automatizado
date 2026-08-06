@@ -652,29 +652,11 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
         id="modal-import-export-container"
         className="bg-white border border-[#D9D6D0] rounded-sm shadow-xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150 text-[#1A1A1A]"
       >
-        {/* Header do Modal com Identidade da Clínica */}
+        {/* Header do Modal */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-[#D9D6D0] bg-[#FAF8F5]">
-          <div className="flex items-center gap-3">
-            <div
-              style={{ backgroundColor: `${corPrimaria}15`, color: corPrimaria }}
-              className="p-2.5 rounded-sm border border-[#D9D6D0]"
-            >
-              <FileSpreadsheet className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base sm:text-lg font-bold uppercase tracking-wide text-[#1A1A1A]">
-                  Central de Dados & Importação de Clientes
-                </h3>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-xs bg-[#5C3A22]/10 text-[#5C3A22] uppercase tracking-wider">
-                  Base de Pacientes
-                </span>
-              </div>
-              <p className="text-xs text-[#6E6E6E] mt-0.5">
-                Exporte relatórios, importe planilhas de pacientes ou baixe a planilha modelo oficial formatada.
-              </p>
-            </div>
-          </div>
+          <h3 className="text-sm sm:text-base font-bold uppercase tracking-wide text-[#1A1A1A]">
+            Importar e Exportar Pacientes
+          </h3>
 
           <button
             type="button"

@@ -331,57 +331,30 @@ export const HistoricoComprasView: React.FC = () => {
       id="tela-historico-compras"
       className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6 animate-in fade-in duration-200"
     >
-      {/* =========================================================================
-          CABEÇALHO DA TELA
-         ========================================================================= */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-[#D9D6D0] pb-5">
-        <div className="flex items-start gap-3.5">
-          <div
-            className="w-11 h-11 rounded-sm flex items-center justify-center text-white shadow-xs shrink-0"
-            style={{ backgroundColor: corSidebar }}
-          >
-            <ShoppingBag className="w-5 h-5" style={{ color: corSecundaria }} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[#1A1A1A] uppercase">
-                Histórico de compras
-              </h2>
-              <span className="px-2.5 py-0.5 rounded-sm text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
-                {comprasValidas.length} vendas registradas
-              </span>
-            </div>
-            <p className="text-xs sm:text-sm text-[#6E6E6E] mt-0.5">
-              Registro completo de procedimentos faturados, ticket médio e inteligência de fidelização VIP
-            </p>
-          </div>
-        </div>
+      {/* Ações Rápidas no Topo */}
+      <div className="flex flex-wrap items-center justify-end gap-2 pb-1">
+        {/* Botão de Campanha de Fidelização */}
+        <button
+          id="btn-campanha-fidelizacao"
+          type="button"
+          onClick={() => setModalCampanhaFidelizacaoAberta(true)}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-sm bg-[#F2EFEA] hover:bg-[#E5E2DC] text-[#1A1A1A] border border-[#D9D6D0] text-xs font-bold uppercase tracking-wider shadow-xs transition-all cursor-pointer"
+        >
+          <Gift className="w-3.5 h-3.5 text-[#5C3A22]" />
+          <span>Campanha Fidelização VIP</span>
+        </button>
 
-        {/* Ações Rápidas no Topo */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Botão de Campanha de Fidelização */}
-          <button
-            id="btn-campanha-fidelizacao"
-            type="button"
-            onClick={() => setModalCampanhaFidelizacaoAberta(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-sm bg-[#F2EFEA] hover:bg-[#E5E2DC] text-[#1A1A1A] border border-[#D9D6D0] text-xs font-bold uppercase tracking-wider shadow-xs transition-all cursor-pointer"
-          >
-            <Gift className="w-3.5 h-3.5 text-[#5C3A22]" />
-            <span>Campanha Fidelização VIP</span>
-          </button>
-
-          {/* Botão para Lançar Nova Compra */}
-          <button
-            id="btn-lancar-nova-compra"
-            type="button"
-            onClick={() => setModalNovaCompraAberta(true)}
-            style={{ backgroundColor: corPrimaria }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-sm text-white text-xs font-bold uppercase tracking-wider shadow-xs hover:brightness-110 transition-colors cursor-pointer"
-          >
-            <Plus className="w-4 h-4 text-white" />
-            <span>Lançar Nova Compra</span>
-          </button>
-        </div>
+        {/* Botão para Lançar Nova Compra */}
+        <button
+          id="btn-lancar-nova-compra"
+          type="button"
+          onClick={() => setModalNovaCompraAberta(true)}
+          style={{ backgroundColor: corPrimaria }}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-sm text-white text-xs font-bold uppercase tracking-wider shadow-xs hover:brightness-110 transition-colors cursor-pointer"
+        >
+          <Plus className="w-4 h-4 text-white" />
+          <span>Lançar Nova Compra</span>
+        </button>
       </div>
 
       {/* =========================================================================
@@ -976,20 +949,7 @@ export const HistoricoComprasView: React.FC = () => {
               className="p-4 sm:p-5 text-white flex items-center justify-between border-b border-black/20"
               style={{ backgroundColor: corSidebar }}
             >
-              <div className="flex items-center gap-2.5">
-                <div
-                  className="w-8 h-8 rounded-sm text-white flex items-center justify-center font-bold shadow-xs"
-                  style={{ backgroundColor: corPrimaria }}
-                >
-                  <Plus className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold uppercase tracking-tight">Lançar Nova Compra</h3>
-                  <p className="text-xs text-[#D9D6D0]">
-                    Registre um procedimento e valor faturado para um paciente
-                  </p>
-                </div>
-              </div>
+              <h3 className="text-sm sm:text-base font-bold uppercase tracking-wide">Lançar Nova Compra</h3>
               <button
                 type="button"
                 onClick={() => setModalNovaCompraAberta(false)}
@@ -1120,20 +1080,7 @@ export const HistoricoComprasView: React.FC = () => {
               className="p-4 sm:p-5 text-white flex items-center justify-between border-b border-black/20"
               style={{ backgroundColor: corSidebar }}
             >
-              <div className="flex items-center gap-2.5">
-                <div
-                  className="w-8 h-8 rounded-sm text-white flex items-center justify-center font-bold shadow-xs"
-                  style={{ backgroundColor: corPrimaria }}
-                >
-                  <Gift className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold uppercase tracking-tight">Campanha de Fidelização VIP</h3>
-                  <p className="text-xs text-[#D9D6D0]">
-                    Ações de relacionamento, bônus e mimos para os clientes do Top 10
-                  </p>
-                </div>
-              </div>
+              <h3 className="text-sm sm:text-base font-bold uppercase tracking-wide">Campanha de Fidelização VIP</h3>
               <button
                 type="button"
                 onClick={() => setModalCampanhaFidelizacaoAberta(false)}

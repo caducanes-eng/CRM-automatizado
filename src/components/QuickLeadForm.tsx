@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { UserPlus, Sparkles, ArrowRight, Tag, FileSpreadsheet } from 'lucide-react';
+import { UserPlus, ArrowRight } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
 import { SituacaoLead, TODAS_SITUACOES, Lead, ProcedimentoClinica } from '../types';
 
@@ -75,32 +75,9 @@ export const QuickLeadForm: React.FC<QuickLeadFormProps> = ({ onLeadCreated, onO
           <div className="w-7 h-7 rounded-sm bg-[#5C3A22] flex items-center justify-center text-white font-bold">
             <UserPlus className="w-4 h-4 text-white" />
           </div>
-          <div>
-            <h2 className="text-xs sm:text-sm font-bold tracking-wider text-white uppercase flex items-center gap-2">
-              <span className="text-[#8A6142]">01</span>
-              <span>Cadastro Rápido de Paciente</span>
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-sm bg-[#F2EFEA]/20 text-[#F2EFEA] border border-[#F2EFEA]/30">
-                Entrada Ágil
-              </span>
-            </h2>
-          </div>
-        </div>
-        <div className="flex items-center gap-2.5">
-          {onOpenImportExport && (
-            <button
-              id="btn-quick-form-import-export"
-              type="button"
-              onClick={onOpenImportExport}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-sm text-xs font-bold uppercase tracking-wider bg-white/10 hover:bg-white/20 text-[#F2EFEA] border border-white/20 transition-all cursor-pointer"
-              title="Importar clientes por planilha, exportar dados ou baixar modelo oficial"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-[#D9D6D0]" />
-              <span>Importar / Exportar</span>
-            </button>
-          )}
-          <span className="text-xs text-[#8F887E] hidden md:block font-normal">
-            Dra. Agda Rodrigues • Harmonização Facial
-          </span>
+          <h2 className="text-xs sm:text-sm font-bold tracking-wider text-white uppercase">
+            Cadastro Rápido de Paciente
+          </h2>
         </div>
       </div>
 

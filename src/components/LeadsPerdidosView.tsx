@@ -301,51 +301,28 @@ export const LeadsPerdidosView: React.FC = () => {
       id="tela-leads-perdidos"
       className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6 animate-in fade-in duration-200"
     >
-      {/* =========================================================================
-          CABEÇALHO DA TELA
-         ========================================================================= */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-[#D9D6D0] pb-5">
-        <div className="flex items-start gap-3.5">
-          <div className="w-11 h-11 rounded-sm bg-rose-900 flex items-center justify-center text-white shadow-xs shrink-0">
-            <UserX className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[#1A1A1A] uppercase">
-                Leads perdidos
-              </h2>
-              <span className="px-2.5 py-0.5 rounded-sm text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200 uppercase tracking-wider">
-                statusVenda = "Perdido"
-              </span>
-            </div>
-            <p className="text-xs sm:text-sm text-[#6E6E6E] mt-0.5">
-              Análise de perdas, motivos de descarte e modelagem de campanhas de recuperação
-            </p>
-          </div>
-        </div>
+      {/* Ações Rápidas no Topo */}
+      <div className="flex flex-wrap items-center justify-end gap-2 pb-1">
+        {/* Botão de Campanha de Recuperação */}
+        <button
+          id="btn-abrir-modelador-campanha"
+          type="button"
+          onClick={() => setModalCampanhaAberta(true)}
+          style={{ backgroundColor: corPrimaria }}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-sm text-white text-xs font-bold uppercase tracking-wider shadow-xs hover:brightness-110 transition-all cursor-pointer"
+        >
+          <Megaphone className="w-3.5 h-3.5 text-white" />
+          <span>Modelar Campanha de Resgate</span>
+        </button>
 
-        {/* Ações Rápidas no Topo */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Botão de Campanha de Recuperação */}
-          <button
-            id="btn-abrir-modelador-campanha"
-            type="button"
-            onClick={() => setModalCampanhaAberta(true)}
-            style={{ backgroundColor: corPrimaria }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-sm text-white text-xs font-bold uppercase tracking-wider shadow-xs hover:brightness-110 transition-all cursor-pointer"
-          >
-            <Megaphone className="w-3.5 h-3.5 text-white" />
-            <span>Modelar Campanha de Resgate</span>
-          </button>
-
-          {/* Copiar Lista de Contatos */}
-          <button
-            id="btn-copiar-contatos-perdidos"
-            type="button"
-            onClick={handleCopiarContatosCampanha}
-            title="Copiar lista de telefones e dados para WhatsApp"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-sm bg-white border border-[#D9D6D0] hover:bg-[#F2EFEA] text-xs font-bold uppercase tracking-wider text-[#1A1A1A] shadow-2xs transition-colors cursor-pointer"
-          >
+        {/* Copiar Lista de Contatos */}
+        <button
+          id="btn-copiar-contatos-perdidos"
+          type="button"
+          onClick={handleCopiarContatosCampanha}
+          title="Copiar lista de telefones e dados para WhatsApp"
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-sm bg-white border border-[#D9D6D0] hover:bg-[#F2EFEA] text-xs font-bold uppercase tracking-wider text-[#1A1A1A] shadow-2xs transition-colors cursor-pointer"
+        >
             {copiadoFeedback ? (
               <>
                 <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -358,7 +335,6 @@ export const LeadsPerdidosView: React.FC = () => {
               </>
             )}
           </button>
-        </div>
       </div>
 
       {/* =========================================================================

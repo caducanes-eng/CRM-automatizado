@@ -15,6 +15,7 @@ import {
   ExternalLink,
   TrendingUp,
   AlertCircle,
+  X,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCrm } from '../context/CrmContext';
@@ -220,30 +221,9 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
       transition={{ duration: 0.15 }}
       className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6"
     >
-      {/* CABEÇALHO DA ETAPA */}
-      <div className="bg-white rounded-sm p-5 sm:p-6 border border-[#D9D6D0] shadow-xs space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-sm bg-[#F2EFEA] border border-[#D9D6D0] flex items-center justify-center shadow-xs">
-              {getIconeSituacao()}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold text-[#1A1A1A] uppercase tracking-wide flex items-center gap-2">
-                  <span className="text-[#5C3A22]">01</span>
-                  <span>{titulo}</span>
-                </h1>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-sm bg-[#F2EFEA] text-[#1A1A1A] border border-[#D9D6D0]">
-                  {metricas.total} {metricas.total === 1 ? 'paciente' : 'pacientes'}
-                </span>
-              </div>
-              <p className="text-xs text-[#6E6E6E] mt-0.5">{subtitulo}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* CARDS DE RESUMO DE STATUS */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+      {/* RESUMO DE STATUS DA CADÊNCIA */}
+      <div className="bg-white rounded-sm p-4 sm:p-5 border border-[#D9D6D0] shadow-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {/* Em Dia */}
           <button
             type="button"
@@ -334,7 +314,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
         </div>
       </div>
 
-      {/* BARRA DE FILTROS & PESQUISA */}
+      {/* BARRA DE FILTROS & PESQUISA COM MENU SUSPENSO */}
       <div className="bg-white rounded-sm p-4 border border-[#D9D6D0] shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#8F887E]" />
@@ -344,34 +324,37 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
             value={termoBusca}
             onChange={(e) => setTermoBusca(e.target.value)}
             placeholder="Buscar por paciente, responsável..."
-            className="w-full h-9 pl-9 pr-3 text-xs sm:text-sm rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/30 text-[#1A1A1A] placeholder:text-[#8F887E] focus:bg-white focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden font-medium"
+            className="w-full h-9 pl-9 pr-8 text-xs sm:text-sm rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/30 text-[#1A1A1A] placeholder:text-[#8F887E] focus:bg-white focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden font-medium"
           />
+          {termoBusca && (
+            <button
+              type="button"
+              onClick={() => setTermoBusca('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8F887E] hover:text-[#1A1A1A] cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-          <div className="flex items-center gap-1.5 text-xs text-[#1A1A1A]">
+          <label htmlFor="select-status-cadencia" className="flex items-center gap-1.5 text-xs text-[#1A1A1A] font-bold uppercase tracking-wider shrink-0 cursor-pointer">
             <Filter className="w-3.5 h-3.5 text-[#8F887E]" />
-            <span className="font-bold uppercase tracking-wider hidden sm:inline">Status:</span>
-          </div>
+            <span>Status:</span>
+          </label>
 
-          <div className="flex gap-1 overflow-x-auto pb-1 sm:pb-0">
-            {(['Todos', 'Atrasado', 'Em dia', 'Adiantado', 'Sem etapa selecionada'] as FiltroStatus[]).map(
-              (st) => (
-                <button
-                  key={st}
-                  type="button"
-                  onClick={() => setFiltroStatus(st)}
-                  className={`text-xs px-2.5 py-1 rounded-sm font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
-                    filtroStatus === st
-                      ? 'bg-[#1A1A1A] text-white shadow-xs'
-                      : 'bg-[#F2EFEA] text-[#1A1A1A] hover:bg-[#D9D6D0]'
-                  }`}
-                >
-                  {st}
-                </button>
-              )
-            )}
-          </div>
+          <select
+            id="select-status-cadencia"
+            value={filtroStatus}
+            onChange={(e) => setFiltroStatus(e.target.value as FiltroStatus)}
+            className="h-9 px-3 text-xs sm:text-sm font-medium rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer"
+          >
+            <option value="Todos">Todos ({metricas.total})</option>
+            <option value="Em dia">Em dia ({metricas.emDia})</option>
+            <option value="Atrasado">Atrasados ({metricas.atrasados})</option>
+            <option value="Adiantado">Adiantados ({metricas.adiantados})</option>
+            <option value="Sem etapa selecionada">Sem etapa ({metricas.semEtapa})</option>
+          </select>
         </div>
       </div>
 

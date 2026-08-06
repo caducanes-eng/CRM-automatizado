@@ -207,33 +207,8 @@ export const FunilConversaoView: React.FC = () => {
       id="tela-funil-conversao"
       className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6 animate-in fade-in duration-200"
     >
-      {/* =========================================================================
-          CABEÇALHO DA TELA
-         ========================================================================= */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[#D9D6D0] pb-5">
-        <div className="flex items-start gap-3.5">
-          <div
-            className="w-11 h-11 rounded-sm flex items-center justify-center text-white shadow-xs shrink-0"
-            style={{ backgroundColor: corSidebar }}
-          >
-            <Filter className="w-6 h-6" style={{ color: corSecundaria }} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#1A1A1A] uppercase">
-                Funil de Conversão
-              </h1>
-              <span className="px-2.5 py-0.5 rounded-sm text-[10px] font-bold bg-[#F2EFEA] text-[#1A1A1A] border border-[#D9D6D0] uppercase tracking-wider">
-                Métricas & Conversão
-              </span>
-            </div>
-            <p className="text-xs sm:text-sm text-[#6E6E6E] mt-0.5">
-              Acompanhamento de passagem entre etapas, volume financeiro e eficiência de conversão
-            </p>
-          </div>
-        </div>
-
-        {/* Filtro por Responsável */}
+      {/* BARRA DE FILTROS SUPERIOR */}
+      <div className="flex items-center justify-end pb-2">
         <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-sm border border-[#D9D6D0] shadow-2xs">
           <Users className="w-4 h-4 text-[#8F887E]" />
           <span className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wider">Responsável:</span>

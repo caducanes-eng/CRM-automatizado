@@ -125,78 +125,27 @@ export const NutricaoView: React.FC = () => {
       id="tela-nutricao"
       className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6 animate-in fade-in duration-200"
     >
-      {/* =========================================================================
-          CABEÇALHO DA TELA
-         ========================================================================= */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[#D9D6D0] pb-5">
-        <div className="flex items-start gap-3.5">
-          <div
-            className="w-11 h-11 rounded-sm flex items-center justify-center text-white shadow-xs shrink-0"
-            style={{ backgroundColor: corSidebar }}
-          >
-            <Sprout className="w-6 h-6" style={{ color: corSecundaria }} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[#1A1A1A] uppercase">
-                Nutrição
-              </h2>
-              <span className="px-2.5 py-0.5 rounded-sm text-[10px] font-bold bg-[#F2EFEA] text-[#1A1A1A] border border-[#D9D6D0] uppercase tracking-wider">
-                Grupo de Conteúdo
-              </span>
-            </div>
-            <p className="text-xs sm:text-sm text-[#6E6E6E] mt-0.5">
-              Gestão de pacientes em listas de transmissão e canais de relacionamento
-            </p>
-          </div>
-        </div>
-
-        {/* Ação rápida: Copiar contatos para transmissão */}
-        <div className="flex items-center gap-2">
-          <button
-            id="btn-copiar-telefones-nutricao"
-            type="button"
-            onClick={handleCopiarTelefonesAtivos}
-            title="Copiar lista de telefones de membros ativos"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-sm bg-white border border-[#D9D6D0] hover:bg-[#F8F7F4] text-xs font-bold uppercase tracking-wider text-[#1A1A1A] shadow-xs transition-colors cursor-pointer"
-          >
-            {copiadoFeedback ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="text-emerald-700">Contatos Copiados!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-3.5 h-3.5 text-[#5C3A22]" />
-                <span>Copiar Contatos Ativos</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* =========================================================================
-          BANNER INFORMATIVO ESPECÍFICO DE NUTRIÇÃO
-         ========================================================================= */}
-      <div
-        id="banner-informativo-nutricao"
-        className="p-4 rounded-sm bloco-destaque-ar border border-[#D9D6D0] shadow-xs flex items-start gap-3"
-      >
-        <div
-          className="w-6 h-6 rounded-sm text-white flex items-center justify-center shrink-0 mt-0.5"
-          style={{ backgroundColor: corSidebar }}
+      {/* Ação superior: Copiar contatos para transmissão */}
+      <div className="flex items-center justify-end pb-1">
+        <button
+          id="btn-copiar-telefones-nutricao"
+          type="button"
+          onClick={handleCopiarTelefonesAtivos}
+          title="Copiar lista de telefones de membros ativos"
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-sm bg-white border border-[#D9D6D0] hover:bg-[#F8F7F4] text-xs font-bold uppercase tracking-wider text-[#1A1A1A] shadow-xs transition-colors cursor-pointer"
         >
-          <Info className="w-3.5 h-3.5" style={{ color: corSecundaria }} />
-        </div>
-        <div className="text-xs text-[#1A1A1A] leading-relaxed">
-          <span className="font-bold text-[#5C3A22] uppercase tracking-wider text-[11px] block sm:inline mr-1">
-            Dinâmica desta etapa:
-          </span>
-          Diferente das outras etapas do CRM, na <strong>Nutrição</strong>{' '}
-          <strong>NÃO existe acompanhamento individual de contato</strong>. Trata-se de um grupo de
-          conteúdo e aquecimento da base (ex.: lista de transmissão do WhatsApp, comunidade VIP ou
-          newsletter). O controle é feito unicamente pelo status do lead no grupo.
-        </div>
+          {copiadoFeedback ? (
+            <>
+              <Check className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="text-emerald-700">Contatos Copiados!</span>
+            </>
+          ) : (
+            <>
+              <Copy className="w-3.5 h-3.5 text-[#5C3A22]" />
+              <span>Copiar Contatos Ativos</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* =========================================================================
@@ -287,30 +236,22 @@ export const NutricaoView: React.FC = () => {
           />
         </div>
 
-        {/* Filtro por Status no Grupo */}
-        <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          <span className="text-xs font-bold uppercase tracking-wider text-[#1A1A1A] mr-1 hidden md:inline flex items-center gap-1">
-            <Filter className="w-3 h-3 text-[#5C3A22]" />
-            Status:
-          </span>
-          {(['Todos', 'Ativo', 'Removido'] as const).map((status) => {
-            const isSelected = filtroStatus === status;
-            return (
-              <button
-                key={status}
-                type="button"
-                onClick={() => setFiltroStatus(status)}
-                style={isSelected ? { backgroundColor: corSidebar } : {}}
-                className={`px-3 py-1.5 rounded-sm text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer ${
-                  isSelected
-                    ? 'text-white shadow-xs'
-                    : 'bg-[#F2EFEA] hover:bg-[#E5E2DC] text-[#1A1A1A] border border-[#D9D6D0]'
-                }`}
-              >
-                {status === 'Todos' ? `Todos (${totalLeads})` : status === 'Ativo' ? `Ativos (${totalAtivos})` : `Removidos (${totalRemovidos})`}
-              </button>
-            );
-          })}
+        {/* Filtro por Status no Grupo (Menu Suspenso) */}
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+          <label htmlFor="select-status-nutricao" className="text-xs font-bold uppercase tracking-wider text-[#1A1A1A] flex items-center gap-1 shrink-0 cursor-pointer">
+            <Filter className="w-3.5 h-3.5 text-[#5C3A22]" />
+            <span>Status:</span>
+          </label>
+          <select
+            id="select-status-nutricao"
+            value={filtroStatus}
+            onChange={(e) => setFiltroStatus(e.target.value as 'Todos' | 'Ativo' | 'Removido')}
+            className="h-9 px-3 text-xs sm:text-sm font-medium rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer"
+          >
+            <option value="Todos">Todos ({totalLeads})</option>
+            <option value="Ativo">Ativos ({totalAtivos})</option>
+            <option value="Removido">Removidos ({totalRemovidos})</option>
+          </select>
         </div>
       </div>
 

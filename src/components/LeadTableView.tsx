@@ -15,6 +15,7 @@ import {
   FileSpreadsheet,
   Download,
   Upload,
+  UserPlus,
 } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
 import {
@@ -29,6 +30,7 @@ import { ImportExportModal } from './ImportExportModal';
 
 interface LeadTableViewProps {
   onOpenFicha?: (leadId: string) => void;
+  onOpenNovoPaciente?: () => void;
 }
 
 type SortField =
@@ -97,7 +99,7 @@ export function getSituacaoEstilo(situacao: SituacaoLead | string) {
   }
 }
 
-export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha }) => {
+export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpenNovoPaciente }) => {
   const { leads, compras, atualizarLead, abrirFichaLead } = useCrm();
 
   const handleOpenFichaClick = (leadId: string) => {
@@ -254,19 +256,15 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha }) => 
   return (
     <div id="bloco-tabela-leads" className="bg-white rounded-sm border border-[#D9D6D0] shadow-xs overflow-hidden">
       {/* Header com Filtros */}
-      <div className="p-4 sm:p-5 border-b border-[#D9D6D0] space-y-4">
+      <div className="p-4 sm:p-5 border-b border-[#D9D6D0] space-y-3">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm sm:text-base font-bold tracking-wide text-[#1A1A1A] uppercase flex items-center gap-2">
-              <span className="text-[#5C3A22]">02</span>
-              <span>Pacientes Cadastrados</span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm bg-[#F2EFEA] text-[#1A1A1A] border border-[#D9D6D0]">
-                {leadsFiltradosEOrdenados.length} de {leads.length}
-              </span>
-            </h3>
-            <p className="text-xs text-[#6E6E6E]">
-              Clique no nome do paciente para abrir a ficha clínica e registrar procedimentos.
-            </p>
+          <div className="flex items-center gap-2">
+            <span className="text-xs sm:text-sm font-bold tracking-wide text-[#1A1A1A] uppercase">
+              Pacientes
+            </span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm bg-[#F2EFEA] text-[#1A1A1A] border border-[#D9D6D0]">
+              {leadsFiltradosEOrdenados.length} de {leads.length}
+            </span>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -298,89 +296,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha }) => 
           </div>
         </div>
 
-        {/* Pílulas de Seleção Rápida por Status com Coloração Neutra e Alto Contraste */}
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-[#8F887E] mr-1">
-            Status:
-          </span>
-          <button
-            type="button"
-            onClick={() => setFiltroStatusVenda('todos')}
-            className={`px-3 py-1 rounded-sm text-xs font-bold uppercase tracking-wider border transition-all cursor-pointer flex items-center gap-1.5 ${
-              filtroStatusVenda === 'todos'
-                ? 'bg-[#1A1A1A] text-white border-[#1A1A1A] shadow-2xs'
-                : 'bg-white text-[#6E6E6E] border-[#D9D6D0] hover:bg-[#F2EFEA]'
-            }`}
-          >
-            <span>Todos</span>
-            <span
-              className={`px-1.5 py-0.2 rounded-xs text-[10px] font-mono ${
-                filtroStatusVenda === 'todos' ? 'bg-white/20 text-white' : 'bg-[#EAE6DF] text-[#1A1A1A]'
-              }`}
-            >
-              {contagensStatus.total}
-            </span>
-          </button>
-
-          {/* Em processo - Neutro quente / Taupe */}
-          <button
-            type="button"
-            onClick={() =>
-              setFiltroStatusVenda(filtroStatusVenda === 'Em processo' ? 'todos' : 'Em processo')
-            }
-            className={`px-3 py-1 rounded-sm text-xs font-bold uppercase tracking-wider border transition-all cursor-pointer flex items-center gap-1.5 ${
-              filtroStatusVenda === 'Em processo'
-                ? 'bg-[#F5EFEB] text-[#5C3A22] border-[#5C3A22] ring-1 ring-[#5C3A22] shadow-2xs'
-                : 'bg-white text-[#5C3A22] border-[#D9CDBF] hover:bg-[#F5EFEB]'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-[#8A6142]" />
-            <span>Em processo</span>
-            <span className="px-1.5 py-0.2 rounded-xs text-[10px] font-mono bg-[#EAE2D8] text-[#5C3A22]">
-              {contagensStatus.emProcesso}
-            </span>
-          </button>
-
-          {/* Venda feita - Neutro sálvia / Oliva elegante */}
-          <button
-            type="button"
-            onClick={() =>
-              setFiltroStatusVenda(filtroStatusVenda === 'Venda feita' ? 'todos' : 'Venda feita')
-            }
-            className={`px-3 py-1 rounded-sm text-xs font-bold uppercase tracking-wider border transition-all cursor-pointer flex items-center gap-1.5 ${
-              filtroStatusVenda === 'Venda feita'
-                ? 'bg-[#EBF3EE] text-[#1E4D30] border-[#1E4D30] ring-1 ring-[#1E4D30] shadow-2xs'
-                : 'bg-white text-[#1E4D30] border-[#BCD6C6] hover:bg-[#EBF3EE]'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-[#2E6F47]" />
-            <span>Venda feita</span>
-            <span className="px-1.5 py-0.2 rounded-xs text-[10px] font-mono bg-[#D7E8DC] text-[#1E4D30]">
-              {contagensStatus.vendaFeita}
-            </span>
-          </button>
-
-          {/* Perdido - Neutro terracota acinzentado */}
-          <button
-            type="button"
-            onClick={() =>
-              setFiltroStatusVenda(filtroStatusVenda === 'Perdido' ? 'todos' : 'Perdido')
-            }
-            className={`px-3 py-1 rounded-sm text-xs font-bold uppercase tracking-wider border transition-all cursor-pointer flex items-center gap-1.5 ${
-              filtroStatusVenda === 'Perdido'
-                ? 'bg-[#F5EEED] text-[#7A322C] border-[#7A322C] ring-1 ring-[#7A322C] shadow-2xs'
-                : 'bg-white text-[#7A322C] border-[#DAC0BD] hover:bg-[#F5EEED]'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-[#9C433B]" />
-            <span>Perdido</span>
-            <span className="px-1.5 py-0.2 rounded-xs text-[10px] font-mono bg-[#EBD8D6] text-[#7A322C]">
-              {contagensStatus.perdido}
-            </span>
-          </button>
-        </div>
-
-        {/* Barra de Filtros e Busca */}
+        {/* Barra de Filtros e Busca com Menus Suspensos */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 pt-1">
           {/* Busca por texto */}
           <div className="lg:col-span-5 relative">
@@ -391,18 +307,29 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha }) => 
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar por paciente, procedimento ou responsável..."
-              className="w-full h-9 pl-9 pr-3 text-xs rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/30 text-[#1A1A1A] focus:bg-white focus:outline-hidden focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] transition-all placeholder:text-[#8F887E]"
+              className="w-full h-9 pl-9 pr-8 text-xs rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/30 text-[#1A1A1A] focus:bg-white focus:outline-hidden focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] transition-all placeholder:text-[#8F887E]"
             />
+            {busca && (
+              <button
+                type="button"
+                onClick={() => setBusca('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8F887E] hover:text-[#1A1A1A] cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
-          {/* Filtro por Situação */}
+          {/* Filtro por Situação (Menu Suspenso) */}
           <div className="lg:col-span-4 flex items-center gap-2">
-            <span className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wider shrink-0">Situação:</span>
+            <label htmlFor="filtro-situacao-select" className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wider shrink-0">
+              Situação:
+            </label>
             <select
               id="filtro-situacao-select"
               value={filtroSituacao}
               onChange={(e) => setFiltroSituacao(e.target.value)}
-              className="w-full h-9 px-2.5 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:outline-hidden focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] transition-all"
+              className="w-full h-9 px-2.5 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:outline-hidden focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] transition-all cursor-pointer font-medium"
             >
               <option value="todos">Todas as Situações</option>
               {TODAS_SITUACOES.map((sit) => (
@@ -413,21 +340,21 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha }) => 
             </select>
           </div>
 
-          {/* Filtro por Status da Venda */}
+          {/* Filtro por Status da Venda (Menu Suspenso com contagens) */}
           <div className="lg:col-span-3 flex items-center gap-2">
-            <span className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wider shrink-0">Status:</span>
+            <label htmlFor="filtro-status-venda-select" className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wider shrink-0">
+              Status:
+            </label>
             <select
               id="filtro-status-venda-select"
               value={filtroStatusVenda}
               onChange={(e) => setFiltroStatusVenda(e.target.value)}
-              className="w-full h-9 px-2.5 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:outline-hidden focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] transition-all"
+              className="w-full h-9 px-2.5 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:outline-hidden focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] transition-all cursor-pointer font-medium"
             >
-              <option value="todos">Todos os Status</option>
-              {TODOS_STATUS_VENDA.map((st) => (
-                <option key={st} value={st}>
-                  {st}
-                </option>
-              ))}
+              <option value="todos">Todos ({contagensStatus.total})</option>
+              <option value="Em processo">Em processo ({contagensStatus.emProcesso})</option>
+              <option value="Venda feita">Venda feita ({contagensStatus.vendaFeita})</option>
+              <option value="Perdido">Perdido ({contagensStatus.perdido})</option>
             </select>
           </div>
         </div>

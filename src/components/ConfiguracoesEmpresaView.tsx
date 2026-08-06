@@ -292,44 +292,21 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
       transition={{ duration: 0.15 }}
       className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6"
     >
-      {/* CABEÇALHO */}
-      <div className="bg-white rounded-sm p-5 sm:p-6 border border-[#D9D6D0] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-sm bg-[#F2EFEA] border border-[#D9D6D0] flex items-center justify-center text-[#5C3A22] shadow-xs shrink-0">
-            <Building2 className="w-6 h-6 text-[#5C3A22]" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base sm:text-lg font-bold text-[#1A1A1A] uppercase tracking-wide flex items-center gap-2">
-                <span className="text-[#5C3A22]">08</span>
-                <span>Configurações da Clínica & Identidade Visual</span>
-              </h1>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-sm bg-[#5C3A22]/10 text-[#5C3A22] border border-[#5C3A22]/30">
-                Gestão Master
-              </span>
-            </div>
-            <p className="text-xs text-[#6E6E6E] mt-0.5">
-              Personalize o logotipo, informações da empresa, paleta de cores e estética global da plataforma.
-            </p>
-          </div>
+      {/* Status Toast */}
+      {mensagemStatus && (
+        <div
+          className={`px-3 py-2 rounded-sm text-xs font-semibold flex items-center gap-2 border shadow-xs animate-fade-in ${
+            mensagemStatus.tipo === 'sucesso'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+              : mensagemStatus.tipo === 'erro'
+              ? 'bg-rose-50 border-rose-300 text-rose-800'
+              : 'bg-[#F2EFEA] border-[#D9D6D0] text-[#1A1A1A]'
+          }`}
+        >
+          <CheckCircle2 className="w-4 h-4 shrink-0 text-[#5C3A22]" />
+          <span>{mensagemStatus.texto}</span>
         </div>
-
-        {/* Status Toast */}
-        {mensagemStatus && (
-          <div
-            className={`px-3 py-2 rounded-sm text-xs font-semibold flex items-center gap-2 border shadow-xs animate-fade-in ${
-              mensagemStatus.tipo === 'sucesso'
-                ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
-                : mensagemStatus.tipo === 'erro'
-                ? 'bg-rose-50 border-rose-300 text-rose-800'
-                : 'bg-[#F2EFEA] border-[#D9D6D0] text-[#1A1A1A]'
-            }`}
-          >
-            <CheckCircle2 className="w-4 h-4 shrink-0 text-[#5C3A22]" />
-            <span>{mensagemStatus.texto}</span>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* ABAS DE NAVEGAÇÃO */}
       <div className="flex border-b border-[#D9D6D0] bg-white rounded-t-sm px-2 sm:px-4 pt-2 gap-1 overflow-x-auto">

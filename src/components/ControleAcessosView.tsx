@@ -334,41 +334,20 @@ export const ControleAcessosView: React.FC = () => {
 
       {/* Header Principal do Módulo do Gestor */}
       <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#0B1F3A] text-[#B8960C] border border-[#B8960C]/30">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                Painel do Gestor Geral
-              </span>
-              <span className="text-xs text-slate-400 font-medium hidden sm:inline">•</span>
-              <span className="text-xs text-slate-500 font-medium hidden sm:inline">
-                Controle de Acessos & Credenciais
-              </span>
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight text-[#0B1F3A]">
-              Gestão de Colaboradores & Níveis de Acesso
-            </h1>
-            <p className="text-sm text-slate-600 max-w-3xl">
-              Crie as credenciais de acesso da equipe da clínica, defina cargos, senhas padrão de primeiro acesso e configure as permissões de cada colaborador em cada etapa do sistema.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2.5 shrink-0">
-            <button
-              id="btn-criar-colaborador"
-              type="button"
-              onClick={handleAbrirCriar}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#0B1F3A] hover:bg-[#152e52] text-white font-semibold text-sm rounded-xl shadow-md transition-colors cursor-pointer border border-[#B8960C]/30"
-            >
-              <UserPlus className="w-4 h-4 text-[#B8960C]" />
-              <span>Novo Colaborador</span>
-            </button>
-          </div>
+        <div className="flex items-center justify-end">
+          <button
+            id="btn-criar-colaborador"
+            type="button"
+            onClick={handleAbrirCriar}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#0B1F3A] hover:bg-[#152e52] text-white font-semibold text-sm rounded-xl shadow-md transition-colors cursor-pointer border border-[#B8960C]/30"
+          >
+            <UserPlus className="w-4 h-4 text-[#B8960C]" />
+            <span>Novo Colaborador</span>
+          </button>
         </div>
 
         {/* Métricas e Resumo Rápido */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-slate-100">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-100">
           <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100">
             <p className="text-xs font-medium text-slate-500">Colaboradores Ativos</p>
             <p className="text-xl font-bold text-[#0B1F3A] mt-0.5">{totalAtivos}</p>
