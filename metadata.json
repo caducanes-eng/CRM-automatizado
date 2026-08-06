@@ -1,0 +1,6 @@
+{
+  "name": "CRM Clínica de Estética",
+  "description": "CRM inteligente e gestão automatizada de pacientes para Dra. Agda Rodrigues – Harmonização Facial.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

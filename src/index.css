@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+:root {
+  --cor-primaria: #5C3A22;
+  --cor-secundaria: #8A6142;
+  --cor-sidebar: #1A1A1A;
+  --cor-sidebar-texto: #F2EFEA;
+  --cor-fundo-destaque: #F2EFEA;
+  --cor-borda: #D9D6D0;
+  --cor-texto: #1A1A1A;
+}
+
+@layer base {
+  * {
+    font-family: 'Montserrat', sans-serif;
+  }
+
+  body {
+    background-color: #FFFFFF;
+    color: var(--cor-texto, #1A1A1A);
+  }
+}
+
+/* Utilitários da Identidade Visual & Estética Customizável */
+.font-montserrat {
+  font-family: 'Montserrat', sans-serif;
+}
+
+/* Bloco de destaque oficial dinâmico: fundo de destaque + barra lateral esquerda primária */
+.bloco-destaque-ar {
+  background-color: var(--cor-fundo-destaque, #F2EFEA);
+  border-left: 4px solid var(--cor-primaria, #5C3A22);
+  color: var(--cor-texto, #1A1A1A);
+}
+
+/* Cabeçalho de tabela oficial: fundo estrutural/sidebar e texto branco */
+.tabela-ar-thead {
+  background-color: var(--cor-sidebar, #1A1A1A);
+  color: #FFFFFF;
+}
+
+/* Borda neutra oficial */
+.borda-neutra-ar {
+  border-color: var(--cor-borda, #D9D6D0);
+}
+
+/* Classes utilitárias com variáveis CSS */
+.bg-primaria {
+  background-color: var(--cor-primaria, #5C3A22);
+}
+
+.text-primaria {
+  color: var(--cor-primaria, #5C3A22);
+}
+
+.border-primaria {
+  border-color: var(--cor-primaria, #5C3A22);
+}
+
+.bg-secundaria {
+  background-color: var(--cor-secundaria, #8A6142);
+}
+
+.text-secundaria {
+  color: var(--cor-secundaria, #8A6142);
+}
+
+.bg-fundo-destaque {
+  background-color: var(--cor-fundo-destaque, #F2EFEA);
+}
+
+.bg-sidebar-custom {
+  background-color: var(--cor-sidebar, #1A1A1A);
+}
+
+

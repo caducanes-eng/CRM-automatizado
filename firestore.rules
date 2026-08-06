@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Permite leitura e escrita para equipe da clínica autenticada no Firebase
+    match /leads/{leadId} {
+      allow read, write: if true;
+    }
+    match /fichas/{fichaId} {
+      allow read, write: if true;
+    }
+    match /compras/{compraId} {
+      allow read, write: if true;
+    }
+    match /usuarios/{usuarioId} {
+      allow read, write: if true;
+    }
+    match /configuracoes/{configId} {
+      allow read, write: if true;
+    }
+  }
+}

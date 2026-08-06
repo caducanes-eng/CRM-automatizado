@@ -1,0 +1,89 @@
+{
+  "entities": {
+    "Lead": {
+      "collection": "leads",
+      "fields": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "canal": { "type": "string" },
+        "interesse": { "type": "string" },
+        "situacao": { "type": "string" },
+        "responsavel": { "type": "string" },
+        "prioridade": { "type": "string" },
+        "motivoPerda": { "type": "string" },
+        "statusNutricao": { "type": "string" },
+        "dataEntrada": { "type": "string" },
+        "valorEstimado": { "type": "number" },
+        "cadenciaEtapaAtual": { "type": "number" },
+        "cadenciaUltimaData": { "type": "string" },
+        "cadenciaProximaData": { "type": "string" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "deleted_at": { "type": "string" },
+        "version": { "type": "number" }
+      }
+    },
+    "FichaLead": {
+      "collection": "fichas",
+      "fields": {
+        "id": { "type": "string" },
+        "leadId": { "type": "string" },
+        "nome": { "type": "string" },
+        "telefone": { "type": "string" },
+        "email": { "type": "string" },
+        "instagram": { "type": "string" },
+        "cidade": { "type": "string" },
+        "dataNascimento": { "type": "string" },
+        "cpf": { "type": "string" },
+        "profissao": { "type": "string" },
+        "procedimentoInteresse": { "type": "string" },
+        "canalOrigem": { "type": "string" },
+        "responsavel": { "type": "string" },
+        "situacaoAtual": { "type": "string" },
+        "prioridade": { "type": "string" },
+        "valorEstimado": { "type": "number" },
+        "observacoes": { "type": "string" },
+        "queixaPrincipal": { "type": "string" },
+        "historicoTratamentos": { "type": "string" },
+        "alergiasRestricoes": { "type": "string" },
+        "expectativaResultado": { "type": "string" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "deleted_at": { "type": "string" },
+        "version": { "type": "number" }
+      }
+    },
+    "Compra": {
+      "collection": "compras",
+      "fields": {
+        "id": { "type": "string" },
+        "leadId": { "type": "string" },
+        "data": { "type": "string" },
+        "procedimento": { "type": "string" },
+        "valor": { "type": "number" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "deleted_at": { "type": "string" },
+        "version": { "type": "number" }
+      }
+    },
+    "ConfiguracoesEmpresa": {
+      "collection": "configuracoes",
+      "fields": {
+        "nomeEmpresa": { "type": "string" },
+        "subtitulo": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "tipoLogo": { "type": "string" },
+        "monogramaIniciais": { "type": "string" },
+        "cnpj": { "type": "string" },
+        "registroProfissional": { "type": "string" },
+        "telefone": { "type": "string" },
+        "email": { "type": "string" },
+        "endereco": { "type": "string" },
+        "horarioFuncionamento": { "type": "string" },
+        "unidadePadrao": { "type": "string" },
+        "updated_at": { "type": "string" }
+      }
+    }
+  }
+}
