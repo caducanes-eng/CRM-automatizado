@@ -25,6 +25,7 @@ import {
   calcularDiasCorridos,
   calcularEtapaEsperada,
   calcularStatusCadencia,
+  verificarSeDeveContatarHoje,
   obterOpcoesCadenciaPorSituacao,
   StatusCadencia,
 } from '../utils/cadencia';
@@ -35,7 +36,7 @@ interface CadenciaViewProps {
   subtitulo: string;
 }
 
-type FiltroStatus = 'Todos' | StatusCadencia;
+type FiltroStatus = 'Todos' | 'Contatar hoje' | StatusCadencia;
 
 export const CadenciaView: React.FC<CadenciaViewProps> = ({
   situacao,
@@ -92,6 +93,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
       const etapaAtual = lead.etapaPorSituacao?.[situacao] || '';
       const etapaEsperada = calcularEtapaEsperada(situacao, diasCorridos);
       const statusCadencia = calcularStatusCadencia(situacao, etapaAtual, etapaEsperada);
+      const deveContatarHoje = verificarSeDeveContatarHoje(situacao, diasCorridos, statusCadencia, etapaAtual);
 
       return {
         ...lead,
@@ -99,6 +101,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
         etapaAtual,
         etapaEsperada,
         statusCadencia,
+        deveContatarHoje,
       };
     });
   }, [leadsDaSituacao, situacao]);
@@ -106,6 +109,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
   // 3. Métricas de resumo
   const metricas = useMemo(() => {
     const total = leadsProcessados.length;
+    const contatarHoje = leadsProcessados.filter((l) => l.deveContatarHoje).length;
     const emDia = leadsProcessados.filter((l) => l.statusCadencia === 'Em dia').length;
     const atrasados = leadsProcessados.filter((l) => l.statusCadencia === 'Atrasado').length;
     const adiantados = leadsProcessados.filter((l) => l.statusCadencia === 'Adiantado').length;
@@ -113,7 +117,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
       (l) => l.statusCadencia === 'Sem etapa selecionada'
     ).length;
 
-    return { total, emDia, atrasados, adiantados, semEtapa };
+    return { total, contatarHoje, emDia, atrasados, adiantados, semEtapa };
   }, [leadsProcessados]);
 
   // 4. Filtragem e ordenação da tabela
@@ -131,7 +135,11 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
 
         // Filtro por status
         if (filtroStatus !== 'Todos') {
-          if (lead.statusCadencia !== filtroStatus) return false;
+          if (filtroStatus === 'Contatar hoje') {
+            if (!lead.deveContatarHoje) return false;
+          } else if (lead.statusCadencia !== filtroStatus) {
+            return false;
+          }
         }
 
         return true;
@@ -223,9 +231,32 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
     >
       {/* RESUMO DE STATUS DA CADÊNCIA */}
       <div className="bg-white rounded-sm p-4 sm:p-5 border border-[#D9D6D0] shadow-xs">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {/* Contatar Hoje */}
+          <button
+            id="card-filtro-contatar-hoje"
+            type="button"
+            onClick={() => setFiltroStatus(filtroStatus === 'Contatar hoje' ? 'Todos' : 'Contatar hoje')}
+            className={`p-3 rounded-sm border text-left transition-all cursor-pointer ${
+              filtroStatus === 'Contatar hoje'
+                ? 'bg-amber-50 border-amber-600 ring-1 ring-amber-600 shadow-xs'
+                : 'bg-amber-50/40 border-amber-200 hover:bg-amber-50'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wider">
+                Contatar Hoje
+              </span>
+              <Calendar className="w-4 h-4 text-amber-700" />
+            </div>
+            <p className="text-xl sm:text-2xl font-bold text-amber-950 mt-1">
+              {metricas.contatarHoje}
+            </p>
+          </button>
+
           {/* Em Dia */}
           <button
+            id="card-filtro-em-dia"
             type="button"
             onClick={() => setFiltroStatus(filtroStatus === 'Em dia' ? 'Todos' : 'Em dia')}
             className={`p-3 rounded-sm border text-left transition-all cursor-pointer ${
@@ -247,6 +278,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
 
           {/* Atrasados */}
           <button
+            id="card-filtro-atrasados"
             type="button"
             onClick={() => setFiltroStatus(filtroStatus === 'Atrasado' ? 'Todos' : 'Atrasado')}
             className={`p-3 rounded-sm border text-left transition-all cursor-pointer ${
@@ -268,6 +300,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
 
           {/* Adiantados */}
           <button
+            id="card-filtro-adiantados"
             type="button"
             onClick={() => setFiltroStatus(filtroStatus === 'Adiantado' ? 'Todos' : 'Adiantado')}
             className={`p-3 rounded-sm border text-left transition-all cursor-pointer ${
@@ -289,6 +322,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
 
           {/* Sem Etapa */}
           <button
+            id="card-filtro-sem-etapa"
             type="button"
             onClick={() =>
               setFiltroStatus(
@@ -349,7 +383,8 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
             onChange={(e) => setFiltroStatus(e.target.value as FiltroStatus)}
             className="h-9 px-3 text-xs sm:text-sm font-medium rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer"
           >
-            <option value="Todos">Todos ({metricas.total})</option>
+            <option value="Todos">Todos os status ({metricas.total})</option>
+            <option value="Contatar hoje">Contatar hoje ({metricas.contatarHoje})</option>
             <option value="Em dia">Em dia ({metricas.emDia})</option>
             <option value="Atrasado">Atrasados ({metricas.atrasados})</option>
             <option value="Adiantado">Adiantados ({metricas.adiantados})</option>

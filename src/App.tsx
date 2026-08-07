@@ -49,17 +49,16 @@ export default function App() {
   // 1. Tela de Carregamento Inicial do Firebase Auth
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#F2EFEA] flex flex-col items-center justify-center text-[#1A1A1A] space-y-4">
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center text-[#1A1A1A] space-y-4">
         {config.tipoLogo === 'imagem' && config.logoUrl ? (
           <img
             src={config.logoUrl}
             alt={config.nomeEmpresa}
-            className="max-h-16 max-w-[220px] object-contain rounded-xs animate-pulse"
+            className="max-h-24 max-w-[400px] object-contain border-none rounded-none shadow-none animate-pulse"
           />
         ) : (
           <div
-            style={{ borderBottomColor: corPrimaria }}
-            className="w-14 h-14 rounded-sm bg-[#1A1A1A] text-white flex items-center justify-center font-bold text-xl tracking-wider border-b-2 shadow-sm animate-pulse"
+            className="w-20 h-20 bg-[#1A1A1A] text-white flex items-center justify-center font-bold text-2xl tracking-wider border-none rounded-none shadow-none animate-pulse"
           >
             {config.monogramaIniciais || 'AR'}
           </div>

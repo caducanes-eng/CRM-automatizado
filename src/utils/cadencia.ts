@@ -177,3 +177,43 @@ export function calcularStatusCadencia(
 
   return 'Adiantado';
 }
+
+/**
+ * Verifica se a paciente deve ser contatada no dia de hoje.
+ * - Leads atrasados ou sem etapa selecionada
+ * - Leads em dia que atingiram exatamente a data prevista de um marco de contato da cadência
+ */
+export function verificarSeDeveContatarHoje(
+  situacao: SituacaoLead,
+  diasCorridos: number,
+  statusCadencia: StatusCadencia,
+  etapaAtual?: string | null
+): boolean {
+  // 1. Se o lead está atrasado ou sem nenhuma etapa selecionada, precisa de contato urgente hoje
+  if (statusCadencia === 'Atrasado' || statusCadencia === 'Sem etapa selecionada') {
+    return true;
+  }
+
+  // 2. Se o lead está adiantado (já avançou contatos à frente), não exige novo contato hoje
+  if (statusCadencia === 'Adiantado') {
+    return false;
+  }
+
+  // 3. Se o lead está em dia, verifica se a data de hoje coincide com um dos marcos oficiais da cadência
+  if (situacao === 'Pós procedimento') {
+    const diasContato = [0, 1, 7, 15, 29];
+    return diasContato.includes(diasCorridos);
+  }
+
+  if (
+    situacao === 'Em captação' ||
+    situacao === 'Pós consulta' ||
+    situacao === 'Reativação'
+  ) {
+    const diasContatoPadrao = [0, 1, 3, 5, 9, 17];
+    return diasContatoPadrao.includes(diasCorridos);
+  }
+
+  // Demais situações gerais (ex: acabou de entrar)
+  return diasCorridos === 0 || diasCorridos === 1;
+}

@@ -18,6 +18,10 @@ import {
   UserPlus,
   RotateCcw,
   Sliders,
+  Calendar,
+  AlertCircle,
+  TrendingUp,
+  AlertTriangle,
 } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
 import { useEmpresa } from '../context/EmpresaContext';
@@ -30,6 +34,13 @@ import {
   TODOS_STATUS_VENDA,
 } from '../types';
 import { formatarMoeda, formatarDataBR } from '../utils/formatters';
+import {
+  calcularDiasCorridos,
+  calcularEtapaEsperada,
+  calcularStatusCadencia,
+  verificarSeDeveContatarHoje,
+  StatusCadencia,
+} from '../utils/cadencia';
 import { ImportExportModal } from './ImportExportModal';
 
 interface LeadTableViewProps {
@@ -277,6 +288,47 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
     return { total, emProcesso, vendaFeita, perdido };
   }, [leads]);
 
+  // Contagens e cálculos de cadência para todos os leads
+  const [filtroCadencia, setFiltroCadencia] = useState<
+    'todos' | 'contatar_hoje' | 'em_dia' | 'atrasados' | 'adiantados' | 'sem_etapa'
+  >('todos');
+
+  const leadsComCadencia = useMemo(() => {
+    return leads.map((lead) => {
+      const diasCorridos = calcularDiasCorridos(lead.dataEntrada);
+      const etapaAtual = lead.etapaPorSituacao?.[lead.situacao] || '';
+      const etapaEsperada = calcularEtapaEsperada(lead.situacao, diasCorridos);
+      const statusCadencia = calcularStatusCadencia(lead.situacao, etapaAtual, etapaEsperada);
+      const deveContatarHoje = verificarSeDeveContatarHoje(
+        lead.situacao,
+        diasCorridos,
+        statusCadencia,
+        etapaAtual
+      );
+
+      return {
+        ...lead,
+        diasCorridos,
+        etapaAtual,
+        etapaEsperada,
+        statusCadencia,
+        deveContatarHoje,
+      };
+    });
+  }, [leads]);
+
+  const contagensCadencia = useMemo(() => {
+    const validos = leadsComCadencia.filter((l) => !l.deleted_at);
+    const total = validos.length;
+    const contatarHoje = validos.filter((l) => l.deveContatarHoje).length;
+    const emDia = validos.filter((l) => l.statusCadencia === 'Em dia').length;
+    const atrasados = validos.filter((l) => l.statusCadencia === 'Atrasado').length;
+    const adiantados = validos.filter((l) => l.statusCadencia === 'Adiantado').length;
+    const semEtapa = validos.filter((l) => l.statusCadencia === 'Sem etapa selecionada').length;
+
+    return { total, contatarHoje, emDia, atrasados, adiantados, semEtapa };
+  }, [leadsComCadencia]);
+
   // Estados de Ordenação
   const [sortField, setSortField] = useState<SortField>('dataEntrada');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -319,7 +371,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
 
   // Filtragem e Ordenação
   const leadsFiltradosEOrdenados = useMemo(() => {
-    return leads
+    return leadsComCadencia
       .filter((lead) => {
         // Filtro por busca de texto
         if (busca.trim()) {
@@ -338,6 +390,25 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
         // Filtro por Status da Venda
         if (filtroStatusVenda !== 'todos' && lead.statusVenda !== filtroStatusVenda) {
           return false;
+        }
+
+        // Filtro por Cadência (Contatar hoje / Em dia / Atrasados / Adiantados / Sem etapa)
+        if (filtroCadencia !== 'todos') {
+          if (filtroCadencia === 'contatar_hoje' && !lead.deveContatarHoje) {
+            return false;
+          }
+          if (filtroCadencia === 'em_dia' && lead.statusCadencia !== 'Em dia') {
+            return false;
+          }
+          if (filtroCadencia === 'atrasados' && lead.statusCadencia !== 'Atrasado') {
+            return false;
+          }
+          if (filtroCadencia === 'adiantados' && lead.statusCadencia !== 'Adiantado') {
+            return false;
+          }
+          if (filtroCadencia === 'sem_etapa' && lead.statusCadencia !== 'Sem etapa selecionada') {
+            return false;
+          }
         }
 
         return true;
@@ -391,7 +462,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
         if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
         return 0;
       });
-  }, [leads, busca, filtroSituacao, filtroStatusVenda, sortField, sortDirection, totaisCompradosMap]);
+  }, [leadsComCadencia, busca, filtroSituacao, filtroStatusVenda, filtroCadencia, sortField, sortDirection, totaisCompradosMap]);
 
   // Render do indicador de ordenação de alto contraste
   const renderSortIcon = (field: SortField) => {
@@ -415,6 +486,123 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
 
   return (
     <div id="bloco-tabela-leads" className="bg-white rounded-sm border border-[#D9D6D0] shadow-xs overflow-hidden">
+      {/* Indicadores Rápidos de Cadência e Contato */}
+      <div className="p-4 sm:p-5 border-b border-[#D9D6D0] bg-[#FAF8F5]/60">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {/* Contatar Hoje */}
+          <button
+            id="card-filtro-leads-contatar-hoje"
+            type="button"
+            onClick={() =>
+              setFiltroCadencia(filtroCadencia === 'contatar_hoje' ? 'todos' : 'contatar_hoje')
+            }
+            className={`p-3 rounded-sm border text-left transition-all cursor-pointer ${
+              filtroCadencia === 'contatar_hoje'
+                ? 'bg-amber-50 border-amber-600 ring-1 ring-amber-600 shadow-xs'
+                : 'bg-amber-50/40 border-amber-200 hover:bg-amber-50'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wider">
+                Contatar Hoje
+              </span>
+              <Calendar className="w-4 h-4 text-amber-700" />
+            </div>
+            <p className="text-xl sm:text-2xl font-bold text-amber-950 mt-1">
+              {contagensCadencia.contatarHoje}
+            </p>
+          </button>
+
+          {/* Em Dia */}
+          <button
+            id="card-filtro-leads-em-dia"
+            type="button"
+            onClick={() => setFiltroCadencia(filtroCadencia === 'em_dia' ? 'todos' : 'em_dia')}
+            className={`p-3 rounded-sm border text-left transition-all cursor-pointer ${
+              filtroCadencia === 'em_dia'
+                ? 'bg-white border-[#5C3A22] ring-1 ring-[#5C3A22] shadow-xs'
+                : 'bg-white/80 border-[#D9D6D0] hover:bg-[#F2EFEA]'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-[#1A1A1A] uppercase tracking-wider">
+                Em Dia
+              </span>
+              <CheckCircle2 className="w-4 h-4 text-[#5C3A22]" />
+            </div>
+            <p className="text-xl sm:text-2xl font-bold text-[#1A1A1A] mt-1">
+              {contagensCadencia.emDia}
+            </p>
+          </button>
+
+          {/* Atrasados */}
+          <button
+            id="card-filtro-leads-atrasados"
+            type="button"
+            onClick={() => setFiltroCadencia(filtroCadencia === 'atrasados' ? 'todos' : 'atrasados')}
+            className={`p-3 rounded-sm border text-left transition-all cursor-pointer ${
+              filtroCadencia === 'atrasados'
+                ? 'bg-rose-50 border-rose-500 ring-1 ring-rose-500 shadow-xs'
+                : 'bg-rose-50/40 border-rose-200 hover:bg-rose-50'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-rose-800 uppercase tracking-wider">
+                Atrasados
+              </span>
+              <AlertCircle className="w-4 h-4 text-rose-600" />
+            </div>
+            <p className="text-xl sm:text-2xl font-bold text-rose-950 mt-1">
+              {contagensCadencia.atrasados}
+            </p>
+          </button>
+
+          {/* Adiantados */}
+          <button
+            id="card-filtro-leads-adiantados"
+            type="button"
+            onClick={() => setFiltroCadencia(filtroCadencia === 'adiantados' ? 'todos' : 'adiantados')}
+            className={`p-3 rounded-sm border text-left transition-all cursor-pointer ${
+              filtroCadencia === 'adiantados'
+                ? 'bg-white border-[#5C3A22] ring-1 ring-[#5C3A22] shadow-xs'
+                : 'bg-white/80 border-[#D9D6D0] hover:bg-[#F2EFEA]'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-[#5C3A22] uppercase tracking-wider">
+                Adiantados
+              </span>
+              <TrendingUp className="w-4 h-4 text-[#5C3A22]" />
+            </div>
+            <p className="text-xl sm:text-2xl font-bold text-[#5C3A22] mt-1">
+              {contagensCadencia.adiantados}
+            </p>
+          </button>
+
+          {/* Sem Etapa */}
+          <button
+            id="card-filtro-leads-sem-etapa"
+            type="button"
+            onClick={() => setFiltroCadencia(filtroCadencia === 'sem_etapa' ? 'todos' : 'sem_etapa')}
+            className={`p-3 rounded-sm border text-left transition-all cursor-pointer ${
+              filtroCadencia === 'sem_etapa'
+                ? 'bg-white border-[#8F887E] ring-1 ring-[#8F887E] shadow-xs'
+                : 'bg-white/80 border-[#D9D6D0] hover:bg-[#F2EFEA]'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-[#8F887E] uppercase tracking-wider">
+                Sem Etapa
+              </span>
+              <AlertTriangle className="w-4 h-4 text-[#8F887E]" />
+            </div>
+            <p className="text-xl sm:text-2xl font-bold text-[#1A1A1A] mt-1">
+              {contagensCadencia.semEtapa}
+            </p>
+          </button>
+        </div>
+      </div>
+
       {/* Header com Filtros */}
       <div className="p-4 sm:p-5 border-b border-[#D9D6D0] space-y-3">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -428,13 +616,14 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {(filtroSituacao !== 'todos' || filtroStatusVenda !== 'todos' || busca) && (
+            {(filtroSituacao !== 'todos' || filtroStatusVenda !== 'todos' || filtroCadencia !== 'todos' || busca) && (
               <button
                 type="button"
                 onClick={() => {
                   setBusca('');
                   setFiltroSituacao('todos');
                   setFiltroStatusVenda('todos');
+                  setFiltroCadencia('todos');
                 }}
                 className="inline-flex items-center gap-1.5 text-xs text-[#5C3A22] hover:text-[#1A1A1A] font-bold uppercase tracking-wider transition-colors cursor-pointer mr-1"
               >

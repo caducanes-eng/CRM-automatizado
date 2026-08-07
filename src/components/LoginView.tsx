@@ -42,7 +42,7 @@ export const LoginView: React.FC = () => {
   return (
     <div
       id="tela-login-crm"
-      className="min-h-screen bg-[#F2EFEA] flex flex-col justify-center items-center p-4 sm:p-6 text-[#1A1A1A] relative"
+      className="min-h-screen bg-white flex flex-col justify-center items-center p-4 sm:p-6 text-[#1A1A1A] relative"
     >
       {/* Detalhes arquitetônicos sutis da identidade da clínica */}
       <div className="w-full max-w-md relative z-10 space-y-6 animate-in fade-in duration-200">
@@ -54,20 +54,19 @@ export const LoginView: React.FC = () => {
           </div>
 
           <div className="flex items-center justify-center gap-3.5 pt-1">
-            {/* Logo da Clínica (Imagem ou Monograma) */}
+            {/* Logo da Clínica (Imagem ou Monograma) - 2x tamanho, sem bordas */}
             {config.tipoLogo === 'imagem' && config.logoUrl ? (
-              <div className="flex items-center justify-center max-h-12">
+              <div className="flex items-center justify-center max-h-24">
                 <img
                   src={config.logoUrl}
                   alt={config.nomeEmpresa}
-                  className="max-h-12 max-w-[200px] object-contain rounded-xs"
+                  className="max-h-24 max-w-[400px] object-contain border-none rounded-none shadow-none"
                 />
               </div>
             ) : (
               <>
                 <div
-                  style={{ borderBottomColor: corPrimaria }}
-                  className="w-12 h-12 rounded-sm bg-[#1A1A1A] text-white flex items-center justify-center font-bold text-lg tracking-wider border-b-2 shadow-xs"
+                  className="w-24 h-24 bg-[#1A1A1A] text-white flex items-center justify-center font-bold text-2xl tracking-wider border-none rounded-none shadow-none"
                 >
                   {config.monogramaIniciais || 'AR'}
                 </div>
