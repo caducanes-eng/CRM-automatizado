@@ -46,10 +46,11 @@
   color: var(--cor-texto, #1A1A1A);
 }
 
-/* Cabeçalho de tabela oficial: fundo estrutural/sidebar e texto branco */
-.tabela-ar-thead {
-  background-color: var(--cor-sidebar, #1A1A1A);
-  color: #FFFFFF;
+/* Cabeçalho de tabela oficial de alto contraste: fundo escuro estrutural #1A1A1A e texto branco #FFFFFF */
+.tabela-ar-thead,
+.tabela-ar-thead th {
+  background-color: #5C3A22 !important;
+  color: #FFFFFF !important;
 }
 
 /* Borda neutra oficial */

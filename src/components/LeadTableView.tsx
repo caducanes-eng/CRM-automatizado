@@ -393,25 +393,22 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
       });
   }, [leads, busca, filtroSituacao, filtroStatusVenda, sortField, sortDirection, totaisCompradosMap]);
 
-  // Render do indicador de ordenação com a cor de destaque da identidade
+  // Render do indicador de ordenação de alto contraste
   const renderSortIcon = (field: SortField) => {
     if (sortField !== field) {
       return (
         <ArrowUpDown
-          className="w-3 h-3 opacity-30 group-hover:opacity-100 transition-opacity shrink-0"
-          style={{ color: cores.corSidebarTexto }}
+          className="w-3 h-3 opacity-40 group-hover:opacity-100 transition-opacity shrink-0 text-white/70"
         />
       );
     }
     return sortDirection === 'asc' ? (
       <ArrowUp
-        className="w-3 h-3 shrink-0 font-bold"
-        style={{ color: cores.corSecundaria || cores.corPrimaria || '#FFFFFF' }}
+        className="w-3 h-3 shrink-0 font-bold text-white"
       />
     ) : (
       <ArrowDown
-        className="w-3 h-3 shrink-0 font-bold"
-        style={{ color: cores.corSecundaria || cores.corPrimaria || '#FFFFFF' }}
+        className="w-3 h-3 shrink-0 font-bold text-white"
       />
     );
   };
@@ -554,13 +551,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
             ))}
           </colgroup>
 
-          <thead
-            className="tabela-ar-thead select-none border-b border-black/20"
-            style={{
-              backgroundColor: cores.corSidebar,
-              color: cores.corSidebarTexto,
-            }}
-          >
+          <thead className="tabela-ar-thead bg-[#1A1A1A] text-white select-none border-b border-black/30">
             <tr>
               {COLUNAS_TABELA_LEADS.map((col, idx) => {
                 const isSorted = col.sortField && sortField === col.sortField;
@@ -571,16 +562,16 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                     key={col.key}
                     style={{
                       width: `${colWidth}px`,
-                      backgroundColor: cores.corSidebar,
-                      color: cores.corSidebarTexto,
+                      backgroundColor: '#1A1A1A',
+                      color: '#FFFFFF',
                     }}
                     onClick={() => {
                       if (col.sortField) {
                         handleSort(col.sortField);
                       }
                     }}
-                    className={`relative py-3 px-3 transition-colors group select-none font-bold uppercase tracking-wider text-[11px] border-r border-white/10 ${
-                      col.sortField ? 'cursor-pointer hover:brightness-110' : ''
+                    className={`relative py-3 px-3 transition-colors group select-none font-bold uppercase tracking-wider text-[11px] text-white border-r border-white/10 ${
+                      col.sortField ? 'cursor-pointer hover:bg-[#2A2A2A]' : ''
                     } ${
                       col.align === 'right'
                         ? 'text-right'
@@ -590,7 +581,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                     }`}
                   >
                     <div
-                      className={`flex items-center gap-1.5 min-w-0 ${
+                      className={`flex items-center gap-1.5 min-w-0 text-white ${
                         col.align === 'right'
                           ? 'justify-end'
                           : col.align === 'center'
@@ -598,7 +589,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                           : 'justify-start'
                       }`}
                     >
-                      <span className="truncate">{col.label}</span>
+                      <span className="truncate text-white font-bold">{col.label}</span>
                       {col.sortField && renderSortIcon(col.sortField)}
                     </div>
 
@@ -609,18 +600,12 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                       onClick={(e) => e.stopPropagation()}
                       title="Arraste para ajustar a largura da coluna (duplo clique para restaurar)"
                       className={`absolute top-0 bottom-0 -right-1 w-3 cursor-col-resize z-20 flex items-center justify-center group/resizer transition-all ${
-                        resizingCol === col.key ? 'opacity-100' : 'opacity-40 hover:opacity-100'
+                        resizingCol === col.key ? 'opacity-100' : 'opacity-30 hover:opacity-100'
                       }`}
                     >
                       <div
-                        style={{
-                          backgroundColor:
-                            resizingCol === col.key
-                              ? cores.corSecundaria || cores.corPrimaria
-                              : 'rgba(255, 255, 255, 0.35)',
-                        }}
-                        className={`w-[2px] h-full transition-all group-hover/resizer:w-[3px] ${
-                          resizingCol === col.key ? 'w-[3px] shadow-sm' : 'group-hover/resizer:bg-white'
+                        className={`w-[2px] h-full transition-all group-hover/resizer:w-[3px] bg-white/40 ${
+                          resizingCol === col.key ? 'w-[3px] shadow-sm bg-white' : 'group-hover/resizer:bg-white'
                         }`}
                       />
                     </div>
@@ -750,10 +735,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                       <button
                         type="button"
                         onClick={() => handleOpenFichaClick(lead.id)}
-                        style={{
-                          backgroundColor: cores.corSidebar,
-                        }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-sm text-white font-bold text-[10px] uppercase tracking-wider hover:brightness-125 transition-all cursor-pointer shadow-2xs"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-sm bg-[#1A1A1A] hover:bg-[#5C3A22] text-white font-bold text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-2xs"
                       >
                         <span>Ficha</span>
                         <ChevronRight className="w-3 h-3" />

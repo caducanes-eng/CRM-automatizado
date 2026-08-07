@@ -362,69 +362,69 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
       <div className="bg-white rounded-sm border border-[#D9D6D0] shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table id="tabela-cadencia-leads" className="w-full text-left text-xs border-collapse">
-            <thead className="tabela-ar-thead">
-              <tr>
+            <thead className="tabela-ar-thead bg-[#1A1A1A] text-white">
+              <tr className="text-white border-b border-black/30">
                 {/* 1. Nome */}
-                <th scope="col" className="py-3 px-4 sm:px-6 font-bold uppercase tracking-wider text-[11px]">
+                <th scope="col" className="py-3 px-4 sm:px-6 font-bold uppercase tracking-wider text-[11px] text-white">
                   <button
                     type="button"
                     onClick={() => handleToggleOrdenacao('nome')}
-                    className="flex items-center gap-1.5 text-white hover:text-[#F2EFEA] font-bold cursor-pointer"
+                    className="flex items-center gap-1.5 text-white hover:text-white/80 font-bold cursor-pointer"
                   >
-                    <span>Paciente</span>
-                    <ArrowUpDown className="w-3 h-3 text-[#8F887E]" />
+                    <span className="text-white font-bold">Paciente</span>
+                    <ArrowUpDown className="w-3 h-3 text-white/70" />
                   </button>
                 </th>
 
                 {/* 2. Data de entrada */}
-                <th scope="col" className="py-3 px-4 font-bold uppercase tracking-wider text-[11px]">
+                <th scope="col" className="py-3 px-4 font-bold uppercase tracking-wider text-[11px] text-white">
                   <button
                     type="button"
                     onClick={() => handleToggleOrdenacao('dataEntrada')}
-                    className="flex items-center gap-1.5 text-white hover:text-[#F2EFEA] font-bold cursor-pointer"
+                    className="flex items-center gap-1.5 text-white hover:text-white/80 font-bold cursor-pointer"
                   >
-                    <span>Data de entrada</span>
-                    <ArrowUpDown className="w-3 h-3 text-[#8F887E]" />
+                    <span className="text-white font-bold">Data de entrada</span>
+                    <ArrowUpDown className="w-3 h-3 text-white/70" />
                   </button>
                 </th>
 
                 {/* 3. Dias corridos */}
-                <th scope="col" className="py-3 px-4 text-center font-bold uppercase tracking-wider text-[11px]">
+                <th scope="col" className="py-3 px-4 text-center font-bold uppercase tracking-wider text-[11px] text-white">
                   <button
                     type="button"
                     onClick={() => handleToggleOrdenacao('diasCorridos')}
-                    className="inline-flex items-center gap-1.5 text-white hover:text-[#F2EFEA] font-bold cursor-pointer"
+                    className="inline-flex items-center gap-1.5 text-white hover:text-white/80 font-bold cursor-pointer"
                   >
-                    <span>Dias corridos</span>
-                    <ArrowUpDown className="w-3 h-3 text-[#8F887E]" />
+                    <span className="text-white font-bold">Dias corridos</span>
+                    <ArrowUpDown className="w-3 h-3 text-white/70" />
                   </button>
                 </th>
 
                 {/* 4. Etapa atual */}
-                <th scope="col" className="py-3 px-4 min-w-[220px] font-bold uppercase tracking-wider text-[11px]">
-                  <span>Etapa atual</span>
+                <th scope="col" className="py-3 px-4 min-w-[220px] font-bold uppercase tracking-wider text-[11px] text-white">
+                  <span className="text-white font-bold">Etapa atual</span>
                 </th>
 
                 {/* 5. Etapa esperada */}
-                <th scope="col" className="py-3 px-4 min-w-[180px] font-bold uppercase tracking-wider text-[11px]">
-                  <span>Etapa esperada</span>
+                <th scope="col" className="py-3 px-4 min-w-[180px] font-bold uppercase tracking-wider text-[11px] text-white">
+                  <span className="text-white font-bold">Etapa esperada</span>
                 </th>
 
                 {/* 6. Status */}
-                <th scope="col" className="py-3 px-4 text-center font-bold uppercase tracking-wider text-[11px]">
+                <th scope="col" className="py-3 px-4 text-center font-bold uppercase tracking-wider text-[11px] text-white">
                   <button
                     type="button"
                     onClick={() => handleToggleOrdenacao('status')}
-                    className="inline-flex items-center gap-1.5 text-white hover:text-[#F2EFEA] font-bold cursor-pointer"
+                    className="inline-flex items-center gap-1.5 text-white hover:text-white/80 font-bold cursor-pointer"
                   >
-                    <span>Status</span>
-                    <ArrowUpDown className="w-3 h-3 text-[#8F887E]" />
+                    <span className="text-white font-bold">Status</span>
+                    <ArrowUpDown className="w-3 h-3 text-white/70" />
                   </button>
                 </th>
 
                 {/* Ações / Ficha */}
-                <th scope="col" className="py-3 px-4 text-right font-bold uppercase tracking-wider text-[11px]">
-                  <span>Ficha</span>
+                <th scope="col" className="py-3 px-4 text-right font-bold uppercase tracking-wider text-[11px] text-white">
+                  <span className="text-white font-bold">Ficha</span>
                 </th>
               </tr>
             </thead>

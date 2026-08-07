@@ -475,17 +475,17 @@ export const ControleProcedimentosView: React.FC = () => {
       <div className="bg-white rounded-sm border border-[#D9D6D0] shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-[#F2EFEA] border-b border-[#D9D6D0] text-[#1A1A1A] font-bold uppercase tracking-wider text-[10px]">
-                <th className="py-3 px-4">Procedimento & Categoria</th>
-                <th className="py-3 px-3">Valor de Tabela</th>
-                <th className="py-3 px-3">Formatos de Pagamento (Executor)</th>
-                <th className="py-3 px-3 text-center">Duração / Gatilho</th>
-                <th className="py-3 px-3 text-center">Procura (Leads)</th>
-                <th className="py-3 px-3 text-center">Conversão</th>
-                <th className="py-3 px-3 text-right">Faturamento</th>
-                <th className="py-3 px-3 text-center">Status</th>
-                <th className="py-3 px-4 text-center">Ações</th>
+            <thead className="tabela-ar-thead bg-[#1A1A1A] text-white">
+              <tr className="text-white border-b border-black/30 font-bold uppercase tracking-wider text-[10px]">
+                <th className="py-3 px-4 text-white">Procedimento & Categoria</th>
+                <th className="py-3 px-3 text-white">Valor de Tabela</th>
+                <th className="py-3 px-3 text-white">Formatos de Pagamento (Executor)</th>
+                <th className="py-3 px-3 text-center text-white">Duração / Gatilho</th>
+                <th className="py-3 px-3 text-center text-white">Procura (Leads)</th>
+                <th className="py-3 px-3 text-center text-white">Conversão</th>
+                <th className="py-3 px-3 text-right text-white">Faturamento</th>
+                <th className="py-3 px-3 text-center text-white">Status</th>
+                <th className="py-3 px-4 text-center text-white">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#D9D6D0]">

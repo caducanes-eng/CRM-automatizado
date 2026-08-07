@@ -394,18 +394,18 @@ export const HistoricoComprasView: React.FC = () => {
               className="w-10 h-10 rounded-sm flex items-center justify-center text-white font-bold shadow-xs shrink-0"
               style={{ backgroundColor: corPrimaria }}
             >
-              <Trophy className="w-5 h-5 text-white" />
+              <Trophy className="w-5 h-5 #5C3A22e" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight uppercase">
+                <h3 className="text-base sm:text-lg font-bold text-[#5C3A22] tracking-tight uppercase">
                   Top 10 pacientes que mais compraram
                 </h3>
-                <span className="px-2 py-0.5 rounded-sm text-[10px] font-bold bg-white/15 text-[#F2EFEA] border border-white/20 uppercase tracking-wider">
+                <span className="px-2 py-0.5 rounded-sm text-[10px] font-bold bg-white/15 text-[#5C3A22] border border-white/20 uppercase tracking-wider">
                   Ranking VIP & Fidelização
                 </span>
               </div>
-              <p className="text-xs text-[#D9D6D0] mt-0.5">
+              <p className="text-xs text-[#5C3A22] mt-0.5">
                 Soma acumulada de valor por paciente (ordem decrescente) para direcionar mimos, bônus e ofertas exclusivas
               </p>
             </div>
@@ -792,13 +792,13 @@ export const HistoricoComprasView: React.FC = () => {
       >
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs sm:text-sm">
-            <thead>
-              <tr style={{ backgroundColor: corSidebar }} className="text-white border-b border-black/20 text-[11px] uppercase tracking-wider font-bold">
-                <th className="py-3 px-4 sm:px-5">Data da Venda</th>
-                <th className="py-3 px-4 sm:px-5">Paciente</th>
-                <th className="py-3 px-4 sm:px-5">Procedimento</th>
-                <th className="py-3 px-4 sm:px-5">Valor</th>
-                <th className="py-3 px-4 sm:px-5 text-right">Ações</th>
+            <thead className="tabela-ar-thead bg-[#1A1A1A] text-white">
+              <tr className="text-white border-b border-black/30 text-[11px] uppercase tracking-wider font-bold">
+                <th className="py-3 px-4 sm:px-5 text-white">Data da Venda</th>
+                <th className="py-3 px-4 sm:px-5 text-white">Paciente</th>
+                <th className="py-3 px-4 sm:px-5 text-white">Procedimento</th>
+                <th className="py-3 px-4 sm:px-5 text-white">Valor</th>
+                <th className="py-3 px-4 sm:px-5 text-right text-white">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#D9D6D0] text-[#1A1A1A]">

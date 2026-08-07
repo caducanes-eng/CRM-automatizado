@@ -262,18 +262,18 @@ export const NutricaoView: React.FC = () => {
       <div className="bg-white rounded-sm border border-[#D9D6D0] shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table id="tabela-leads-nutricao" className="w-full text-left text-xs sm:text-sm border-collapse">
-            <thead className="tabela-ar-thead">
-              <tr style={{ backgroundColor: corSidebar }} className="text-white border-b border-black/20 text-[11px] uppercase tracking-wider font-bold">
-                <th scope="col" className="py-3 px-4 sm:px-6">
+            <thead className="tabela-ar-thead bg-[#1A1A1A] text-white">
+              <tr className="text-white border-b border-black/30 text-[11px] uppercase tracking-wider font-bold">
+                <th scope="col" className="py-3 px-4 sm:px-6 text-white">
                   Nome
                 </th>
-                <th scope="col" className="py-3 px-4 sm:px-6">
+                <th scope="col" className="py-3 px-4 sm:px-6 text-white">
                   Data em que entrou na Nutrição
                 </th>
-                <th scope="col" className="py-3 px-4 sm:px-6">
+                <th scope="col" className="py-3 px-4 sm:px-6 text-white">
                   Status no grupo
                 </th>
-                <th scope="col" className="py-3 px-4 sm:px-6 text-right">
+                <th scope="col" className="py-3 px-4 sm:px-6 text-right text-white">
                   Ação
                 </th>
               </tr>

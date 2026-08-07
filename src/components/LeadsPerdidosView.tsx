@@ -745,17 +745,17 @@ export const LeadsPerdidosView: React.FC = () => {
       <div className="bg-white rounded-sm border border-[#D9D6D0] shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs sm:text-sm">
-            <thead>
-              <tr style={{ backgroundColor: corSidebar }} className="text-white border-b border-black/20 text-[11px] uppercase tracking-wider font-bold">
-                <th className="py-3 px-4 sm:px-5">Nome</th>
-                <th className="py-3 px-4 sm:px-5">Situação ao Perder</th>
-                <th className="py-3 px-4 sm:px-5">Interesse</th>
-                <th className="py-3 px-4 sm:px-5">Valor Perdido</th>
-                <th className="py-3 px-4 sm:px-5">Origem</th>
-                <th className="py-3 px-4 sm:px-5">Motivo da Perda</th>
-                <th className="py-3 px-4 sm:px-5">Data da Perda</th>
-                <th className="py-3 px-4 sm:px-5">Responsável</th>
-                <th className="py-3 px-4 sm:px-5 text-right">Ações</th>
+            <thead className="tabela-ar-thead bg-[#1A1A1A] text-white">
+              <tr className="text-white border-b border-black/30 text-[11px] uppercase tracking-wider font-bold">
+                <th className="py-3 px-4 sm:px-5 text-white">Nome</th>
+                <th className="py-3 px-4 sm:px-5 text-white">Situação ao Perder</th>
+                <th className="py-3 px-4 sm:px-5 text-white">Interesse</th>
+                <th className="py-3 px-4 sm:px-5 text-white">Valor Perdido</th>
+                <th className="py-3 px-4 sm:px-5 text-white">Origem</th>
+                <th className="py-3 px-4 sm:px-5 text-white">Motivo da Perda</th>
+                <th className="py-3 px-4 sm:px-5 text-white">Data da Perda</th>
+                <th className="py-3 px-4 sm:px-5 text-white">Responsável</th>
+                <th className="py-3 px-4 sm:px-5 text-right text-white">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#D9D6D0] text-[#1A1A1A]">
