@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { UserPlus, X, ArrowRight, Check } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
+import { useAuth } from '../context/AuthContext';
 import { SituacaoLead, TODAS_SITUACOES, Lead, ProcedimentoClinica } from '../types';
 
 interface NovoPacienteModalProps {
@@ -15,13 +16,31 @@ export const NovoPacienteModal: React.FC<NovoPacienteModalProps> = ({
   onLeadCreated,
 }) => {
   const { criarLead, responsaveis, procedimentos } = useCrm();
+  const { usuarios } = useAuth();
+
+  // Colaboradores cadastrados ativos pelo Gestor
+  const colaboradoresAtivos = useMemo(() => {
+    if (usuarios && usuarios.length > 0) {
+      return usuarios.filter((u) => !u.deleted_at && u.ativo !== false);
+    }
+    return [];
+  }, [usuarios]);
+
+  const listaNomesResponsaveis = useMemo(() => {
+    if (colaboradoresAtivos.length > 0) {
+      return colaboradoresAtivos.map((u) => u.nome);
+    }
+    return responsaveis || [];
+  }, [colaboradoresAtivos, responsaveis]);
 
   const [nome, setNome] = useState('');
   const [situacao, setSituacao] = useState<SituacaoLead>('Em captação');
   const [interesse, setInteresse] = useState('');
   const [isCustomInteresse, setIsCustomInteresse] = useState(false);
   const [possivelValor, setPossivelValor] = useState<string>('');
-  const [responsavel, setResponsavel] = useState(responsaveis[0] || 'Secretária 1');
+  const [responsavel, setResponsavel] = useState(
+    colaboradoresAtivos[0]?.nome || responsaveis[0] || 'Gestão Geral'
+  );
   const [erroNome, setErroNome] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -177,13 +196,21 @@ export const NovoPacienteModal: React.FC<NovoPacienteModalProps> = ({
                 id="modal-lead-responsavel-select"
                 value={responsavel}
                 onChange={(e) => setResponsavel(e.target.value)}
-                className="w-full h-10 px-3 text-sm rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:outline-hidden focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] transition-all"
+                className="w-full h-10 px-3 text-sm rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:outline-hidden focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] transition-all cursor-pointer"
               >
-                {responsaveis.map((resp) => (
-                  <option key={resp} value={resp}>
-                    {resp}
-                  </option>
-                ))}
+                {colaboradoresAtivos.length > 0 ? (
+                  colaboradoresAtivos.map((colab) => (
+                    <option key={colab.id} value={colab.nome}>
+                      {colab.nome} {colab.cargo ? `— ${colab.cargo}` : ''}
+                    </option>
+                  ))
+                ) : (
+                  listaNomesResponsaveis.map((resp) => (
+                    <option key={resp} value={resp}>
+                      {resp}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
           </div>

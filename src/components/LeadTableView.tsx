@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Search,
   ArrowUpDown,
@@ -16,8 +16,12 @@ import {
   Download,
   Upload,
   UserPlus,
+  RotateCcw,
+  Sliders,
 } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
+import { useEmpresa } from '../context/EmpresaContext';
+import { obterCoresSidebarCompletas } from '../utils/estetica';
 import {
   Lead,
   SituacaoLead,
@@ -45,6 +49,30 @@ type SortField =
   | 'responsavel';
 
 type SortDirection = 'asc' | 'desc';
+
+interface ColumnConfig {
+  key: string;
+  label: string;
+  defaultWidth: number;
+  minWidth: number;
+  align?: 'left' | 'right' | 'center';
+  sortField?: SortField;
+}
+
+export const COLUNAS_TABELA_LEADS: ColumnConfig[] = [
+  { key: 'nome', label: 'Paciente', defaultWidth: 220, minWidth: 140, sortField: 'nome' },
+  { key: 'situacao', label: 'Situação', defaultWidth: 170, minWidth: 130, sortField: 'situacao' },
+  { key: 'etapa', label: 'Etapa Atual', defaultWidth: 150, minWidth: 110, sortField: 'etapa' },
+  { key: 'interesse', label: 'Interesse', defaultWidth: 170, minWidth: 110, sortField: 'interesse' },
+  { key: 'possivelValor', label: 'Possível Valor', defaultWidth: 130, minWidth: 100, align: 'right', sortField: 'possivelValor' },
+  { key: 'totalComprado', label: 'Total Realizado', defaultWidth: 130, minWidth: 100, align: 'right', sortField: 'totalComprado' },
+  { key: 'statusVenda', label: 'Status', defaultWidth: 130, minWidth: 105, sortField: 'statusVenda' },
+  { key: 'dataEntrada', label: 'Entrada', defaultWidth: 110, minWidth: 90, sortField: 'dataEntrada' },
+  { key: 'responsavel', label: 'Responsável', defaultWidth: 140, minWidth: 110, sortField: 'responsavel' },
+  { key: 'acoes', label: 'Ficha', defaultWidth: 85, minWidth: 70, align: 'center' },
+];
+
+const STORAGE_KEY_COL_WIDTHS = 'crm_leads_col_widths_v2';
 
 // Helper de estilos neutros elegantes com alto contraste para Status da Venda
 export function getStatusVendaEstilo(status: StatusVenda | string) {
@@ -101,6 +129,10 @@ export function getSituacaoEstilo(situacao: SituacaoLead | string) {
 
 export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpenNovoPaciente }) => {
   const { leads, compras, atualizarLead, abrirFichaLead } = useCrm();
+  const { config } = useEmpresa();
+
+  // Cores dinâmicas selecionadas para a barra lateral / navegação
+  const cores = useMemo(() => obterCoresSidebarCompletas(config.estetica), [config.estetica]);
 
   const handleOpenFichaClick = (leadId: string) => {
     if (onOpenFicha) {
@@ -115,6 +147,126 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
   const [filtroSituacao, setFiltroSituacao] = useState<string>('todos');
   const [filtroStatusVenda, setFiltroStatusVenda] = useState<string>('todos');
   const [isImportExportOpen, setIsImportExportOpen] = useState(false);
+
+  // Larguras das colunas estilo planilha com persistência no LocalStorage
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
+    const defaults = COLUNAS_TABELA_LEADS.reduce(
+      (acc, col) => ({ ...acc, [col.key]: col.defaultWidth }),
+      {} as Record<string, number>
+    );
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_COL_WIDTHS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return { ...defaults, ...parsed };
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao ler larguras das colunas:', e);
+    }
+    return defaults;
+  });
+
+  // Estado de redimensionamento ativo
+  const [resizingCol, setResizingCol] = useState<string | null>(null);
+  const dragInfoRef = useRef<{
+    colKey: string;
+    startX: number;
+    startWidth: number;
+    minWidth: number;
+  } | null>(null);
+
+  // Manipulador de início de redimensionamento (arrastar borda da coluna)
+  const handleMouseDownResize = useCallback(
+    (colKey: string, minWidth: number, e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const currentWidth = columnWidths[colKey] || minWidth || 100;
+      dragInfoRef.current = {
+        colKey,
+        startX: e.clientX,
+        startWidth: currentWidth,
+        minWidth,
+      };
+      setResizingCol(colKey);
+
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        if (!dragInfoRef.current) return;
+        const { colKey: key, startX, startWidth: sWidth, minWidth: mWidth } = dragInfoRef.current;
+        const deltaX = moveEvent.clientX - startX;
+        const newWidth = Math.max(mWidth, Math.round(sWidth + deltaX));
+
+        setColumnWidths((prev) => ({
+          ...prev,
+          [key]: newWidth,
+        }));
+      };
+
+      const handleMouseUp = () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        setResizingCol(null);
+        dragInfoRef.current = null;
+
+        // Persiste as larguras finais no localStorage
+        setColumnWidths((prev) => {
+          try {
+            localStorage.setItem(STORAGE_KEY_COL_WIDTHS, JSON.stringify(prev));
+          } catch (err) {
+            console.warn(err);
+          }
+          return prev;
+        });
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    },
+    [columnWidths]
+  );
+
+  // Redefinir largura de uma coluna específica com duplo clique
+  const handleDoubleClickReset = useCallback((colKey: string, defaultWidth: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setColumnWidths((prev) => {
+      const next = { ...prev, [colKey]: defaultWidth };
+      try {
+        localStorage.setItem(STORAGE_KEY_COL_WIDTHS, JSON.stringify(next));
+      } catch (err) {
+        console.warn(err);
+      }
+      return next;
+    });
+  }, []);
+
+  // Redefinir todas as larguras para o padrão
+  const handleResetarTodasLarguras = useCallback(() => {
+    const defaults = COLUNAS_TABELA_LEADS.reduce(
+      (acc, col) => ({ ...acc, [col.key]: col.defaultWidth }),
+      {} as Record<string, number>
+    );
+    setColumnWidths(defaults);
+    try {
+      localStorage.removeItem(STORAGE_KEY_COL_WIDTHS);
+    } catch (e) {
+      console.warn(e);
+    }
+  }, []);
+
+  // Largura total calculada da tabela
+  const totalTableWidth = useMemo(() => {
+    return COLUNAS_TABELA_LEADS.reduce(
+      (acc, col) => acc + (columnWidths[col.key] || col.defaultWidth),
+      0
+    );
+  }, [columnWidths]);
 
   // Contagens rápidas de status para os botões de filtro
   const contagensStatus = useMemo(() => {
@@ -241,15 +393,26 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
       });
   }, [leads, busca, filtroSituacao, filtroStatusVenda, sortField, sortDirection, totaisCompradosMap]);
 
-  // Render do indicador de ordenação
+  // Render do indicador de ordenação com a cor de destaque da identidade
   const renderSortIcon = (field: SortField) => {
     if (sortField !== field) {
-      return <ArrowUpDown className="w-3 h-3 text-[#8F887E] opacity-0 group-hover:opacity-100 transition-opacity" />;
+      return (
+        <ArrowUpDown
+          className="w-3 h-3 opacity-30 group-hover:opacity-100 transition-opacity shrink-0"
+          style={{ color: cores.corSidebarTexto }}
+        />
+      );
     }
     return sortDirection === 'asc' ? (
-      <ArrowUp className="w-3 h-3 text-[#5C3A22]" />
+      <ArrowUp
+        className="w-3 h-3 shrink-0 font-bold"
+        style={{ color: cores.corSecundaria || cores.corPrimaria || '#FFFFFF' }}
+      />
     ) : (
-      <ArrowDown className="w-3 h-3 text-[#5C3A22]" />
+      <ArrowDown
+        className="w-3 h-3 shrink-0 font-bold"
+        style={{ color: cores.corSecundaria || cores.corPrimaria || '#FFFFFF' }}
+      />
     );
   };
 
@@ -282,6 +445,17 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                 Limpar filtros
               </button>
             )}
+
+            <button
+              id="btn-reset-col-widths"
+              type="button"
+              onClick={handleResetarTodasLarguras}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm text-xs font-bold uppercase tracking-wider bg-white border border-[#D9D6D0] hover:border-[#5C3A22] hover:bg-[#FAF8F5] text-[#1A1A1A] shadow-2xs transition-all cursor-pointer"
+              title="Restaurar a largura padrão de todas as colunas da planilha"
+            >
+              <RotateCcw className="w-3 h-3 text-[#5C3A22]" />
+              <span>Ajuste Padrão de Colunas</span>
+            </button>
 
             <button
               id="btn-import-export-leads"
@@ -360,121 +534,106 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
         </div>
       </div>
 
-      {/* Tabela de Leads: Cabeçalho Preto #1A1A1A com texto branco conforme Manual da Marca */}
+      {/* Tabela de Leads: Cabeçalho com cores configuradas da barra de navegação + Colunas Redimensionáveis estilo Planilha */}
       <div className="overflow-x-auto">
-        <table id="tabela-leads" className="w-full text-left border-collapse text-xs">
-          <thead className="tabela-ar-thead">
+        <table
+          id="tabela-leads"
+          style={{
+            tableLayout: 'fixed',
+            width: '100%',
+            minWidth: `${totalTableWidth}px`,
+          }}
+          className="text-left border-collapse text-xs"
+        >
+          <colgroup>
+            {COLUNAS_TABELA_LEADS.map((col) => (
+              <col
+                key={col.key}
+                style={{ width: `${columnWidths[col.key] || col.defaultWidth}px` }}
+              />
+            ))}
+          </colgroup>
+
+          <thead
+            className="tabela-ar-thead select-none border-b border-black/20"
+            style={{
+              backgroundColor: cores.corSidebar,
+              color: cores.corSidebarTexto,
+            }}
+          >
             <tr>
-              {/* Nome */}
-              <th
-                onClick={() => handleSort('nome')}
-                className="py-3 px-4 cursor-pointer hover:bg-[#2A2A2A] transition-colors group select-none font-bold uppercase tracking-wider text-[11px]"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Paciente</span>
-                  {renderSortIcon('nome')}
-                </div>
-              </th>
+              {COLUNAS_TABELA_LEADS.map((col, idx) => {
+                const isSorted = col.sortField && sortField === col.sortField;
+                const colWidth = columnWidths[col.key] || col.defaultWidth;
 
-              {/* Situação */}
-              <th
-                onClick={() => handleSort('situacao')}
-                className="py-3 px-3 cursor-pointer hover:bg-[#2A2A2A] transition-colors group select-none font-bold uppercase tracking-wider text-[11px]"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Situação</span>
-                  {renderSortIcon('situacao')}
-                </div>
-              </th>
+                return (
+                  <th
+                    key={col.key}
+                    style={{
+                      width: `${colWidth}px`,
+                      backgroundColor: cores.corSidebar,
+                      color: cores.corSidebarTexto,
+                    }}
+                    onClick={() => {
+                      if (col.sortField) {
+                        handleSort(col.sortField);
+                      }
+                    }}
+                    className={`relative py-3 px-3 transition-colors group select-none font-bold uppercase tracking-wider text-[11px] border-r border-white/10 ${
+                      col.sortField ? 'cursor-pointer hover:brightness-110' : ''
+                    } ${
+                      col.align === 'right'
+                        ? 'text-right'
+                        : col.align === 'center'
+                        ? 'text-center'
+                        : 'text-left'
+                    }`}
+                  >
+                    <div
+                      className={`flex items-center gap-1.5 min-w-0 ${
+                        col.align === 'right'
+                          ? 'justify-end'
+                          : col.align === 'center'
+                          ? 'justify-center'
+                          : 'justify-start'
+                      }`}
+                    >
+                      <span className="truncate">{col.label}</span>
+                      {col.sortField && renderSortIcon(col.sortField)}
+                    </div>
 
-              {/* Etapa atual */}
-              <th
-                onClick={() => handleSort('etapa')}
-                className="py-3 px-3 cursor-pointer hover:bg-[#2A2A2A] transition-colors group select-none font-bold uppercase tracking-wider text-[11px]"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Etapa Atual</span>
-                  {renderSortIcon('etapa')}
-                </div>
-              </th>
-
-              {/* Interesse */}
-              <th
-                onClick={() => handleSort('interesse')}
-                className="py-3 px-3 cursor-pointer hover:bg-[#2A2A2A] transition-colors group select-none font-bold uppercase tracking-wider text-[11px]"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Interesse</span>
-                  {renderSortIcon('interesse')}
-                </div>
-              </th>
-
-              {/* Possível Valor */}
-              <th
-                onClick={() => handleSort('possivelValor')}
-                className="py-3 px-3 text-right cursor-pointer hover:bg-[#2A2A2A] transition-colors group select-none font-bold uppercase tracking-wider text-[11px]"
-              >
-                <div className="flex items-center justify-end gap-1.5">
-                  <span>Possível Valor</span>
-                  {renderSortIcon('possivelValor')}
-                </div>
-              </th>
-
-              {/* Total já comprado */}
-              <th
-                onClick={() => handleSort('totalComprado')}
-                className="py-3 px-3 text-right cursor-pointer hover:bg-[#2A2A2A] transition-colors group select-none font-bold uppercase tracking-wider text-[11px]"
-              >
-                <div className="flex items-center justify-end gap-1.5">
-                  <span>Total Realizado</span>
-                  {renderSortIcon('totalComprado')}
-                </div>
-              </th>
-
-              {/* Status da venda */}
-              <th
-                onClick={() => handleSort('statusVenda')}
-                className="py-3 px-3 cursor-pointer hover:bg-[#2A2A2A] transition-colors group select-none font-bold uppercase tracking-wider text-[11px]"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Status</span>
-                  {renderSortIcon('statusVenda')}
-                </div>
-              </th>
-
-              {/* Data de entrada */}
-              <th
-                onClick={() => handleSort('dataEntrada')}
-                className="py-3 px-3 cursor-pointer hover:bg-[#2A2A2A] transition-colors group select-none font-bold uppercase tracking-wider text-[11px]"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Entrada</span>
-                  {renderSortIcon('dataEntrada')}
-                </div>
-              </th>
-
-              {/* Responsável */}
-              <th
-                onClick={() => handleSort('responsavel')}
-                className="py-3 px-3 cursor-pointer hover:bg-[#2A2A2A] transition-colors group select-none font-bold uppercase tracking-wider text-[11px]"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Responsável</span>
-                  {renderSortIcon('responsavel')}
-                </div>
-              </th>
-
-              {/* Ações */}
-              <th className="py-3 px-4 text-center font-bold uppercase tracking-wider text-[11px]">
-                <span>Ficha</span>
-              </th>
+                    {/* Divisor de redimensionamento estilo planilha (Arraste para redimensionar / Duplo clique para restaurar) */}
+                    <div
+                      onMouseDown={(e) => handleMouseDownResize(col.key, col.minWidth, e)}
+                      onDoubleClick={(e) => handleDoubleClickReset(col.key, col.defaultWidth, e)}
+                      onClick={(e) => e.stopPropagation()}
+                      title="Arraste para ajustar a largura da coluna (duplo clique para restaurar)"
+                      className={`absolute top-0 bottom-0 -right-1 w-3 cursor-col-resize z-20 flex items-center justify-center group/resizer transition-all ${
+                        resizingCol === col.key ? 'opacity-100' : 'opacity-40 hover:opacity-100'
+                      }`}
+                    >
+                      <div
+                        style={{
+                          backgroundColor:
+                            resizingCol === col.key
+                              ? cores.corSecundaria || cores.corPrimaria
+                              : 'rgba(255, 255, 255, 0.35)',
+                        }}
+                        className={`w-[2px] h-full transition-all group-hover/resizer:w-[3px] ${
+                          resizingCol === col.key ? 'w-[3px] shadow-sm' : 'group-hover/resizer:bg-white'
+                        }`}
+                      />
+                    </div>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
 
           <tbody className="divide-y divide-[#D9D6D0]">
             {leadsFiltradosEOrdenados.length === 0 ? (
               <tr>
-                <td colSpan={10} className="py-12 text-center text-[#8F887E]">
+                <td colSpan={COLUNAS_TABELA_LEADS.length} className="py-12 text-center text-[#8F887E]">
                   <div className="max-w-xs mx-auto space-y-2">
                     <User className="w-8 h-8 mx-auto text-[#8F887E]" />
                     <p className="text-xs font-semibold text-[#1A1A1A]">Nenhum paciente encontrado.</p>
@@ -500,14 +659,14 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                     className={`${baseBgClass} ${statusEstilo.hoverBg} ${statusEstilo.borderLeft} border-l-[3px] transition-colors border-b border-[#D9D6D0]/60`}
                   >
                     {/* Nome (Clicável para abrir ficha) */}
-                    <td className="py-3 px-4 font-bold">
+                    <td className="py-3 px-3 font-bold truncate">
                       <button
                         type="button"
                         onClick={() => handleOpenFichaClick(lead.id)}
-                        className="text-left font-bold text-[#1A1A1A] hover:text-[#5C3A22] flex items-center gap-1.5 group cursor-pointer"
+                        className="text-left font-bold text-[#1A1A1A] hover:text-[#5C3A22] flex items-center gap-1.5 group cursor-pointer max-w-full truncate"
                       >
-                        <span>{lead.nome}</span>
-                        <ExternalLink className="w-3 h-3 text-[#8F887E] opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <span className="truncate">{lead.nome}</span>
+                        <ExternalLink className="w-3 h-3 text-[#8F887E] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                       </button>
                     </td>
 
@@ -518,7 +677,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                         onChange={(e) =>
                           handleTrocaSituacao(lead.id, e.target.value as SituacaoLead)
                         }
-                        className={`py-1 px-2 rounded-sm border text-xs font-semibold focus:border-[#5C3A22] focus:outline-hidden cursor-pointer shadow-2xs ${situacaoClass}`}
+                        className={`w-full py-1 px-2 rounded-sm border text-xs font-semibold focus:border-[#5C3A22] focus:outline-hidden cursor-pointer shadow-2xs truncate ${situacaoClass}`}
                       >
                         {TODAS_SITUACOES.map((sit) => (
                           <option key={sit} value={sit} className="bg-white text-[#1A1A1A]">
@@ -533,19 +692,21 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                       {etapaExibida === '-' ? (
                         <span className="text-[#8F887E] font-mono text-center block w-6">-</span>
                       ) : (
-                        <span className="inline-block px-2 py-0.5 rounded-sm bg-white text-[#1A1A1A] border border-[#D9D6D0] text-[11px] max-w-[160px] truncate shadow-2xs">
+                        <span className="inline-block px-2 py-0.5 rounded-sm bg-white text-[#1A1A1A] border border-[#D9D6D0] text-[11px] max-w-full truncate shadow-2xs">
                           {etapaExibida}
                         </span>
                       )}
                     </td>
 
                     {/* Interesse */}
-                    <td className="py-3 px-3 text-[#1A1A1A] max-w-[180px] truncate">
-                      {lead.interesse || <span className="text-[#8F887E]">-</span>}
+                    <td className="py-3 px-3 text-[#1A1A1A] truncate">
+                      <span className="truncate block">
+                        {lead.interesse || <span className="text-[#8F887E]">-</span>}
+                      </span>
                     </td>
 
                     {/* Possível Valor */}
-                    <td className="py-3 px-3 text-right font-medium text-[#1A1A1A] font-mono">
+                    <td className="py-3 px-3 text-right font-medium text-[#1A1A1A] font-mono whitespace-nowrap">
                       {lead.possivelValor > 0 ? (
                         formatarMoeda(lead.possivelValor)
                       ) : (
@@ -554,7 +715,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                     </td>
 
                     {/* Total já comprado */}
-                    <td className="py-3 px-3 text-right font-bold font-mono">
+                    <td className="py-3 px-3 text-right font-bold font-mono whitespace-nowrap">
                       {totalComprado > 0 ? (
                         <span className="text-[#5C3A22] bg-[#F2EFEA] px-2 py-0.5 rounded-sm border border-[#5C3A22]/20 font-bold">
                           {formatarMoeda(totalComprado)}
@@ -567,7 +728,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                     {/* Status da venda com badge neutro e de alto contraste */}
                     <td className="py-3 px-3">
                       <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-sm text-[10px] font-bold uppercase tracking-wider border shadow-2xs ${statusEstilo.badge}`}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-sm text-[10px] font-bold uppercase tracking-wider border shadow-2xs whitespace-nowrap ${statusEstilo.badge}`}
                       >
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusEstilo.dot}`} />
                         <span>{lead.statusVenda}</span>
@@ -580,16 +741,19 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                     </td>
 
                     {/* Responsável */}
-                    <td className="py-3 px-3 text-[#1A1A1A] font-medium">
-                      {lead.responsavel}
+                    <td className="py-3 px-3 text-[#1A1A1A] font-medium truncate">
+                      <span className="truncate block">{lead.responsavel}</span>
                     </td>
 
                     {/* Botão Ação / Ficha */}
-                    <td className="py-3 px-4 text-center">
+                    <td className="py-3 px-3 text-center">
                       <button
                         type="button"
                         onClick={() => handleOpenFichaClick(lead.id)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-sm bg-[#1A1A1A] hover:bg-[#5C3A22] text-white font-bold text-[10px] uppercase tracking-wider transition-colors cursor-pointer"
+                        style={{
+                          backgroundColor: cores.corSidebar,
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-sm text-white font-bold text-[10px] uppercase tracking-wider hover:brightness-125 transition-all cursor-pointer shadow-2xs"
                       >
                         <span>Ficha</span>
                         <ChevronRight className="w-3 h-3" />

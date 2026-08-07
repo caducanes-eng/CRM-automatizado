@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
 import { useEmpresa } from '../context/EmpresaContext';
+import { useAuth } from '../context/AuthContext';
 import {
   Lead,
   FichaLead,
@@ -136,6 +137,22 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
   } = useCrm();
 
   const { config } = useEmpresa();
+  const { usuarios } = useAuth();
+
+  // Colaboradores cadastrados ativos pelo Gestor
+  const colaboradoresAtivos = useMemo(() => {
+    if (usuarios && usuarios.length > 0) {
+      return usuarios.filter((u) => !u.deleted_at && u.ativo !== false);
+    }
+    return [];
+  }, [usuarios]);
+
+  const listaNomesResponsaveis = useMemo(() => {
+    if (colaboradoresAtivos.length > 0) {
+      return colaboradoresAtivos.map((u) => u.nome);
+    }
+    return responsaveis || [];
+  }, [colaboradoresAtivos, responsaveis]);
 
   const corPrimaria = config.estetica?.corPrimaria || '#5C3A22';
   const corSecundaria = config.estetica?.corSecundaria || '#8A6142';
@@ -243,7 +260,9 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
       setPossivelValor(currentLead.possivelValor || 0);
       setStatusVenda(currentLead.statusVenda || 'Em processo');
       setDataEntrada(currentLead.dataEntrada || obterDataHoje());
-      setResponsavel(currentLead.responsavel || (responsaveis[0] || 'Secretária 1'));
+      setResponsavel(
+        currentLead.responsavel || (colaboradoresAtivos[0]?.nome || responsaveis[0] || 'Gestão Geral')
+      );
       setIsEditingDadosBasicos(false);
     }
 
@@ -1118,20 +1137,34 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
 
                       {/* Responsável */}
                       <div className="space-y-1">
-                        <label className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]">
+                        <label
+                          htmlFor="edit-lead-responsavel"
+                          className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                        >
                           Responsável
                         </label>
                         <select
                           id="edit-lead-responsavel"
                           value={responsavel}
                           onChange={(e) => setResponsavel(e.target.value)}
-                          className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
+                          className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer"
                         >
-                          {responsaveis.map((resp) => (
-                            <option key={resp} value={resp}>
-                              {resp}
-                            </option>
-                          ))}
+                          {responsavel && !listaNomesResponsaveis.includes(responsavel) && (
+                            <option value={responsavel}>{responsavel} (Atual)</option>
+                          )}
+                          {colaboradoresAtivos.length > 0 ? (
+                            colaboradoresAtivos.map((colab) => (
+                              <option key={colab.id} value={colab.nome}>
+                                {colab.nome} {colab.cargo ? `— ${colab.cargo}` : ''}
+                              </option>
+                            ))
+                          ) : (
+                            listaNomesResponsaveis.map((resp) => (
+                              <option key={resp} value={resp}>
+                                {resp}
+                              </option>
+                            ))
+                          )}
                         </select>
                       </div>
 

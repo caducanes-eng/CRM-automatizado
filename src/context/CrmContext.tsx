@@ -177,7 +177,7 @@ export function casarProcedimentoComTexto(
 const CrmContext = createContext<CrmContextType | undefined>(undefined);
 
 export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, usuarios } = useAuth();
 
   // Chave de controle de limpeza de dados de teste
   const STORAGE_KEY_LIMPEZA_TESTES = 'crm_estetica_limpeza_testes_v3';
@@ -1768,13 +1768,25 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   }, [procedimentosAtivos, leadsAtivos, comprasAtivas]);
 
+  // Lista de responsáveis baseada exclusivamente nos colaboradores cadastrados pelo Gestor
+  const responsaveisEfetivos = useMemo<string[]>(() => {
+    if (usuarios && usuarios.length > 0) {
+      const ativos = usuarios
+        .filter((u) => !u.deleted_at && u.ativo !== false)
+        .map((u) => u.nome.trim())
+        .filter(Boolean);
+      if (ativos.length > 0) return ativos;
+    }
+    return responsaveis;
+  }, [usuarios, responsaveis]);
+
   return (
     <CrmContext.Provider
       value={{
         leads: leadsAtivos,
         fichas: fichasAtivas,
         compras: comprasAtivas,
-        responsaveis,
+        responsaveis: responsaveisEfetivos,
         procedimentos: procedimentosAtivos,
         estatisticasProcedimentos,
         isFirestoreConnected,
