@@ -13,6 +13,7 @@ import {
   EsteticaPlataforma,
   ESTETICAS_PRESET,
 } from '../types';
+import { obterCoresSidebarCompletas } from '../utils/estetica';
 
 const STORAGE_KEY_EMPRESA = 'crm_estetica_empresa_v1';
 
@@ -52,13 +53,28 @@ const EmpresaContext = createContext<EmpresaContextType | undefined>(undefined);
 function aplicarVariaveisCss(estetica: EsteticaPlataforma) {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
-  root.style.setProperty('--cor-primaria', estetica.corPrimaria);
-  root.style.setProperty('--cor-secundaria', estetica.corSecundaria);
-  root.style.setProperty('--cor-sidebar', estetica.corSidebar);
-  root.style.setProperty('--cor-sidebar-texto', estetica.corSidebarTexto);
-  root.style.setProperty('--cor-fundo-destaque', estetica.corFundoDestaque);
-  root.style.setProperty('--cor-borda', estetica.corBorda);
-  root.style.setProperty('--cor-texto', estetica.corTexto);
+  const c = obterCoresSidebarCompletas(estetica);
+
+  root.style.setProperty('--cor-primaria', c.corPrimaria);
+  root.style.setProperty('--cor-secundaria', c.corSecundaria);
+  root.style.setProperty('--cor-sidebar', c.corSidebar);
+  root.style.setProperty('--cor-sidebar-texto', c.corSidebarTexto);
+  root.style.setProperty('--cor-nav-categoria-texto', c.corNavCategoriaTexto);
+  root.style.setProperty('--cor-nav-texto-inativo', c.corNavTextoInativo);
+  root.style.setProperty('--cor-nav-texto-hover', c.corNavTextoHover);
+  root.style.setProperty('--cor-nav-hover-bg', c.corNavHoverBg);
+  root.style.setProperty('--cor-nav-ativo-bg', c.corNavAtivoBg);
+  root.style.setProperty('--cor-nav-ativo-texto', c.corNavAtivoTexto);
+  root.style.setProperty('--cor-nav-ativo-borda', c.corNavAtivoBorda);
+  root.style.setProperty('--cor-nav-badge-bg', c.corNavBadgeBg);
+  root.style.setProperty('--cor-nav-badge-texto', c.corNavBadgeTexto);
+  root.style.setProperty('--cor-nav-footer-bg', c.corNavFooterBg);
+  root.style.setProperty('--cor-nav-footer-texto-principal', c.corNavFooterTextoPrincipal);
+  root.style.setProperty('--cor-nav-footer-texto-secundario', c.corNavFooterTextoSecundario);
+  root.style.setProperty('--cor-nav-footer-icone', c.corNavFooterIcone);
+  root.style.setProperty('--cor-fundo-destaque', c.corFundoDestaque);
+  root.style.setProperty('--cor-borda', c.corBorda);
+  root.style.setProperty('--cor-texto', c.corTexto);
 }
 
 export const EmpresaProvider: React.FC<{ children: ReactNode }> = ({ children }) => {

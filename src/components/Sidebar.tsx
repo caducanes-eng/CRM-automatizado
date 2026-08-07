@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   UserPlus,
   Flame,
@@ -18,6 +18,7 @@ import { SectionId, NavigationItem } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useCrm } from '../context/CrmContext';
 import { useEmpresa } from '../context/EmpresaContext';
+import { obterCoresSidebarCompletas } from '../utils/estetica';
 
 interface SidebarProps {
   activeSection: SectionId;
@@ -126,10 +127,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { responsavelAtivo, responsavelNome, isGestor, podeAcessarSecao, deslogar } = useAuth();
   const { isFirestoreConnected } = useCrm();
   const { config } = useEmpresa();
+  const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
 
-  const corSidebar = config.estetica?.corSidebar || '#1A1A1A';
-  const corPrimaria = config.estetica?.corPrimaria || '#5C3A22';
-  const corSecundaria = config.estetica?.corSecundaria || '#8A6142';
+  const c = obterCoresSidebarCompletas(config.estetica);
 
   return (
     <>
@@ -142,18 +142,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
         />
       )}
 
-      {/* BARRA LATERAL FIXA SEM SCROLLING */}
+      {/* BARRA LATERAL FIXA */}
       <aside
         id="main-sidebar"
         style={{
-          backgroundColor: corSidebar,
-          color: config.estetica?.corSidebarTexto || '#F2EFEA',
+          backgroundColor: c.corSidebar,
+          color: c.corSidebarTexto,
         }}
         className={`fixed top-0 bottom-0 left-0 z-50 flex flex-col justify-between w-72 h-screen overflow-hidden border-r border-black/20 shadow-2xl transition-transform duration-300 ease-in-out ${
           isOpenMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        {/* TOPO: LOGO / IDENTIDADE DA CLÍNICA (AJUSTADO LATERALMENTE À LARGURA DA BARRA) */}
+        {/* TOPO: LOGO / IDENTIDADE DA CLÍNICA */}
         <div
           id="sidebar-brand"
           className={`w-full border-b border-white/10 shrink-0 transition-all duration-200 ${
@@ -200,7 +200,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="flex items-center gap-3 min-w-0">
               <div
                 className="w-9 h-9 rounded-sm bg-white text-[#1A1A1A] flex items-center justify-center font-bold text-sm tracking-wider border-b-2 shadow-xs shrink-0"
-                style={{ borderBottomColor: corPrimaria }}
+                style={{ borderBottomColor: c.corPrimaria }}
               >
                 {config.monogramaIniciais || 'AR'}
               </div>
@@ -210,7 +210,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </h1>
                 <p
                   className="text-[10px] font-semibold uppercase tracking-wider truncate"
-                  style={{ color: corSecundaria }}
+                  style={{ color: c.corSecundaria }}
                 >
                   {config.subtitulo || 'Harmonização Facial'}
                 </p>
@@ -237,7 +237,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             return (
               <div key={groupIdx} id={`nav-group-${groupIdx}`} className="space-y-0.5">
                 {group.category && (
-                  <div className="px-2.5 pb-0.5 text-[9px] font-bold uppercase tracking-wider text-[#8F887E]/90">
+                  <div
+                    style={{ color: c.corNavCategoriaTexto }}
+                    className="px-2.5 pb-0.5 text-[9px] font-bold uppercase tracking-wider opacity-90"
+                  >
                     {group.category}
                   </div>
                 )}
@@ -245,72 +248,97 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {itensVisiveis.map((item) => {
                     const Icon = item.icon;
                     const isActive = activeSection === item.id;
+                    const isHovered = hoveredItemId === item.id;
                     const isPrimaryQuick = item.isPrimary;
                     const isGestorExclusivo = item.restritoGestor;
+
+                    // Estilização dinâmica com base nos estados configurados:
+                    let itemStyle: React.CSSProperties = {
+                      color: c.corNavTextoInativo,
+                      backgroundColor: 'transparent',
+                      borderColor: 'transparent',
+                    };
+
+                    if (isActive) {
+                      itemStyle = {
+                        backgroundColor: c.corNavAtivoBg,
+                        color: c.corNavAtivoTexto,
+                        borderLeftColor: c.corNavAtivoBorda,
+                      };
+                    } else if (isHovered) {
+                      itemStyle = {
+                        backgroundColor: c.corNavHoverBg,
+                        color: c.corNavTextoHover,
+                      };
+                    }
 
                     return (
                       <button
                         key={item.id}
                         id={`nav-item-${item.id}`}
+                        onMouseEnter={() => setHoveredItemId(item.id)}
+                        onMouseLeave={() => setHoveredItemId(null)}
                         onClick={() => {
                           onSelectSection(item.id);
                           onCloseMobile();
                         }}
-                        style={
-                          isActive
-                            ? isPrimaryQuick
-                              ? { backgroundColor: corPrimaria, color: '#FFFFFF' }
-                              : {
-                                  backgroundColor: 'rgba(255, 255, 255, 0.12)',
-                                  color: '#FFFFFF',
-                                  borderLeftColor: corPrimaria,
-                                }
-                            : undefined
-                        }
+                        style={itemStyle}
                         className={`group w-full flex items-center justify-between px-2.5 py-1.5 rounded-sm text-xs font-medium transition-all duration-150 text-left cursor-pointer ${
                           isActive
-                            ? isPrimaryQuick
-                              ? 'font-semibold shadow-xs'
-                              : 'font-semibold border-l-2 pl-2'
-                            : isPrimaryQuick
-                            ? 'bg-white/10 text-white hover:bg-white/15'
-                            : 'text-[#8F887E] hover:text-white hover:bg-white/5'
+                            ? 'font-semibold border-l-2 pl-2 shadow-xs'
+                            : ''
                         }`}
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <Icon
-                            className={`w-3.5 h-3.5 shrink-0 transition-colors ${
-                              isActive
-                                ? 'text-white'
-                                : isPrimaryQuick
-                                ? 'text-[#D9D6D0]'
-                                : isGestorExclusivo
-                                ? 'text-[#8F887E]'
-                                : 'text-[#8F887E] group-hover:text-white'
-                            }`}
+                            style={{
+                              color: isActive
+                                ? c.corNavAtivoTexto
+                                : isHovered
+                                ? c.corNavTextoHover
+                                : c.corNavTextoInativo,
+                            }}
+                            className="w-3.5 h-3.5 shrink-0 transition-colors"
                           />
                           <span className="truncate text-[11.5px]">{item.label}</span>
                         </div>
 
                         {isPrimaryQuick ? (
                           <span
-                            className={`text-[8.5px] uppercase font-bold tracking-wider px-1 py-0.5 rounded-sm ${
-                              isActive ? 'bg-white text-[#1A1A1A]' : 'bg-white/20 text-white'
-                            }`}
+                            className="text-[8.5px] uppercase font-bold tracking-wider px-1 py-0.5 rounded-sm"
+                            style={
+                              isActive
+                                ? { backgroundColor: '#FFFFFF', color: '#1A1A1A' }
+                                : {
+                                    backgroundColor: c.corNavBadgeBg,
+                                    color: c.corNavBadgeTexto,
+                                  }
+                            }
                           >
                             Padrão
                           </span>
                         ) : isGestorExclusivo ? (
                           <span
-                            className="text-[8.5px] font-bold tracking-wider uppercase px-1 py-0.5 rounded-sm bg-black/40 text-[#D9D6D0] border border-white/10"
-                            style={isActive ? { borderColor: corPrimaria } : undefined}
+                            className="text-[8.5px] font-bold tracking-wider uppercase px-1 py-0.5 rounded-sm border border-white/10"
+                            style={{
+                              backgroundColor: c.corNavBadgeBg,
+                              color: c.corNavBadgeTexto,
+                              borderColor: isActive ? c.corNavAtivoBorda : 'rgba(255,255,255,0.1)',
+                            }}
                           >
                             Gestor
                           </span>
                         ) : (
                           <ChevronRight
-                            className={`w-3 h-3 transition-transform opacity-0 group-hover:opacity-100 ${
-                              isActive ? 'opacity-100 text-white' : 'text-[#8F887E]'
+                            style={{
+                              color: isActive
+                                ? c.corNavAtivoTexto
+                                : isHovered
+                                ? c.corNavTextoHover
+                                : c.corNavTextoInativo,
+                            }}
+                            className={`w-3 h-3 transition-transform ${
+                              isActive || isHovered ? 'opacity-100' : 'opacity-0'
                             }`}
                           />
                         )}
@@ -323,24 +351,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </div>
 
-        {/* RODAPÉ DA SIDEBAR: RESPONSÁVEL & STATUS */}
+        {/* RODAPÉ DA SIDEBAR: RESPONSÁVEL & STATUS (CONTRASTE HARMONIZADO NA PALETA) */}
         <div
           id="sidebar-footer"
-          className="p-2.5 border-t border-white/10 bg-black/30 shrink-0 space-y-1.5"
+          style={{
+            backgroundColor: c.corNavFooterBg,
+          }}
+          className="p-2.5 border-t border-white/10 shrink-0 space-y-1.5 backdrop-blur-xs"
         >
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <div
-                style={{ backgroundColor: corPrimaria }}
-                className="w-6 h-6 rounded-sm flex items-center justify-center font-bold text-[10px] text-white shrink-0 shadow-xs"
+                style={{ backgroundColor: c.corPrimaria, color: '#FFFFFF' }}
+                className="w-6 h-6 rounded-sm flex items-center justify-center font-bold text-[10px] shrink-0 shadow-xs ring-1 ring-white/15"
               >
                 {responsavelAtivo?.iniciais || config.monogramaIniciais || 'AR'}
               </div>
               <div className="min-w-0">
-                <p className="text-[11px] font-bold text-white truncate">
+                <p
+                  style={{ color: c.corNavFooterTextoPrincipal }}
+                  className="text-[11.5px] font-bold truncate leading-tight tracking-wide"
+                >
                   {responsavelNome}
                 </p>
-                <p className="text-[9.5px] text-[#8F887E] font-medium truncate">
+                <p
+                  style={{ color: c.corNavFooterTextoSecundario }}
+                  className="text-[9.5px] font-medium truncate opacity-95"
+                >
                   {responsavelAtivo?.cargo || (isGestor ? 'Gestor Master' : 'Colaborador')}
                 </p>
               </div>
@@ -349,22 +386,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
               id="btn-sidebar-logout"
               type="button"
               onClick={deslogar}
+              style={{ color: c.corNavFooterIcone }}
               title="Trocar de responsável ou sair"
-              className="p-1 rounded-sm text-[#8F887E] hover:text-rose-400 hover:bg-rose-950/30 transition-colors cursor-pointer"
+              className="p-1 rounded-sm hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          <div className="flex items-center justify-between pt-1.5 border-t border-white/5 text-[9px] text-[#8F887E]">
-            <span className="flex items-center gap-1">
+          <div
+            style={{ borderColor: 'rgba(255, 255, 255, 0.08)' }}
+            className="flex items-center justify-between pt-1.5 border-t text-[9px]"
+          >
+            <span
+              style={{ color: c.corNavFooterTextoSecundario }}
+              className="flex items-center gap-1 font-medium"
+            >
               <span
-                className="w-1.5 h-1.5 rounded-full"
-                style={{ backgroundColor: isFirestoreConnected ? '#10B981' : corSecundaria }}
+                className="w-1.5 h-1.5 rounded-full shrink-0 shadow-2xs"
+                style={{ backgroundColor: isFirestoreConnected ? '#10B981' : c.corSecundaria }}
               />
               {isFirestoreConnected ? 'Nuvem Conectada' : 'Sincronizando...'}
             </span>
-            <span className="text-[8.5px] uppercase font-mono tracking-wider text-[#8F887E]/70">
+            <span
+              style={{ color: c.corNavFooterTextoSecundario }}
+              className="text-[8.5px] uppercase font-mono tracking-wider opacity-85 font-semibold"
+            >
               {config.monogramaIniciais || 'AR'} CRM
             </span>
           </div>
@@ -373,3 +420,4 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </>
   );
 };
+

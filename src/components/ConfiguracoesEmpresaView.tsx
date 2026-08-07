@@ -25,6 +25,13 @@ import {
   Trash2,
   Plus,
   Database,
+  MousePointer,
+  Contrast,
+  SlidersHorizontal,
+  ChevronRight,
+  UserPlus,
+  Flame,
+  LogOut,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useEmpresa, CONFIGURACOES_PADRAO } from '../context/EmpresaContext';
@@ -35,6 +42,7 @@ import {
   EsteticaPlataforma,
   ESTETICAS_PRESET,
 } from '../types';
+import { obterCoresSidebarCompletas, sugerirContrasteBlocoInferior } from '../utils/estetica';
 import { ControleProcedimentosView } from './ControleProcedimentosView';
 import { SupabaseConfigView } from './SupabaseConfigView';
 
@@ -219,11 +227,28 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
     }
   };
 
+  // Estado de simulação interativa da sidebar na aba de estética
+  const [simuladorHoverItemId, setSimuladorHoverItemId] = useState<string | null>(null);
+
   // Aplicar alterações manuais de cor instantaneamente
   const handleAtualizarCorManual = (campo: keyof EsteticaPlataforma, valor: string) => {
     const nova = { ...coresCustomizadas, [campo]: valor, isPersonalizado: true };
     setCoresCustomizadas(nova);
     aplicarEstetica(nova);
+  };
+
+  // Ajustar contraste inteligente e harmônico para o bloco inferior
+  const handleAjustarContrasteAutomatico = () => {
+    const corSidebarAtual = coresCustomizadas.corSidebar || config.estetica.corSidebar;
+    const sugestao = sugerirContrasteBlocoInferior(corSidebarAtual);
+    const nova = {
+      ...coresCustomizadas,
+      ...sugestao,
+      isPersonalizado: true,
+    };
+    setCoresCustomizadas(nova);
+    aplicarEstetica(nova);
+    mostrarMensagem('sucesso', 'Contraste inteligente e harmonizado aplicado ao bloco inferior!');
   };
 
   // Exportar configurações em JSON
@@ -1031,6 +1056,7 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
                 {(config.esteticasSalvas || ESTETICAS_PRESET).map((preset) => {
                   const isAtiva = config.estetica.idPreset === preset.idPreset;
+                  const cPreset = obterCoresSidebarCompletas(preset);
 
                   return (
                     <div
@@ -1057,33 +1083,38 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
                           {preset.descricao || 'Paleta de cores customizada.'}
                         </p>
 
-                        {/* Amostras das cores */}
-                        <div className="flex items-center gap-1.5 pt-1">
-                          <span
-                            title="Cor Primária"
-                            className="w-5 h-5 rounded-sm border border-black/10 shadow-2xs"
-                            style={{ backgroundColor: preset.corPrimaria }}
-                          />
-                          <span
-                            title="Cor Secundária"
-                            className="w-5 h-5 rounded-sm border border-black/10 shadow-2xs"
-                            style={{ backgroundColor: preset.corSecundaria }}
-                          />
-                          <span
-                            title="Cor da Sidebar"
-                            className="w-5 h-5 rounded-sm border border-black/10 shadow-2xs"
-                            style={{ backgroundColor: preset.corSidebar }}
-                          />
-                          <span
-                            title="Fundo Destaque"
-                            className="w-5 h-5 rounded-sm border border-black/10 shadow-2xs"
-                            style={{ backgroundColor: preset.corFundoDestaque }}
-                          />
-                          <span
-                            title="Bordas"
-                            className="w-5 h-5 rounded-sm border border-black/10 shadow-2xs"
-                            style={{ backgroundColor: preset.corBorda }}
-                          />
+                        {/* Amostras completas das cores incluindo menu lateral e rodapé */}
+                        <div className="space-y-1.5 pt-1">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              title="Cor Primária"
+                              className="w-5 h-5 rounded-sm border border-black/10 shadow-2xs"
+                              style={{ backgroundColor: cPreset.corPrimaria }}
+                            />
+                            <span
+                              title="Cor Secundária"
+                              className="w-5 h-5 rounded-sm border border-black/10 shadow-2xs"
+                              style={{ backgroundColor: cPreset.corSecundaria }}
+                            />
+                            <span
+                              title="Fundo da Barra Lateral"
+                              className="w-5 h-5 rounded-sm border border-black/10 shadow-2xs"
+                              style={{ backgroundColor: cPreset.corSidebar }}
+                            />
+                            <span
+                              title="Item Ativo / Clicado"
+                              className="w-5 h-5 rounded-sm border border-black/10 shadow-2xs"
+                              style={{ backgroundColor: cPreset.corNavAtivoBg }}
+                            />
+                            <span
+                              title="Bloco Inferior da Barra"
+                              className="w-5 h-5 rounded-sm border border-black/10 shadow-2xs"
+                              style={{ backgroundColor: cPreset.corNavFooterBg }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-[#8F887E] font-medium block">
+                            Paleta harmônica com alto contraste na barra e rodapé.
+                          </span>
                         </div>
                       </div>
 
@@ -1117,15 +1148,15 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
               </div>
             </div>
 
-            {/* SELETOR DE CORES CUSTOMIZADAS */}
+            {/* SELETOR DE CORES GERAIS DA PLATAFORMA */}
             <div className="bg-white rounded-sm p-5 sm:p-6 border border-[#D9D6D0] shadow-xs space-y-6">
               <div>
                 <h2 className="text-sm font-bold text-[#1A1A1A] uppercase tracking-wider flex items-center gap-2">
                   <Sliders className="w-4 h-4 text-[#5C3A22]" />
-                  <span>Ajuste Fino de Cores da Plataforma</span>
+                  <span>Cores Gerais da Plataforma & Conteúdo</span>
                 </h2>
                 <p className="text-xs text-[#6E6E6E] mt-0.5">
-                  Edite qualquer cor em tempo real. As alterações refletem imediatamente em todos os componentes.
+                  Acentos de botões, destaques de relatórios, divisórias e tipografia do conteúdo principal.
                 </p>
               </div>
 
@@ -1155,7 +1186,7 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
                     />
                   </div>
                   <p className="text-[10px] text-[#6E6E6E]">
-                    Botões de ação primários, badges de destaque e barras laterais de POP.
+                    Botões principais de ação, badges de destaque e barras laterais de POP.
                   </p>
                 </div>
 
@@ -1188,36 +1219,7 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
                   </p>
                 </div>
 
-                {/* 3. Cor da Sidebar */}
-                <div className="p-3.5 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wider">
-                      Cor da Barra Lateral
-                    </label>
-                    <span className="text-[11px] font-mono text-[#6E6E6E]">
-                      {coresCustomizadas.corSidebar}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={coresCustomizadas.corSidebar}
-                      onChange={(e) => handleAtualizarCorManual('corSidebar', e.target.value)}
-                      className="w-10 h-9 rounded-sm border border-[#D9D6D0] cursor-pointer p-0.5 bg-white"
-                    />
-                    <input
-                      type="text"
-                      value={coresCustomizadas.corSidebar}
-                      onChange={(e) => handleAtualizarCorManual('corSidebar', e.target.value)}
-                      className="flex-1 h-9 px-3 text-xs font-mono rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] uppercase"
-                    />
-                  </div>
-                  <p className="text-[10px] text-[#6E6E6E]">
-                    Fundo estrutural da barra de navegação lateral fixa e cabeçalhos de tabela.
-                  </p>
-                </div>
-
-                {/* 4. Fundo de Destaques */}
+                {/* 3. Fundo de Destaques */}
                 <div className="p-3.5 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wider">
@@ -1246,7 +1248,7 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
                   </p>
                 </div>
 
-                {/* 5. Bordas Neutras */}
+                {/* 4. Bordas Neutras */}
                 <div className="p-3.5 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wider">
@@ -1275,11 +1277,11 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
                   </p>
                 </div>
 
-                {/* 6. Texto Principal */}
-                <div className="p-3.5 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2">
+                {/* 5. Texto Principal */}
+                <div className="p-3.5 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2 sm:col-span-2">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wider">
-                      Texto Principal
+                      Texto Principal da Aplicação
                     </label>
                     <span className="text-[11px] font-mono text-[#6E6E6E]">
                       {coresCustomizadas.corTexto}
@@ -1300,8 +1302,614 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
                     />
                   </div>
                   <p className="text-[10px] text-[#6E6E6E]">
-                    Tipografia de títulos, textos e dados das tabelas.
+                    Tipografia de títulos de páginas, parágrafos e dados das tabelas clínicas.
                   </p>
+                </div>
+              </div>
+            </div>
+
+            {/* NOVO PAINEL COMPLETO: CONFIGURAÇÃO DE CORES DA BARRA DE NAVEGAÇÃO */}
+            <div className="bg-white rounded-sm p-5 sm:p-6 border border-[#D9D6D0] shadow-xs space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#D9D6D0]">
+                <div>
+                  <h2 className="text-sm font-bold text-[#1A1A1A] uppercase tracking-wider flex items-center gap-2">
+                    <SlidersHorizontal className="w-4 h-4 text-[#5C3A22]" />
+                    <span>Configurações de Cores da Barra de Navegação</span>
+                  </h2>
+                  <p className="text-xs text-[#6E6E6E] mt-0.5">
+                    Controle granular da letra antes e depois do cursor (hover), quando clicada e não clicada, e contraste harmônico do bloco inferior.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAjustarContrasteAutomatico}
+                  className="h-9 px-3.5 rounded-sm bg-[#1A1A1A] hover:bg-[#5C3A22] text-white text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-2 shadow-xs shrink-0 self-start sm:self-auto"
+                >
+                  <Contrast className="w-4 h-4 text-[#C8C3BC]" />
+                  <span>Ajustar Contraste Inteligente</span>
+                </button>
+              </div>
+
+              {/* Layout em 2 Colunas: Controles de Cor à Esquerda + Simulador Interativo à Direita */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Coluna de Controles (7 Colunas) */}
+                <div className="lg:col-span-7 space-y-6">
+                  {/* SEÇÃO 1: ESTRUTURA DA BARRA */}
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wider flex items-center gap-2 text-[#5C3A22]">
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>1. Estrutura da Barra Lateral & Títulos de Grupos</span>
+                    </h3>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Cor da Sidebar */}
+                      <div className="p-3 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-[#1A1A1A] uppercase tracking-wider">
+                            Fundo da Barra Lateral
+                          </label>
+                          <span className="text-[10.5px] font-mono text-[#6E6E6E]">
+                            {coresCustomizadas.corSidebar}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={coresCustomizadas.corSidebar}
+                            onChange={(e) => handleAtualizarCorManual('corSidebar', e.target.value)}
+                            className="w-9 h-8 rounded-sm border border-[#D9D6D0] cursor-pointer p-0.5 bg-white"
+                          />
+                          <input
+                            type="text"
+                            value={coresCustomizadas.corSidebar}
+                            onChange={(e) => handleAtualizarCorManual('corSidebar', e.target.value)}
+                            className="flex-1 h-8 px-2.5 text-xs font-mono rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] uppercase"
+                          />
+                        </div>
+                        <p className="text-[9.5px] text-[#6E6E6E]">
+                          Fundo estrutural da barra de navegação lateral fixa.
+                        </p>
+                      </div>
+
+                      {/* Títulos de Categorias */}
+                      <div className="p-3 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-[#1A1A1A] uppercase tracking-wider">
+                            Títulos de Categoria
+                          </label>
+                          <span className="text-[10.5px] font-mono text-[#6E6E6E]">
+                            {coresCustomizadas.corNavCategoriaTexto || '#A8A196'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={coresCustomizadas.corNavCategoriaTexto || '#A8A196'}
+                            onChange={(e) => handleAtualizarCorManual('corNavCategoriaTexto', e.target.value)}
+                            className="w-9 h-8 rounded-sm border border-[#D9D6D0] cursor-pointer p-0.5 bg-white"
+                          />
+                          <input
+                            type="text"
+                            value={coresCustomizadas.corNavCategoriaTexto || '#A8A196'}
+                            onChange={(e) => handleAtualizarCorManual('corNavCategoriaTexto', e.target.value)}
+                            className="flex-1 h-8 px-2.5 text-xs font-mono rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] uppercase"
+                          />
+                        </div>
+                        <p className="text-[9.5px] text-[#6E6E6E]">
+                          Ex: "ETAPAS DO FUNIL", "GESTÃO & ANÁLISE".
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SEÇÃO 2: ESTADOS DOS ITENS (ANTES/DEPOIS DO CURSOR, CLICADO/NÃO CLICADO) */}
+                  <div className="space-y-3 pt-2 border-t border-[#D9D6D0]">
+                    <h3 className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wider flex items-center gap-2 text-[#5C3A22]">
+                      <MousePointer className="w-3.5 h-3.5" />
+                      <span>2. Estados dos Itens (Antes e Depois do Cursor, Clicado e Não Clicado)</span>
+                    </h3>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Cor da Letra Antes do Cursor (Inativo / Não Clicado) */}
+                      <div className="p-3 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-[#1A1A1A] uppercase tracking-wider">
+                            Letra Antes do Cursor
+                          </label>
+                          <span className="text-[10.5px] font-mono text-[#6E6E6E]">
+                            {coresCustomizadas.corNavTextoInativo || '#8F887E'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={coresCustomizadas.corNavTextoInativo || '#8F887E'}
+                            onChange={(e) => handleAtualizarCorManual('corNavTextoInativo', e.target.value)}
+                            className="w-9 h-8 rounded-sm border border-[#D9D6D0] cursor-pointer p-0.5 bg-white"
+                          />
+                          <input
+                            type="text"
+                            value={coresCustomizadas.corNavTextoInativo || '#8F887E'}
+                            onChange={(e) => handleAtualizarCorManual('corNavTextoInativo', e.target.value)}
+                            className="flex-1 h-8 px-2.5 text-xs font-mono rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] uppercase"
+                          />
+                        </div>
+                        <p className="text-[9.5px] text-[#6E6E6E]">
+                          Cor da letra e ícone em repouso (quando não clicada e sem o cursor).
+                        </p>
+                      </div>
+
+                      {/* Cor da Letra Depois do Cursor (Hover) */}
+                      <div className="p-3 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-[#1A1A1A] uppercase tracking-wider">
+                            Letra Depois do Cursor (Hover)
+                          </label>
+                          <span className="text-[10.5px] font-mono text-[#6E6E6E]">
+                            {coresCustomizadas.corNavTextoHover || '#FFFFFF'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={coresCustomizadas.corNavTextoHover || '#FFFFFF'}
+                            onChange={(e) => handleAtualizarCorManual('corNavTextoHover', e.target.value)}
+                            className="w-9 h-8 rounded-sm border border-[#D9D6D0] cursor-pointer p-0.5 bg-white"
+                          />
+                          <input
+                            type="text"
+                            value={coresCustomizadas.corNavTextoHover || '#FFFFFF'}
+                            onChange={(e) => handleAtualizarCorManual('corNavTextoHover', e.target.value)}
+                            className="flex-1 h-8 px-2.5 text-xs font-mono rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] uppercase"
+                          />
+                        </div>
+                        <p className="text-[9.5px] text-[#6E6E6E]">
+                          Cor da letra e ícone ao passar o cursor do mouse (hover).
+                        </p>
+                      </div>
+
+                      {/* Fundo do Item no Hover */}
+                      <div className="p-3 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-[#1A1A1A] uppercase tracking-wider">
+                            Fundo no Hover
+                          </label>
+                          <span className="text-[10.5px] font-mono text-[#6E6E6E]">
+                            {coresCustomizadas.corNavHoverBg || 'rgba(255,255,255,0.08)'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={coresCustomizadas.corNavHoverBg || 'rgba(255,255,255,0.08)'}
+                            onChange={(e) => handleAtualizarCorManual('corNavHoverBg', e.target.value)}
+                            className="w-full h-8 px-2.5 text-xs font-mono rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A]"
+                            placeholder="rgba(255,255,255,0.08) ou #262626"
+                          />
+                        </div>
+                        <p className="text-[9.5px] text-[#6E6E6E]">
+                          Realce de fundo suave exibido após o cursor passar sobre o item.
+                        </p>
+                      </div>
+
+                      {/* Fundo do Item Clicado / Ativo */}
+                      <div className="p-3 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-[#1A1A1A] uppercase tracking-wider">
+                            Fundo Quando Clicada (Ativo)
+                          </label>
+                          <span className="text-[10.5px] font-mono text-[#6E6E6E]">
+                            {coresCustomizadas.corNavAtivoBg || coresCustomizadas.corPrimaria}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={coresCustomizadas.corNavAtivoBg || coresCustomizadas.corPrimaria}
+                            onChange={(e) => handleAtualizarCorManual('corNavAtivoBg', e.target.value)}
+                            className="w-9 h-8 rounded-sm border border-[#D9D6D0] cursor-pointer p-0.5 bg-white"
+                          />
+                          <input
+                            type="text"
+                            value={coresCustomizadas.corNavAtivoBg || coresCustomizadas.corPrimaria}
+                            onChange={(e) => handleAtualizarCorManual('corNavAtivoBg', e.target.value)}
+                            className="flex-1 h-8 px-2.5 text-xs font-mono rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] uppercase"
+                          />
+                        </div>
+                        <p className="text-[9.5px] text-[#6E6E6E]">
+                          Fundo da seção atualmente ativa/selecionada na barra.
+                        </p>
+                      </div>
+
+                      {/* Letra do Item Clicado / Ativo */}
+                      <div className="p-3 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-[#1A1A1A] uppercase tracking-wider">
+                            Letra Quando Clicada (Ativo)
+                          </label>
+                          <span className="text-[10.5px] font-mono text-[#6E6E6E]">
+                            {coresCustomizadas.corNavAtivoTexto || '#FFFFFF'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={coresCustomizadas.corNavAtivoTexto || '#FFFFFF'}
+                            onChange={(e) => handleAtualizarCorManual('corNavAtivoTexto', e.target.value)}
+                            className="w-9 h-8 rounded-sm border border-[#D9D6D0] cursor-pointer p-0.5 bg-white"
+                          />
+                          <input
+                            type="text"
+                            value={coresCustomizadas.corNavAtivoTexto || '#FFFFFF'}
+                            onChange={(e) => handleAtualizarCorManual('corNavAtivoTexto', e.target.value)}
+                            className="flex-1 h-8 px-2.5 text-xs font-mono rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] uppercase"
+                          />
+                        </div>
+                        <p className="text-[9.5px] text-[#6E6E6E]">
+                          Cor da letra e ícone da seção ativa em alto contraste.
+                        </p>
+                      </div>
+
+                      {/* Indicador / Borda Lateral do Item Clicado */}
+                      <div className="p-3 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-[#1A1A1A] uppercase tracking-wider">
+                            Indicador / Borda Clicada
+                          </label>
+                          <span className="text-[10.5px] font-mono text-[#6E6E6E]">
+                            {coresCustomizadas.corNavAtivoBorda || coresCustomizadas.corSecundaria}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={coresCustomizadas.corNavAtivoBorda || coresCustomizadas.corSecundaria}
+                            onChange={(e) => handleAtualizarCorManual('corNavAtivoBorda', e.target.value)}
+                            className="w-9 h-8 rounded-sm border border-[#D9D6D0] cursor-pointer p-0.5 bg-white"
+                          />
+                          <input
+                            type="text"
+                            value={coresCustomizadas.corNavAtivoBorda || coresCustomizadas.corSecundaria}
+                            onChange={(e) => handleAtualizarCorManual('corNavAtivoBorda', e.target.value)}
+                            className="flex-1 h-8 px-2.5 text-xs font-mono rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] uppercase"
+                          />
+                        </div>
+                        <p className="text-[9.5px] text-[#6E6E6E]">
+                          Borda lateral esquerda indicativa de seleção.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SEÇÃO 3: BLOCO INFERIOR DA BARRA (RODAPÉ / RESPONSÁVEL & NUVEM) */}
+                  <div className="space-y-3 pt-2 border-t border-[#D9D6D0]">
+                    <div className="space-y-1">
+                      <h3 className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wider flex items-center gap-2 text-[#5C3A22]">
+                        <Contrast className="w-3.5 h-3.5" />
+                        <span>3. Bloco Inferior da Barra (Responsável, Nuvem & Informações)</span>
+                      </h3>
+                      <p className="text-[11px] text-[#6E6E6E]">
+                        O bloco inferior possui cores sempre contrastadas e harmonizadas na paleta do fundo para garantir que nome, cargo, status da nuvem e versão estejam 100% visíveis e legíveis.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Fundo do Bloco Inferior */}
+                      <div className="p-3 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-[#1A1A1A] uppercase tracking-wider">
+                            Fundo do Bloco Inferior
+                          </label>
+                          <span className="text-[10.5px] font-mono text-[#6E6E6E]">
+                            {coresCustomizadas.corNavFooterBg || '#111111'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={coresCustomizadas.corNavFooterBg?.startsWith('#') ? coresCustomizadas.corNavFooterBg : '#111111'}
+                            onChange={(e) => handleAtualizarCorManual('corNavFooterBg', e.target.value)}
+                            className="w-9 h-8 rounded-sm border border-[#D9D6D0] cursor-pointer p-0.5 bg-white"
+                          />
+                          <input
+                            type="text"
+                            value={coresCustomizadas.corNavFooterBg || '#111111'}
+                            onChange={(e) => handleAtualizarCorManual('corNavFooterBg', e.target.value)}
+                            className="flex-1 h-8 px-2.5 text-xs font-mono rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] uppercase"
+                          />
+                        </div>
+                        <p className="text-[9.5px] text-[#6E6E6E]">
+                          Fundo do rodapé da barra lateral.
+                        </p>
+                      </div>
+
+                      {/* Texto Principal do Rodapé (Nome do Responsável) */}
+                      <div className="p-3 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-[#1A1A1A] uppercase tracking-wider">
+                            Nome do Responsável
+                          </label>
+                          <span className="text-[10.5px] font-mono text-[#6E6E6E]">
+                            {coresCustomizadas.corNavFooterTextoPrincipal || '#FFFFFF'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={coresCustomizadas.corNavFooterTextoPrincipal || '#FFFFFF'}
+                            onChange={(e) => handleAtualizarCorManual('corNavFooterTextoPrincipal', e.target.value)}
+                            className="w-9 h-8 rounded-sm border border-[#D9D6D0] cursor-pointer p-0.5 bg-white"
+                          />
+                          <input
+                            type="text"
+                            value={coresCustomizadas.corNavFooterTextoPrincipal || '#FFFFFF'}
+                            onChange={(e) => handleAtualizarCorManual('corNavFooterTextoPrincipal', e.target.value)}
+                            className="flex-1 h-8 px-2.5 text-xs font-mono rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] uppercase"
+                          />
+                        </div>
+                        <p className="text-[9.5px] text-[#6E6E6E]">
+                          Texto de alto contraste para leitura imediata do nome do usuário.
+                        </p>
+                      </div>
+
+                      {/* Texto Secundário do Rodapé (Cargo, Nuvem & CRM) */}
+                      <div className="p-3 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-[#1A1A1A] uppercase tracking-wider">
+                            Cargo & Status da Nuvem
+                          </label>
+                          <span className="text-[10.5px] font-mono text-[#6E6E6E]">
+                            {coresCustomizadas.corNavFooterTextoSecundario || '#C8C3BC'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={coresCustomizadas.corNavFooterTextoSecundario || '#C8C3BC'}
+                            onChange={(e) => handleAtualizarCorManual('corNavFooterTextoSecundario', e.target.value)}
+                            className="w-9 h-8 rounded-sm border border-[#D9D6D0] cursor-pointer p-0.5 bg-white"
+                          />
+                          <input
+                            type="text"
+                            value={coresCustomizadas.corNavFooterTextoSecundario || '#C8C3BC'}
+                            onChange={(e) => handleAtualizarCorManual('corNavFooterTextoSecundario', e.target.value)}
+                            className="flex-1 h-8 px-2.5 text-xs font-mono rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] uppercase"
+                          />
+                        </div>
+                        <p className="text-[9.5px] text-[#6E6E6E]">
+                          Cargo do colaborador, indicador de nuvem conectada e versão do CRM.
+                        </p>
+                      </div>
+
+                      {/* Ícone do Rodapé */}
+                      <div className="p-3 rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-[#1A1A1A] uppercase tracking-wider">
+                            Ícone de Logout & Ações
+                          </label>
+                          <span className="text-[10.5px] font-mono text-[#6E6E6E]">
+                            {coresCustomizadas.corNavFooterIcone || '#D9D6D0'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={coresCustomizadas.corNavFooterIcone || '#D9D6D0'}
+                            onChange={(e) => handleAtualizarCorManual('corNavFooterIcone', e.target.value)}
+                            className="w-9 h-8 rounded-sm border border-[#D9D6D0] cursor-pointer p-0.5 bg-white"
+                          />
+                          <input
+                            type="text"
+                            value={coresCustomizadas.corNavFooterIcone || '#D9D6D0'}
+                            onChange={(e) => handleAtualizarCorManual('corNavFooterIcone', e.target.value)}
+                            className="flex-1 h-8 px-2.5 text-xs font-mono rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] uppercase"
+                          />
+                        </div>
+                        <p className="text-[9.5px] text-[#6E6E6E]">
+                          Botão de deslogar/trocar responsável no rodapé da barra.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Coluna Direita: SIMULADOR INTERATIVO EM TEMPO REAL (5 Colunas) */}
+                <div className="lg:col-span-5 space-y-4">
+                  <div className="bg-[#F2EFEA]/40 rounded-sm p-4 border border-[#D9D6D0] space-y-3 sticky top-4">
+                    <div className="flex items-center justify-between pb-2 border-b border-[#D9D6D0]">
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1A1A1A]">
+                        <Eye className="w-4 h-4 text-[#5C3A22]" />
+                        <span>Simulador Interativo da Barra</span>
+                      </div>
+                      <span className="text-[10px] text-[#5C3A22] font-bold uppercase tracking-wider">
+                        Tempo Real
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-[#6E6E6E] leading-snug">
+                      Passe o cursor sobre os itens abaixo para testar a cor <strong>antes</strong> e <strong>depois</strong> do cursor, o estado clicado e a legibilidade do bloco inferior:
+                    </p>
+
+                    {/* Barra Lateral Simulada */}
+                    {(() => {
+                      const cSim = obterCoresSidebarCompletas(coresCustomizadas);
+
+                      return (
+                        <div
+                          className="rounded-sm text-white shadow-lg border border-black/30 overflow-hidden flex flex-col justify-between"
+                          style={{ backgroundColor: cSim.corSidebar }}
+                        >
+                          {/* Topo / Marca Simulado */}
+                          <div className="p-3 border-b border-white/10 bg-black/25 flex items-center gap-2.5">
+                            <div
+                              className="w-8 h-8 rounded-sm bg-white text-[#1A1A1A] flex items-center justify-center font-bold text-xs shrink-0 shadow-xs border-b-2"
+                              style={{ borderBottomColor: cSim.corPrimaria }}
+                            >
+                              {config.monogramaIniciais || 'AR'}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-bold tracking-wider text-white uppercase truncate">
+                                {config.nomeEmpresa || 'Dra. Agda Rodrigues'}
+                              </p>
+                              <p
+                                className="text-[9px] font-semibold uppercase tracking-wider truncate"
+                                style={{ color: cSim.corSecundaria }}
+                              >
+                                {config.subtitulo || 'Harmonização Facial'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Itens Simulados com Interação de Hover */}
+                          <div className="p-2.5 space-y-2">
+                            {/* Categoria */}
+                            <div
+                              style={{ color: cSim.corNavCategoriaTexto }}
+                              className="px-2 text-[9px] font-bold uppercase tracking-wider opacity-90"
+                            >
+                              Etapas do Funil
+                            </div>
+
+                            {/* Item 1: Estado Quando Clicada (Ativo) */}
+                            <div
+                              style={{
+                                backgroundColor: cSim.corNavAtivoBg,
+                                color: cSim.corNavAtivoTexto,
+                                borderLeftColor: cSim.corNavAtivoBorda,
+                              }}
+                              className="p-2 rounded-sm font-semibold border-l-2 flex items-center justify-between text-xs shadow-xs cursor-default"
+                            >
+                              <div className="flex items-center gap-2">
+                                <Flame className="w-3.5 h-3.5" style={{ color: cSim.corNavAtivoTexto }} />
+                                <span className="text-[11.5px]">Em captação</span>
+                              </div>
+                              <span className="text-[8.5px] uppercase font-bold tracking-wider px-1 py-0.5 rounded-sm bg-white/20 text-white">
+                                Clicada
+                              </span>
+                            </div>
+
+                            {/* Item 2: Interativo - Antes e Depois do Cursor (Hover) */}
+                            <div
+                              onMouseEnter={() => setSimuladorHoverItemId('pos_consulta')}
+                              onMouseLeave={() => setSimuladorHoverItemId(null)}
+                              style={{
+                                color:
+                                  simuladorHoverItemId === 'pos_consulta'
+                                    ? cSim.corNavTextoHover
+                                    : cSim.corNavTextoInativo,
+                                backgroundColor:
+                                  simuladorHoverItemId === 'pos_consulta'
+                                    ? cSim.corNavHoverBg
+                                    : 'transparent',
+                              }}
+                              className="p-2 rounded-sm flex items-center justify-between text-xs transition-all duration-150 cursor-pointer"
+                            >
+                              <div className="flex items-center gap-2">
+                                <Sparkles className="w-3.5 h-3.5 transition-colors" />
+                                <span className="text-[11.5px]">Pós consulta</span>
+                              </div>
+                              <span className="text-[9px] opacity-75 font-mono">
+                                {simuladorHoverItemId === 'pos_consulta' ? 'Depois do Cursor' : 'Antes do Cursor'}
+                              </span>
+                            </div>
+
+                            {/* Item 3: Cadastro Rápido / Padrão */}
+                            <div
+                              onMouseEnter={() => setSimuladorHoverItemId('cadastro_rapido')}
+                              onMouseLeave={() => setSimuladorHoverItemId(null)}
+                              style={{
+                                color:
+                                  simuladorHoverItemId === 'cadastro_rapido'
+                                    ? cSim.corNavTextoHover
+                                    : cSim.corNavTextoInativo,
+                                backgroundColor:
+                                  simuladorHoverItemId === 'cadastro_rapido'
+                                    ? cSim.corNavHoverBg
+                                    : 'transparent',
+                              }}
+                              className="p-2 rounded-sm flex items-center justify-between text-xs transition-all duration-150 cursor-pointer"
+                            >
+                              <div className="flex items-center gap-2">
+                                <UserPlus className="w-3.5 h-3.5 transition-colors" />
+                                <span className="text-[11.5px]">Cadastro rápido</span>
+                              </div>
+                              <ChevronRight className="w-3 h-3 opacity-60" />
+                            </div>
+                          </div>
+
+                          {/* Bloco Inferior Simulado com Contraste */}
+                          <div
+                            style={{
+                              backgroundColor: cSim.corNavFooterBg,
+                            }}
+                            className="p-2.5 border-t border-white/10 shrink-0 space-y-1.5 backdrop-blur-xs"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div
+                                  style={{ backgroundColor: cSim.corPrimaria, color: '#FFFFFF' }}
+                                  className="w-6 h-6 rounded-sm flex items-center justify-center font-bold text-[10px] shrink-0 shadow-xs ring-1 ring-white/15"
+                                >
+                                  {config.monogramaIniciais || 'AR'}
+                                </div>
+                                <div className="min-w-0">
+                                  <p
+                                    style={{ color: cSim.corNavFooterTextoPrincipal }}
+                                    className="text-[11px] font-bold truncate leading-tight tracking-wide"
+                                  >
+                                    Dra. Agda Rodrigues
+                                  </p>
+                                  <p
+                                    style={{ color: cSim.corNavFooterTextoSecundario }}
+                                    className="text-[9.5px] font-medium truncate opacity-95"
+                                  >
+                                    Gestora Master
+                                  </p>
+                                </div>
+                              </div>
+                              <div
+                                style={{ color: cSim.corNavFooterIcone }}
+                                className="p-1 rounded-sm text-xs"
+                              >
+                                <LogOut className="w-3.5 h-3.5" />
+                              </div>
+                            </div>
+
+                            <div
+                              style={{ borderColor: 'rgba(255, 255, 255, 0.08)' }}
+                              className="flex items-center justify-between pt-1.5 border-t text-[9px]"
+                            >
+                              <span
+                                style={{ color: cSim.corNavFooterTextoSecundario }}
+                                className="flex items-center gap-1 font-medium"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-2xs" />
+                                Nuvem Conectada
+                              </span>
+                              <span
+                                style={{ color: cSim.corNavFooterTextoSecundario }}
+                                className="text-[8.5px] uppercase font-mono tracking-wider opacity-85 font-semibold"
+                              >
+                                {config.monogramaIniciais || 'AR'} CRM
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={handleAjustarContrasteAutomatico}
+                        className="w-full py-2 rounded-sm border border-[#D9D6D0] bg-white hover:bg-[#F2EFEA] text-[#1A1A1A] text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <Contrast className="w-3.5 h-3.5 text-[#5C3A22]" />
+                        <span>Otimizar Contraste da Paleta</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

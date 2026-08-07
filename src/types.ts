@@ -129,13 +129,36 @@ export interface EsteticaPlataforma {
   idPreset: string;
   nomePreset: string;
   descricao?: string;
+  // Cores Globais da Plataforma
   corPrimaria: string; // Ex: #5C3A22
   corSecundaria: string; // Ex: #8A6142
-  corSidebar: string; // Ex: #1A1A1A
-  corSidebarTexto: string; // Ex: #F2EFEA
   corFundoDestaque: string; // Ex: #F2EFEA
   corBorda: string; // Ex: #D9D6D0
   corTexto: string; // Ex: #1A1A1A
+
+  // Estrutura da Barra de Navegação (Sidebar)
+  corSidebar: string; // Ex: #1A1A1A (Fundo da barra lateral)
+  corSidebarTexto?: string; // Ex: #F2EFEA
+  corNavCategoriaTexto?: string; // Ex: #8F887E (Títulos de categorias e grupos)
+
+  // Estados dos Itens de Navegação (Antes/Depois do Cursor, Clicado/Não Clicado)
+  corNavTextoInativo?: string; // Ex: #8F887E (Letra e ícone em repouso / quando não clicada / antes do cursor)
+  corNavTextoHover?: string; // Ex: #FFFFFF (Letra e ícone ao passar o cursor / depois do cursor)
+  corNavHoverBg?: string; // Ex: rgba(255, 255, 255, 0.08) (Fundo no hover)
+  corNavAtivoBg?: string; // Ex: #5C3A22 (Fundo do item quando clicado / ativo)
+  corNavAtivoTexto?: string; // Ex: #FFFFFF (Letra e ícone do item quando clicado / ativo)
+  corNavAtivoBorda?: string; // Ex: #8A6142 (Indicador / borda do item quando clicado / ativo)
+
+  // Badges e Etiquetas da Barra Lateral
+  corNavBadgeBg?: string; // Ex: #2A2A2A (Fundo dos badges 'Gestor' / 'Padrão')
+  corNavBadgeTexto?: string; // Ex: #D9D6D0 (Texto dos badges)
+
+  // Bloco Inferior da Barra de Navegação (Rodapé / Responsável, Nuvem e CRM)
+  corNavFooterBg?: string; // Ex: #111111 ou rgba(0,0,0,0.4) (Fundo do bloco inferior)
+  corNavFooterTextoPrincipal?: string; // Ex: #FFFFFF (Nome do responsável em alto contraste)
+  corNavFooterTextoSecundario?: string; // Ex: #C8C3BC (Cargo, nuvem conectada e versão em contraste harmônico)
+  corNavFooterIcone?: string; // Ex: #D9D6D0 (Ícone de logout e ações)
+
   isPersonalizado?: boolean;
 }
 
@@ -148,6 +171,19 @@ export const ESTETICAS_PRESET: EsteticaPlataforma[] = [
     corSecundaria: '#8A6142',
     corSidebar: '#1A1A1A',
     corSidebarTexto: '#F2EFEA',
+    corNavCategoriaTexto: '#A8A196',
+    corNavTextoInativo: '#8F887E',
+    corNavTextoHover: '#FFFFFF',
+    corNavHoverBg: 'rgba(255, 255, 255, 0.08)',
+    corNavAtivoBg: '#5C3A22',
+    corNavAtivoTexto: '#FFFFFF',
+    corNavAtivoBorda: '#8A6142',
+    corNavBadgeBg: '#2A2A2A',
+    corNavBadgeTexto: '#D9D6D0',
+    corNavFooterBg: '#111111',
+    corNavFooterTextoPrincipal: '#FFFFFF',
+    corNavFooterTextoSecundario: '#C8C3BC',
+    corNavFooterIcone: '#D9D6D0',
     corFundoDestaque: '#F2EFEA',
     corBorda: '#D9D6D0',
     corTexto: '#1A1A1A',
@@ -160,6 +196,19 @@ export const ESTETICAS_PRESET: EsteticaPlataforma[] = [
     corSecundaria: '#C49E3A',
     corSidebar: '#0F172A',
     corSidebarTexto: '#F8FAFC',
+    corNavCategoriaTexto: '#94A3B8',
+    corNavTextoInativo: '#64748B',
+    corNavTextoHover: '#FFFFFF',
+    corNavHoverBg: 'rgba(255, 255, 255, 0.08)',
+    corNavAtivoBg: '#A88220',
+    corNavAtivoTexto: '#FFFFFF',
+    corNavAtivoBorda: '#C49E3A',
+    corNavBadgeBg: '#1E293B',
+    corNavBadgeTexto: '#E2E8F0',
+    corNavFooterBg: '#090D16',
+    corNavFooterTextoPrincipal: '#FFFFFF',
+    corNavFooterTextoSecundario: '#CBD5E1',
+    corNavFooterIcone: '#E2E8F0',
     corFundoDestaque: '#F8FAFC',
     corBorda: '#E2E8F0',
     corTexto: '#0F172A',
@@ -172,6 +221,19 @@ export const ESTETICAS_PRESET: EsteticaPlataforma[] = [
     corSecundaria: '#A86861',
     corSidebar: '#241817',
     corSidebarTexto: '#FAF5F4',
+    corNavCategoriaTexto: '#D8C3C0',
+    corNavTextoInativo: '#A89290',
+    corNavTextoHover: '#FFFFFF',
+    corNavHoverBg: 'rgba(255, 255, 255, 0.08)',
+    corNavAtivoBg: '#7A3E39',
+    corNavAtivoTexto: '#FFFFFF',
+    corNavAtivoBorda: '#A86861',
+    corNavBadgeBg: '#382625',
+    corNavBadgeTexto: '#FAF5F4',
+    corNavFooterBg: '#170E0E',
+    corNavFooterTextoPrincipal: '#FFFFFF',
+    corNavFooterTextoSecundario: '#E0D0CE',
+    corNavFooterIcone: '#FAF5F4',
     corFundoDestaque: '#FAF5F4',
     corBorda: '#E6D8D6',
     corTexto: '#241817',
@@ -184,6 +246,19 @@ export const ESTETICAS_PRESET: EsteticaPlataforma[] = [
     corSecundaria: '#5A7A6C',
     corSidebar: '#15221C',
     corSidebarTexto: '#F3F6F4',
+    corNavCategoriaTexto: '#BED0C7',
+    corNavTextoInativo: '#7E988D',
+    corNavTextoHover: '#FFFFFF',
+    corNavHoverBg: 'rgba(255, 255, 255, 0.08)',
+    corNavAtivoBg: '#2E4A3E',
+    corNavAtivoTexto: '#FFFFFF',
+    corNavAtivoBorda: '#5A7A6C',
+    corNavBadgeBg: '#22332B',
+    corNavBadgeTexto: '#E6EFEA',
+    corNavFooterBg: '#0D1612',
+    corNavFooterTextoPrincipal: '#FFFFFF',
+    corNavFooterTextoSecundario: '#CFDED6',
+    corNavFooterIcone: '#E6EFEA',
     corFundoDestaque: '#F3F6F4',
     corBorda: '#D5DED8',
     corTexto: '#15221C',
@@ -196,6 +271,19 @@ export const ESTETICAS_PRESET: EsteticaPlataforma[] = [
     corSecundaria: '#4B5563',
     corSidebar: '#111827',
     corSidebarTexto: '#F9FAFB',
+    corNavCategoriaTexto: '#D1D5DB',
+    corNavTextoInativo: '#9CA3AF',
+    corNavTextoHover: '#FFFFFF',
+    corNavHoverBg: 'rgba(255, 255, 255, 0.08)',
+    corNavAtivoBg: '#1E40AF',
+    corNavAtivoTexto: '#FFFFFF',
+    corNavAtivoBorda: '#60A5FA',
+    corNavBadgeBg: '#1F2937',
+    corNavBadgeTexto: '#F3F4F6',
+    corNavFooterBg: '#090D16',
+    corNavFooterTextoPrincipal: '#FFFFFF',
+    corNavFooterTextoSecundario: '#E5E7EB',
+    corNavFooterIcone: '#F3F4F6',
     corFundoDestaque: '#F3F4F6',
     corBorda: '#E5E7EB',
     corTexto: '#111827',
