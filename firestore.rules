@@ -1,7 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Permite leitura e escrita para equipe da clínica autenticada no Firebase
+    // Regras de acesso para o CRM e gestão da clínica
     match /leads/{leadId} {
       allow read, write: if true;
     }
@@ -11,7 +11,19 @@ service cloud.firestore {
     match /compras/{compraId} {
       allow read, write: if true;
     }
+    match /procedimentos/{procedimentoId} {
+      allow read, write: if true;
+    }
     match /usuarios/{usuarioId} {
+      allow read, write: if true;
+    }
+    match /empresas/{empresaId} {
+      allow read, write: if true;
+    }
+    match /empresa_membros/{membroId} {
+      allow read, write: if true;
+    }
+    match /plataforma_admins/{adminId} {
       allow read, write: if true;
     }
     match /configuracoes/{configId} {
@@ -19,3 +31,4 @@ service cloud.firestore {
     }
   }
 }
+

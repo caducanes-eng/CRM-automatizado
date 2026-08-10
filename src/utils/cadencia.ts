@@ -21,6 +21,15 @@ export const CADENCIA_POS_PROCEDIMENTO_4_CONTATOS = [
   'Contato 4 - Confirmação do retorno (dia 29)',
 ] as const;
 
+// Cadência de 3 contatos para: Nutrição
+export const CADENCIA_NUTRICAO_3_CONTATOS = [
+  'Fluxo de conteúdo 1 (Cuidados)',
+  'Fluxo de conteúdo 2 (Novidades)',
+  'Convite para evento / Botox Day',
+] as const;
+
+export const ETAPAS_CONCLUIDAS_LABEL = 'Todas as etapas concluídas';
+
 export type StatusCadencia = 'Atrasado' | 'Em dia' | 'Adiantado' | 'Sem etapa selecionada';
 
 export interface ItemCadenciaConfig {
@@ -57,7 +66,135 @@ export function obterOpcoesCadenciaPorSituacao(situacao: SituacaoLead): string[]
   ) {
     return [...CADENCIA_PADRAO_5_CONTATOS];
   }
+  if (situacao === 'Nutrição') {
+    return [...CADENCIA_NUTRICAO_3_CONTATOS];
+  }
   return [];
+}
+
+/**
+ * Normaliza o nome da etapa para casamento flexível caso o lead possua valores legados
+ */
+export function normalizarEtapa(etapa: string): string {
+  return etapa.trim().toLowerCase();
+}
+
+/**
+ * Verifica se todas as etapas foram concluídas para o lead
+ */
+export function verificarSeTodasEtapasConcluidas(
+  situacao: SituacaoLead,
+  etapaArmazenada?: string | null
+): boolean {
+  if (!etapaArmazenada) return false;
+  const etapaTrim = etapaArmazenada.trim();
+  if (etapaTrim === ETAPAS_CONCLUIDAS_LABEL || etapaTrim.toLowerCase().includes('concluída')) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Retorna a "Próxima Etapa" a ser executada pelo usuário com base na última executada
+ * Se nada foi executado ainda, a próxima é o primeiro contato da cadência.
+ */
+export function obterProximaEtapa(
+  situacao: SituacaoLead,
+  etapaArmazenada?: string | null
+): string {
+  const opcoes = obterOpcoesCadenciaPorSituacao(situacao);
+  if (opcoes.length === 0) {
+    return '-';
+  }
+
+  if (!etapaArmazenada || etapaArmazenada.trim() === '') {
+    return opcoes[0];
+  }
+
+  const etapaTrim = etapaArmazenada.trim();
+  if (etapaTrim === ETAPAS_CONCLUIDAS_LABEL || etapaTrim.toLowerCase().includes('concluída')) {
+    return ETAPAS_CONCLUIDAS_LABEL;
+  }
+
+  // Se a etapa armazenada já é uma das etapas oficiais, ela é a próxima etapa a ser cumprida
+  const index = opcoes.indexOf(etapaTrim);
+  if (index !== -1) {
+    return opcoes[index];
+  }
+
+  // Fallback com normalização
+  const norm = normalizarEtapa(etapaTrim);
+  const match = opcoes.find((op) => normalizarEtapa(op) === norm);
+  if (match) return match;
+
+  return etapaTrim;
+}
+
+/**
+ * Avança para a próxima etapa na cadência quando o usuário clica em "Concluído"
+ */
+export function avancarProximaEtapa(
+  situacao: SituacaoLead,
+  etapaArmazenada?: string | null
+): {
+  proximaEtapa: string;
+  todasConcluidas: boolean;
+  etapaConcluida: string;
+} {
+  const opcoes = obterOpcoesCadenciaPorSituacao(situacao);
+  if (opcoes.length === 0) {
+    return {
+      proximaEtapa: '',
+      todasConcluidas: true,
+      etapaConcluida: '-',
+    };
+  }
+
+  // Se já estava com todas concluídas
+  if (verificarSeTodasEtapasConcluidas(situacao, etapaArmazenada)) {
+    return {
+      proximaEtapa: ETAPAS_CONCLUIDAS_LABEL,
+      todasConcluidas: true,
+      etapaConcluida: ETAPAS_CONCLUIDAS_LABEL,
+    };
+  }
+
+  const etapaAtual = etapaArmazenada?.trim() || opcoes[0];
+  let indexAtual = opcoes.indexOf(etapaAtual);
+
+  if (indexAtual === -1) {
+    const norm = normalizarEtapa(etapaAtual);
+    indexAtual = opcoes.findIndex((op) => normalizarEtapa(op) === norm);
+  }
+
+  if (indexAtual === -1) {
+    indexAtual = 0;
+  }
+
+  const etapaConcluida = opcoes[indexAtual] || etapaAtual;
+  const proximoIndex = indexAtual + 1;
+
+  if (proximoIndex < opcoes.length) {
+    return {
+      proximaEtapa: opcoes[proximoIndex],
+      todasConcluidas: false,
+      etapaConcluida,
+    };
+  } else {
+    return {
+      proximaEtapa: ETAPAS_CONCLUIDAS_LABEL,
+      todasConcluidas: true,
+      etapaConcluida,
+    };
+  }
+}
+
+/**
+ * Reinicia a sequência de cadência para o primeiro contato
+ */
+export function reiniciarCadencia(situacao: SituacaoLead): string {
+  const opcoes = obterOpcoesCadenciaPorSituacao(situacao);
+  return opcoes[0] || '';
 }
 
 /**
@@ -101,6 +238,12 @@ export function calcularEtapaEsperada(situacao: SituacaoLead, diasCorridos: numb
     return 'Contato 1 (dia 1)';
   }
 
+  if (situacao === 'Nutrição') {
+    if (diasCorridos >= 30) return 'Convite para evento / Botox Day';
+    if (diasCorridos >= 15) return 'Fluxo de conteúdo 2 (Novidades)';
+    return 'Fluxo de conteúdo 1 (Cuidados)';
+  }
+
   // "Em captação", "Pós consulta", "Reativação" (e padrão)
   if (diasCorridos >= 17) return 'Contato 5 (dia 17)';
   if (diasCorridos >= 9) return 'Contato 4 (dia 9)';
@@ -110,14 +253,8 @@ export function calcularEtapaEsperada(situacao: SituacaoLead, diasCorridos: numb
 }
 
 /**
- * Normaliza o nome da etapa para casamento flexível caso o lead possua valores legados
- */
-function normalizarEtapa(etapa: string): string {
-  return etapa.trim().toLowerCase();
-}
-
-/**
  * Compara a posição da Etapa atual com a Etapa esperada na sequência da cadência
+ * - se todas as etapas foram concluídas → Status = "Em dia"
  * - se a etapa atual ainda não foi selecionada → Status = "Sem etapa selecionada" (destaque amarelo)
  * - se a atual está ATRÁS da esperada → Status = "Atrasado" (destaque vermelho)
  * - se está igual → Status = "Em dia" (destaque verde)
@@ -128,13 +265,18 @@ export function calcularStatusCadencia(
   etapaAtual: string | undefined | null,
   etapaEsperada: string
 ): StatusCadencia {
+  if (verificarSeTodasEtapasConcluidas(situacao, etapaAtual)) {
+    return 'Em dia';
+  }
+
   if (!etapaAtual || etapaAtual.trim() === '') {
-    return 'Sem etapa selecionada';
+    // Se ainda não foi definido, o padrão esperado é o primeiro contato
+    return 'Em dia';
   }
 
   const opcoes = obterOpcoesCadenciaPorSituacao(situacao);
   if (opcoes.length === 0) {
-    return 'Sem etapa selecionada';
+    return 'Em dia';
   }
 
   const etapaAtualTrim = etapaAtual.trim();
@@ -142,7 +284,7 @@ export function calcularStatusCadencia(
   // Busca exata pelo índice
   let indexAtual = opcoes.indexOf(etapaAtualTrim);
 
-  // Fallback caso venha com pequenas variações de texto (ex: "Contato 1" antigo)
+  // Fallback caso venha com pequenas variações de texto
   if (indexAtual === -1) {
     const norm = normalizarEtapa(etapaAtualTrim);
     indexAtual = opcoes.findIndex((op) => {
@@ -189,8 +331,12 @@ export function verificarSeDeveContatarHoje(
   statusCadencia: StatusCadencia,
   etapaAtual?: string | null
 ): boolean {
-  // 1. Se o lead está atrasado ou sem nenhuma etapa selecionada, precisa de contato urgente hoje
-  if (statusCadencia === 'Atrasado' || statusCadencia === 'Sem etapa selecionada') {
+  if (verificarSeTodasEtapasConcluidas(situacao, etapaAtual)) {
+    return false;
+  }
+
+  // 1. Se o lead está atrasado, precisa de contato urgente hoje
+  if (statusCadencia === 'Atrasado') {
     return true;
   }
 

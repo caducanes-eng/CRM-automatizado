@@ -42,7 +42,7 @@ import {
   EsteticaPlataforma,
   ESTETICAS_PRESET,
 } from '../types';
-import { obterCoresSidebarCompletas, sugerirContrasteBlocoInferior } from '../utils/estetica';
+import { obterCoresSidebarCompletas, sugerirContrasteBlocoInferior, aplicarVariaveisCss } from '../utils/estetica';
 import { ControleProcedimentosView } from './ControleProcedimentosView';
 import { SupabaseConfigView } from './SupabaseConfigView';
 
@@ -109,15 +109,24 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
       logoAjusteLateral: config.logoAjusteLateral || 'total',
       logoFundoHeader: config.logoFundoHeader || 'integrado',
     }));
-    setCoresCustomizadas({ ...config.estetica });
+    if (config.estetica) {
+      setCoresCustomizadas((prev) => ({
+        ...prev,
+        ...config.estetica,
+      }));
+    }
   }, [config]);
 
   // Estado local para personalização de cores
-  const [coresCustomizadas, setCoresCustomizadas] = useState<EsteticaPlataforma>({
-    ...config.estetica,
-  });
+  const [coresCustomizadas, setCoresCustomizadas] = useState<EsteticaPlataforma>(() => ({
+    ...CONFIGURACOES_PADRAO.estetica,
+    ...(config.estetica || {}),
+  }));
   const [nomeNovaEstetica, setNomeNovaEstetica] = useState('');
   const [modalSalvarEsteticaAberto, setModalSalvarEsteticaAberto] = useState(false);
+
+  // Debounce para gravação suave no banco sem travar a UI ao arrastar seletores
+  const debounceEsteticaRef = useRef<NodeJS.Timeout | null>(null);
 
   // Drag & drop state
   const [isDragging, setIsDragging] = useState(false);
@@ -230,23 +239,39 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
   // Estado de simulação interativa da sidebar na aba de estética
   const [simuladorHoverItemId, setSimuladorHoverItemId] = useState<string | null>(null);
 
-  // Aplicar alterações manuais de cor instantaneamente
+  // Aplicar alterações manuais de cor instantaneamente com persistência debounced
   const handleAtualizarCorManual = (campo: keyof EsteticaPlataforma, valor: string) => {
-    const nova = { ...coresCustomizadas, [campo]: valor, isPersonalizado: true };
+    const nova: EsteticaPlataforma = {
+      ...coresCustomizadas,
+      [campo]: valor,
+      isPersonalizado: true,
+    };
     setCoresCustomizadas(nova);
-    aplicarEstetica(nova);
+
+    // Aplicação visual instantânea via variáveis CSS no DOM (0ms de latência)
+    aplicarVariaveisCss(nova);
+
+    // Debounce na persistência do Firestore para não floodar chamadas
+    if (debounceEsteticaRef.current) {
+      clearTimeout(debounceEsteticaRef.current);
+    }
+    debounceEsteticaRef.current = setTimeout(() => {
+      aplicarEstetica(nova);
+    }, 250);
   };
 
   // Ajustar contraste inteligente e harmônico para o bloco inferior
   const handleAjustarContrasteAutomatico = () => {
-    const corSidebarAtual = coresCustomizadas.corSidebar || config.estetica.corSidebar;
+    const corSidebarAtual =
+      coresCustomizadas.corSidebar || config.estetica?.corSidebar || '#1A1A1A';
     const sugestao = sugerirContrasteBlocoInferior(corSidebarAtual);
-    const nova = {
+    const nova: EsteticaPlataforma = {
       ...coresCustomizadas,
       ...sugestao,
       isPersonalizado: true,
     };
     setCoresCustomizadas(nova);
+    aplicarVariaveisCss(nova);
     aplicarEstetica(nova);
     mostrarMensagem('sucesso', 'Contraste inteligente e harmonizado aplicado ao bloco inferior!');
   };
@@ -285,6 +310,9 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
           monogramaIniciais: CONFIGURACOES_PADRAO.monogramaIniciais,
           tipoLogo: CONFIGURACOES_PADRAO.tipoLogo,
           logoUrl: '',
+          logoAltura: CONFIGURACOES_PADRAO.logoAltura || 'padrao',
+          logoAjusteLateral: CONFIGURACOES_PADRAO.logoAjusteLateral || 'total',
+          logoFundoHeader: CONFIGURACOES_PADRAO.logoFundoHeader || 'integrado',
         });
         setCoresCustomizadas(CONFIGURACOES_PADRAO.estetica);
         mostrarMensagem('sucesso', 'Configurações restauradas para o padrão oficial!');
@@ -743,7 +771,7 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
                 {/* Simulador da barra lateral */}
                 <div
                   className="rounded-sm text-white shadow-md border border-black/30 overflow-hidden"
-                  style={{ backgroundColor: config.estetica.corSidebar }}
+                  style={{ backgroundColor: config.estetica?.corSidebar || '#1A1A1A' }}
                 >
                   <div className="text-[10px] uppercase font-bold tracking-wider text-[#8F887E] px-4 pt-3 pb-1">
                     Cabeçalho da Barra de Navegação:
@@ -795,7 +823,7 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
                       <div className="flex items-center gap-3">
                         <div
                           className="w-10 h-10 rounded-sm flex items-center justify-center font-bold text-base tracking-wider border-b-2 shadow-xs bg-white text-[#1A1A1A] shrink-0"
-                          style={{ borderBottomColor: config.estetica.corPrimaria }}
+                          style={{ borderBottomColor: config.estetica?.corPrimaria || '#5C3A22' }}
                         >
                           {config.monogramaIniciais || 'AR'}
                         </div>
@@ -805,7 +833,7 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
                           </h3>
                           <p
                             className="text-[10px] font-semibold uppercase tracking-wider truncate"
-                            style={{ color: config.estetica.corSecundaria }}
+                            style={{ color: config.estetica?.corSecundaria || '#8A6142' }}
                           >
                             {config.subtitulo || 'Harmonização Facial'}
                           </p>
@@ -818,7 +846,7 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
                   <div className="p-3 space-y-1.5 text-xs">
                     <div
                       className="p-2 rounded-sm font-semibold flex items-center justify-between text-white shadow-xs"
-                      style={{ backgroundColor: config.estetica.corPrimaria }}
+                      style={{ backgroundColor: config.estetica?.corPrimaria || '#5C3A22' }}
                     >
                       <span>Cadastro rápido</span>
                       <span className="text-[9px] bg-white text-[#1A1A1A] font-bold px-1.5 py-0.5 rounded-sm">
@@ -1055,7 +1083,7 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
               {/* Grid de Presets */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
                 {(config.esteticasSalvas || ESTETICAS_PRESET).map((preset) => {
-                  const isAtiva = config.estetica.idPreset === preset.idPreset;
+                  const isAtiva = config.estetica?.idPreset === preset.idPreset;
                   const cPreset = obterCoresSidebarCompletas(preset);
 
                   return (

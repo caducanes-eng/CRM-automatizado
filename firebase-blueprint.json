@@ -84,6 +84,89 @@
         "unidadePadrao": { "type": "string" },
         "updated_at": { "type": "string" }
       }
+    },
+    "Procedimento": {
+      "collection": "procedimentos",
+      "fields": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "categoria": { "type": "string" },
+        "duracaoMinutos": { "type": "number" },
+        "preco": { "type": "number" },
+        "descricao": { "type": "string" },
+        "ativo": { "type": "boolean" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "deleted_at": { "type": "string" },
+        "version": { "type": "number" }
+      }
+    },
+    "Usuario": {
+      "collection": "usuarios",
+      "fields": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "email": { "type": "string" },
+        "cargo": { "type": "string" },
+        "role": { "type": "string" },
+        "ativo": { "type": "boolean" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "deleted_at": { "type": "string" },
+        "version": { "type": "number" }
+      }
+    },
+    "Empresa": {
+      "collection": "empresas",
+      "fields": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "cnpj": { "type": "string" },
+        "subtitulo": { "type": "string" },
+        "registroProfissional": { "type": "string" },
+        "telefone": { "type": "string" },
+        "email": { "type": "string" },
+        "endereco": { "type": "string" },
+        "unidadePadrao": { "type": "string" },
+        "status": { "type": "string" },
+        "adminPrincipalEmail": { "type": "string" },
+        "adminPrincipalNome": { "type": "string" },
+        "monogramaIniciais": { "type": "string" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "deleted_at": { "type": "string" },
+        "version": { "type": "number" }
+      }
+    },
+    "EmpresaMembro": {
+      "collection": "empresa_membros",
+      "fields": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userNome": { "type": "string" },
+        "papel": { "type": "string" },
+        "ativo": { "type": "boolean" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "deleted_at": { "type": "string" },
+        "version": { "type": "number" }
+      }
+    },
+    "PlataformaAdmin": {
+      "collection": "plataforma_admins",
+      "fields": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "nome": { "type": "string" },
+        "ativo": { "type": "boolean" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "deleted_at": { "type": "string" },
+        "version": { "type": "number" }
+      }
     }
   }
 }

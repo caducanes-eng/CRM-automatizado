@@ -579,4 +579,64 @@ export const supabaseService = {
       };
     }
   },
+
+  /**
+   * Apaga permanentemente todos os registros de pacientes (leads, fichas e compras) no Supabase.
+   * Exclusivo para operações autorizadas pelo Gestor Master.
+   */
+  async apagarDadosPacientesSupabase(empresaId: string = ID_EMPRESA_PADRAO): Promise<{
+    sucesso: boolean;
+    mensagem: string;
+    erros: string[];
+  }> {
+    const client = getSupabaseClient();
+    const erros: string[] = [];
+
+    if (!client) {
+      return {
+        sucesso: true,
+        mensagem: 'Supabase não conectado. Limpeza realizada localmente e no Firestore.',
+        erros: [],
+      };
+    }
+
+    try {
+      // 1. Apaga compras
+      const { error: errC } = await client
+        .from('compras')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (errC) erros.push(`Erro ao limpar compras: ${errC.message}`);
+
+      // 2. Apaga fichas cadastrais
+      const { error: errF } = await client
+        .from('fichas_leads')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (errF) erros.push(`Erro ao limpar fichas: ${errF.message}`);
+
+      // 3. Apaga leads
+      const { error: errL } = await client
+        .from('leads')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (errL) erros.push(`Erro ao limpar leads: ${errL.message}`);
+
+      const sucessoGeral = erros.length === 0;
+      return {
+        sucesso: sucessoGeral,
+        mensagem: sucessoGeral
+          ? 'Todos os registros de pacientes foram apagados do Supabase com sucesso!'
+          : 'Limpeza parcial no Supabase.',
+        erros,
+      };
+    } catch (error: any) {
+      console.error('Erro ao apagar dados de pacientes no Supabase:', error);
+      return {
+        sucesso: false,
+        mensagem: error?.message || 'Falha ao executar exclusão no Supabase.',
+        erros: [error?.message || 'Erro desconhecido'],
+      };
+    }
+  },
 };

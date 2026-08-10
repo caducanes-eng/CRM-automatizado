@@ -31,9 +31,9 @@ export function obterCoresSidebarCompletas(estetica?: Partial<EsteticaPlataforma
 > {
   const padrao = ESTETICAS_PRESET[0];
 
-  const corSidebar = estetica?.corSidebar || padrao.corSidebar;
-  const corPrimaria = estetica?.corPrimaria || padrao.corPrimaria;
-  const corSecundaria = estetica?.corSecundaria || padrao.corSecundaria;
+  const corSidebar = estetica?.corSidebar || padrao.corSidebar || '#1A1A1A';
+  const corPrimaria = estetica?.corPrimaria || padrao.corPrimaria || '#5C3A22';
+  const corSecundaria = estetica?.corSecundaria || padrao.corSecundaria || '#8A6142';
 
   return {
     corSidebar,
@@ -55,10 +55,44 @@ export function obterCoresSidebarCompletas(estetica?: Partial<EsteticaPlataforma
     corNavFooterIcone: estetica?.corNavFooterIcone || padrao.corNavFooterIcone || '#D9D6D0',
     corPrimaria,
     corSecundaria,
-    corFundoDestaque: estetica?.corFundoDestaque || padrao.corFundoDestaque,
-    corBorda: estetica?.corBorda || padrao.corBorda,
-    corTexto: estetica?.corTexto || padrao.corTexto,
+    corFundoDestaque: estetica?.corFundoDestaque || padrao.corFundoDestaque || '#F2EFEA',
+    corBorda: estetica?.corBorda || padrao.corBorda || '#D9D6D0',
+    corTexto: estetica?.corTexto || padrao.corTexto || '#1A1A1A',
   };
+}
+
+/**
+ * Aplica as variáveis CSS dinâmicas globalmente no elemento root (:root)
+ */
+export function aplicarVariaveisCss(estetica?: Partial<EsteticaPlataforma>): void {
+  if (typeof document === 'undefined') return;
+  try {
+    const root = document.documentElement;
+    const c = obterCoresSidebarCompletas(estetica);
+
+    root.style.setProperty('--cor-primaria', c.corPrimaria);
+    root.style.setProperty('--cor-secundaria', c.corSecundaria);
+    root.style.setProperty('--cor-sidebar', c.corSidebar);
+    root.style.setProperty('--cor-sidebar-texto', c.corSidebarTexto);
+    root.style.setProperty('--cor-nav-categoria-texto', c.corNavCategoriaTexto);
+    root.style.setProperty('--cor-nav-texto-inativo', c.corNavTextoInativo);
+    root.style.setProperty('--cor-nav-texto-hover', c.corNavTextoHover);
+    root.style.setProperty('--cor-nav-hover-bg', c.corNavHoverBg);
+    root.style.setProperty('--cor-nav-ativo-bg', c.corNavAtivoBg);
+    root.style.setProperty('--cor-nav-ativo-texto', c.corNavAtivoTexto);
+    root.style.setProperty('--cor-nav-ativo-borda', c.corNavAtivoBorda);
+    root.style.setProperty('--cor-nav-badge-bg', c.corNavBadgeBg);
+    root.style.setProperty('--cor-nav-badge-texto', c.corNavBadgeTexto);
+    root.style.setProperty('--cor-nav-footer-bg', c.corNavFooterBg);
+    root.style.setProperty('--cor-nav-footer-texto-principal', c.corNavFooterTextoPrincipal);
+    root.style.setProperty('--cor-nav-footer-texto-secundario', c.corNavFooterTextoSecundario);
+    root.style.setProperty('--cor-nav-footer-icone', c.corNavFooterIcone);
+    root.style.setProperty('--cor-fundo-destaque', c.corFundoDestaque);
+    root.style.setProperty('--cor-borda', c.corBorda);
+    root.style.setProperty('--cor-texto', c.corTexto);
+  } catch (e) {
+    console.warn('Erro ao aplicar variáveis CSS:', e);
+  }
 }
 
 /**

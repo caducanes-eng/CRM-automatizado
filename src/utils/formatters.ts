@@ -24,3 +24,7 @@ export function formatarDataBR(dataIso: string | undefined | null): string {
 export function obterDataHoje(): string {
   return new Date().toISOString().split('T')[0];
 }
+
+export function formatarDataHoraAgora(): string {
+  return new Date().toLocaleString('pt-BR');
+}

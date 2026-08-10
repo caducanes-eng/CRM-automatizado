@@ -1,6 +1,8 @@
 export type SectionId =
+  | 'painel_plataforma'
   | 'cadastro_rapido'
   | 'em_captacao'
+  | 'consulta_agendada'
   | 'pos_consulta'
   | 'pos_procedimento'
   | 'reativacao'
@@ -18,6 +20,105 @@ export interface NavigationItem {
   badge?: string;
   isPrimary?: boolean;
   restritoGestor?: boolean;
+  exclusivoPlataforma?: boolean;
+}
+
+// ----------------------------------------------------
+// MULTIEMPRESA & NÍVEIS DE ACESSO (PLATAFORMA & EMPRESA)
+// ----------------------------------------------------
+
+export type StatusEmpresa = 'ativa' | 'suspensa';
+
+export type PapelEmpresa =
+  | 'admin'
+  | 'operador'
+  | 'medico'
+  | 'recepcao'
+  | 'pos_venda';
+
+export type StatusAcessoUsuario = 'ativo' | 'pendente' | 'empresa_suspensa';
+
+export interface Empresa extends BaseEntity {
+  nome: string;
+  subtitulo?: string;
+  cnpj?: string;
+  registroProfissional?: string;
+  telefone?: string;
+  email?: string;
+  endereco?: string;
+  horarioFuncionamento?: string;
+  unidadePadrao?: string;
+  status: StatusEmpresa;
+  tipoLogo?: 'imagem' | 'monograma';
+  logoUrl?: string;
+  monogramaIniciais?: string;
+  logoAltura?: 'compacta' | 'padrao' | 'ampla' | 'destaque' | 'maxima';
+  logoAjusteLateral?: 'total' | 'padrao' | 'respirado' | 'sangrado';
+  logoFundoHeader?: 'integrado' | 'escuro_suave' | 'fundo_claro';
+  estetica?: EsteticaPlataforma;
+  esteticasSalvas?: EsteticaPlataforma[];
+  adminPrincipalId?: string;
+  adminPrincipalEmail?: string;
+  adminPrincipalNome?: string;
+  totalUsuarios?: number;
+  totalPacientes?: number;
+}
+
+export interface EmpresaMembro extends BaseEntity {
+  userId: string;
+  empresaId: string;
+  papel: PapelEmpresa;
+  ativo: boolean;
+  usuarioNome?: string;
+  usuarioEmail?: string;
+  usuarioCargo?: string;
+  ultimoAcesso?: string;
+}
+
+export interface PlataformaAdmin extends BaseEntity {
+  userId: string;
+  email: string;
+  nome?: string;
+  criadoPor?: string;
+}
+
+export interface CriarEmpresaPayload {
+  nome: string;
+  cnpj?: string;
+  subtitulo?: string;
+  registroProfissional?: string;
+  telefone?: string;
+  email?: string;
+  endereco?: string;
+  unidadePadrao?: string;
+  status?: StatusEmpresa;
+  adminNome?: string;
+  adminEmail?: string;
+  adminSenha?: string;
+  adminCargo?: string;
+  tipoLogo?: 'imagem' | 'monograma';
+  monogramaIniciais?: string;
+}
+
+export interface AtualizarEmpresaPayload {
+  nome?: string;
+  cnpj?: string;
+  subtitulo?: string;
+  registroProfissional?: string;
+  telefone?: string;
+  email?: string;
+  endereco?: string;
+  horarioFuncionamento?: string;
+  unidadePadrao?: string;
+  status?: StatusEmpresa;
+  tipoLogo?: 'imagem' | 'monograma';
+  logoUrl?: string;
+  monogramaIniciais?: string;
+  logoAltura?: 'compacta' | 'padrao' | 'ampla' | 'destaque' | 'maxima';
+  logoAjusteLateral?: 'total' | 'padrao' | 'respirado' | 'sangrado';
+  logoFundoHeader?: 'integrado' | 'escuro_suave' | 'fundo_claro';
+  estetica?: EsteticaPlataforma;
+  esteticasSalvas?: EsteticaPlataforma[];
 }
 
 // ----------------------------------------------------
@@ -34,6 +135,7 @@ export type NivelAcesso =
 export interface PermissoesUsuario {
   podeCadastrarLeads: boolean;
   podeAcessarEmCaptacao: boolean;
+  podeAcessarConsultaAgendada?: boolean;
   podeAcessarPosConsulta: boolean;
   podeAcessarPosProcedimento: boolean;
   podeAcessarReativacao: boolean;
@@ -52,6 +154,7 @@ export interface PermissoesUsuario {
 export const PERMISSOES_PRESET_GESTOR: PermissoesUsuario = {
   podeCadastrarLeads: true,
   podeAcessarEmCaptacao: true,
+  podeAcessarConsultaAgendada: true,
   podeAcessarPosConsulta: true,
   podeAcessarPosProcedimento: true,
   podeAcessarReativacao: true,
@@ -70,6 +173,7 @@ export const PERMISSOES_PRESET_GESTOR: PermissoesUsuario = {
 export const PERMISSOES_PRESET_MEDICO: PermissoesUsuario = {
   podeCadastrarLeads: true,
   podeAcessarEmCaptacao: false,
+  podeAcessarConsultaAgendada: true,
   podeAcessarPosConsulta: true,
   podeAcessarPosProcedimento: true,
   podeAcessarReativacao: false,
@@ -88,6 +192,7 @@ export const PERMISSOES_PRESET_MEDICO: PermissoesUsuario = {
 export const PERMISSOES_PRESET_RECEPCAO: PermissoesUsuario = {
   podeCadastrarLeads: true,
   podeAcessarEmCaptacao: true,
+  podeAcessarConsultaAgendada: true,
   podeAcessarPosConsulta: true,
   podeAcessarPosProcedimento: false,
   podeAcessarReativacao: false,
@@ -106,6 +211,7 @@ export const PERMISSOES_PRESET_RECEPCAO: PermissoesUsuario = {
 export const PERMISSOES_PRESET_POS_VENDA: PermissoesUsuario = {
   podeCadastrarLeads: false,
   podeAcessarEmCaptacao: false,
+  podeAcessarConsultaAgendada: false,
   podeAcessarPosConsulta: true,
   podeAcessarPosProcedimento: true,
   podeAcessarReativacao: true,
@@ -312,6 +418,8 @@ export interface ConfiguracoesEmpresa {
 }
 
 export interface UsuarioColaborador extends BaseEntity {
+  empresaId?: string;
+  empresa_id?: string;
   nome: string;
   email: string;
   senhaPadrao: string;
@@ -328,6 +436,7 @@ export interface UsuarioColaborador extends BaseEntity {
 }
 
 export interface CriarUsuarioPayload {
+  empresaId?: string;
   nome: string;
   email: string;
   senhaPadrao: string;
@@ -431,9 +540,29 @@ export interface BaseEntity {
 }
 
 /**
+ * Status de Confirmação do Agendamento
+ */
+export type StatusConfirmacaoAgendamento =
+  | 'Agendada'
+  | 'Confirmada'
+  | 'Realizada'
+  | 'Cancelada'
+  | 'Remarcada';
+
+export const TODOS_STATUS_CONFIRMACAO_AGENDAMENTO: StatusConfirmacaoAgendamento[] = [
+  'Agendada',
+  'Confirmada',
+  'Realizada',
+  'Cancelada',
+  'Remarcada',
+];
+
+/**
  * ENTIDADE "Lead" (um registro por lead/paciente)
  */
 export interface Lead extends BaseEntity {
+  empresaId?: string;
+  empresa_id?: string;
   nome: string; // Obrigatório
   situacao: SituacaoLead; // Enum da situação atual
   etapaPorSituacao: EtapaPorSituacaoMap; // Guarda a última etapa selecionada para CADA situação
@@ -442,6 +571,20 @@ export interface Lead extends BaseEntity {
   statusVenda: StatusVenda; // Status da negociação
   dataEntrada: string; // Data de entrada (default: hoje - formato YYYY-MM-DD)
   responsavel: string; // Responsável pelo lead (configurável)
+  
+  // DADOS DO AGENDAMENTO (Quando a consulta é agendada)
+  dataAgendamento?: string; // Data da consulta (YYYY-MM-DD)
+  horarioAgendamento?: string; // Horário da consulta (HH:MM)
+  profissionalAgendamento?: string; // Médico / especialista responsável
+  tipoConsulta?: string; // Avaliação estética, Retorno, Procedimento, etc.
+  unidadeAgendamento?: string; // Sala / Consultório
+  observacoesAgendamento?: string; // Orientações prévias da consulta
+  statusConfirmacaoAgendamento?: StatusConfirmacaoAgendamento; // 'Agendada' | 'Confirmada' | etc.
+  lembrete24hEnviado?: boolean; // Se a secretária já mandou mensagem 24h antes
+  dataEnvioLembrete24h?: string; // Timestamp em que a mensagem 24h foi disparada
+  mensagemLembrete24hEnviadaPor?: string; // Nome de quem realizou o disparo
+  
+  // Nutrição e Perda
   dataEntradaNutricao?: string; // Data em que o lead entrou na situação Nutrição (YYYY-MM-DD)
   statusGrupoNutricao?: StatusGrupoNutricao; // "Ativo" | "Removido" no grupo de transmissão/conteúdo
   motivoPerda?: string; // Motivo da perda quando statusVenda === "Perdido"
@@ -453,6 +596,8 @@ export interface Lead extends BaseEntity {
  * ENTIDADE "FichaLead" (dados complementares, 1 para 1 com o Lead em tela separada)
  */
 export interface FichaLead extends BaseEntity {
+  empresaId?: string;
+  empresa_id?: string;
   leadId: string; // Referência FK ao Lead
   telefone: string;
   origemLead: OrigemLead;
@@ -461,12 +606,21 @@ export interface FichaLead extends BaseEntity {
   observacoes: string;
   motivoPerda?: string; // Relevante se statusVenda === "Perdido"
   dataPerda?: string; // Relevante se statusVenda === "Perdido" (YYYY-MM-DD)
+  // Espelho de agendamento na ficha se necessário
+  dataAgendamento?: string;
+  horarioAgendamento?: string;
+  profissionalAgendamento?: string;
+  tipoConsulta?: string;
+  unidadeAgendamento?: string;
+  observacoesAgendamento?: string;
 }
 
 /**
  * ENTIDADE "Compra" (histórico de compras, N para 1 com o Lead)
  */
 export interface Compra extends BaseEntity {
+  empresaId?: string;
+  empresa_id?: string;
   leadId: string; // Referência FK ao Lead
   data: string; // Data da compra (YYYY-MM-DD)
   procedimento: string; // Descrição do procedimento realizado
@@ -478,6 +632,7 @@ export interface Compra extends BaseEntity {
 // ----------------------------------------------------
 
 export interface CriarLeadPayload {
+  empresaId?: string;
   nome: string;
   situacao?: SituacaoLead;
   etapaInicial?: string;
@@ -486,6 +641,17 @@ export interface CriarLeadPayload {
   statusVenda?: StatusVenda;
   dataEntrada?: string;
   responsavel?: string;
+  // Campos de agendamento na criação
+  dataAgendamento?: string;
+  horarioAgendamento?: string;
+  profissionalAgendamento?: string;
+  tipoConsulta?: string;
+  unidadeAgendamento?: string;
+  observacoesAgendamento?: string;
+  statusConfirmacaoAgendamento?: StatusConfirmacaoAgendamento;
+  lembrete24hEnviado?: boolean;
+  dataEnvioLembrete24h?: string;
+  mensagemLembrete24hEnviadaPor?: string;
   dataEntradaNutricao?: string;
   statusGrupoNutricao?: StatusGrupoNutricao;
   motivoPerda?: string;
@@ -503,6 +669,17 @@ export interface AtualizarLeadPayload {
   statusVenda?: StatusVenda;
   dataEntrada?: string;
   responsavel?: string;
+  // Campos de agendamento na atualização
+  dataAgendamento?: string;
+  horarioAgendamento?: string;
+  profissionalAgendamento?: string;
+  tipoConsulta?: string;
+  unidadeAgendamento?: string;
+  observacoesAgendamento?: string;
+  statusConfirmacaoAgendamento?: StatusConfirmacaoAgendamento;
+  lembrete24hEnviado?: boolean;
+  dataEnvioLembrete24h?: string;
+  mensagemLembrete24hEnviadaPor?: string;
   dataEntradaNutricao?: string;
   statusGrupoNutricao?: StatusGrupoNutricao;
   motivoPerda?: string;
@@ -521,6 +698,7 @@ export interface AtualizarFichaPayload {
 }
 
 export interface CriarCompraPayload {
+  empresaId?: string;
   leadId: string;
   data?: string;
   procedimento: string;
@@ -528,6 +706,7 @@ export interface CriarCompraPayload {
 }
 
 export interface ImportarLeadItem {
+  empresaId?: string;
   nome: string;
   telefone?: string;
   situacao?: SituacaoLead;
@@ -556,6 +735,8 @@ export interface ResultadoImportacao {
  * ENTIDADE "ProcedimentoClinica" (Catálogo e controle de procedimentos da clínica)
  */
 export interface ProcedimentoClinica extends BaseEntity {
+  empresaId?: string;
+  empresa_id?: string;
   nome: string; // Nome do procedimento (ex: Toxina Botulínica, Preenchimento Labial, etc.)
   categoria: string; // Categoria (ex: Injetáveis, Facial, Corporal, Harmonização, Bioestimuladores)
   valor: number; // Valor de tabela em R$
@@ -567,6 +748,7 @@ export interface ProcedimentoClinica extends BaseEntity {
 }
 
 export interface CriarProcedimentoPayload {
+  empresaId?: string;
   nome: string;
   categoria?: string;
   valor: number;

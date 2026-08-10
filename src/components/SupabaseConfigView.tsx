@@ -22,6 +22,12 @@ import {
   Info,
   Clock,
   RotateCcw,
+  Trash2,
+  Lock,
+  Eye,
+  EyeOff,
+  KeyRound,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   getSupabaseConfig,
@@ -36,9 +42,9 @@ import { useEmpresa } from '../context/EmpresaContext';
 import { useAuth } from '../context/AuthContext';
 
 export const SupabaseConfigView: React.FC = () => {
-  const { leads, fichas, compras, procedimentos } = useCrm();
+  const { leads, fichas, compras, procedimentos, limparTodosLeads } = useCrm();
   const { config } = useEmpresa();
-  const { usuarios } = useAuth();
+  const { usuarios, isGestor, responsavelAtivo, usuarioLogado, responsavelNome, validarSenhaGestor } = useAuth();
 
   // Estados de formulário
   const [url, setUrl] = useState('');
@@ -65,6 +71,17 @@ export const SupabaseConfigView: React.FC = () => {
   const [copiadoSql, setCopiadoSql] = useState(false);
   const [abaInterna, setAbaInterna] = useState<'conexao' | 'migracao' | 'schema_sql' | 'arquitetura'>('conexao');
   const [tabelaSelecionada, setTabelaSelecionada] = useState<string>('leads');
+
+  // Estados para modal de apagar dados de pacientes (Exclusivo Gestor Master com Senha)
+  const [modalApagarPacientesAberto, setModalApagarPacientesAberto] = useState(false);
+  const [senhaConfirmacao, setSenhaConfirmacao] = useState('');
+  const [senhaVisivel, setSenhaVisivel] = useState(false);
+  const [erroSenha, setErroSenha] = useState<string | null>(null);
+  const [isApagando, setIsApagando] = useState(false);
+  const [feedbackStatus, setFeedbackStatus] = useState<{
+    tipo: 'sucesso' | 'erro' | 'info';
+    texto: string;
+  } | null>(null);
 
   const corPrimaria = config.estetica?.corPrimaria || '#5C3A22';
 
@@ -161,6 +178,68 @@ export const SupabaseConfigView: React.FC = () => {
       });
     } finally {
       setIsSincronizando(false);
+    }
+  };
+
+  const handleAbrirModalApagarPacientes = () => {
+    setSenhaConfirmacao('');
+    setSenhaVisivel(false);
+    setErroSenha(null);
+    setModalApagarPacientesAberto(true);
+  };
+
+  const handleFecharModalApagarPacientes = () => {
+    if (isApagando) return;
+    setModalApagarPacientesAberto(false);
+    setSenhaConfirmacao('');
+    setErroSenha(null);
+  };
+
+  const handleConfirmarApagarPacientes = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!senhaConfirmacao || !senhaConfirmacao.trim()) {
+      setErroSenha('Por favor, informe sua senha de login para confirmar a exclusão.');
+      return;
+    }
+
+    setErroSenha(null);
+    const senhaValida = validarSenhaGestor(senhaConfirmacao);
+
+    if (!senhaValida) {
+      setErroSenha('Senha de login incorreta. Acesso negado para exclusão de dados.');
+      return;
+    }
+
+    setIsApagando(true);
+    try {
+      // 1. Limpa todos os leads, fichas e compras do Firestore e do estado local
+      const resLocal = await limparTodosLeads();
+
+      // 2. Se o Supabase estiver conectado ou configurado, limpa as tabelas no Supabase também
+      if (isSupabaseConfigured() || url) {
+        await supabaseService.apagarDadosPacientesSupabase();
+      }
+
+      setModalApagarPacientesAberto(false);
+      setSenhaConfirmacao('');
+      setFeedbackStatus({
+        tipo: 'sucesso',
+        texto: `Dados de pacientes apagados com sucesso do banco de dados! ${resLocal.totalRemovidos} registro(s) de pacientes, fichas e histórico de compras foram removidos.`,
+      });
+
+      // Atualiza o teste de conexão se estiver configurado
+      if (url && anonKey) {
+        await executarTesteConexao();
+      }
+
+      setTimeout(() => {
+        setFeedbackStatus(null);
+      }, 7000);
+    } catch (err: any) {
+      console.error('Erro ao apagar dados de pacientes:', err);
+      setErroSenha(`Erro ao executar exclusão: ${err?.message || 'Falha desconhecida'}`);
+    } finally {
+      setIsApagando(false);
     }
   };
 
@@ -396,11 +475,22 @@ CREATE TABLE IF NOT EXISTS logs_auditoria (
 );
 
 -- TRIGGERS DE ATUALIZAÇÃO AUTOMÁTICA
+DROP TRIGGER IF EXISTS trg_empresas_up ON empresas;
 CREATE TRIGGER trg_empresas_up BEFORE UPDATE ON empresas FOR EACH ROW EXECUTE FUNCTION set_updated_at_and_version();
+
+DROP TRIGGER IF EXISTS trg_usuarios_up ON usuarios;
 CREATE TRIGGER trg_usuarios_up BEFORE UPDATE ON usuarios FOR EACH ROW EXECUTE FUNCTION set_updated_at_and_version();
+
+DROP TRIGGER IF EXISTS trg_procedimentos_up ON procedimentos;
 CREATE TRIGGER trg_procedimentos_up BEFORE UPDATE ON procedimentos FOR EACH ROW EXECUTE FUNCTION set_updated_at_and_version();
+
+DROP TRIGGER IF EXISTS trg_leads_up ON leads;
 CREATE TRIGGER trg_leads_up BEFORE UPDATE ON leads FOR EACH ROW EXECUTE FUNCTION set_updated_at_and_version();
+
+DROP TRIGGER IF EXISTS trg_fichas_up ON fichas_leads;
 CREATE TRIGGER trg_fichas_up BEFORE UPDATE ON fichas_leads FOR EACH ROW EXECUTE FUNCTION set_updated_at_and_version();
+
+DROP TRIGGER IF EXISTS trg_compras_up ON compras;
 CREATE TRIGGER trg_compras_up BEFORE UPDATE ON compras FOR EACH ROW EXECUTE FUNCTION set_updated_at_and_version();
 
 -- HABILITAÇÃO DE RLS
@@ -410,6 +500,189 @@ ALTER TABLE procedimentos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fichas_leads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE compras ENABLE ROW LEVEL SECURITY;
+ALTER TABLE historico_atendimentos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tarefas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workflows_automacoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE logs_auditoria ENABLE ROW LEVEL SECURITY;
+
+-- POLÍTICAS DE ACESSO
+DO $$
+BEGIN
+  CREATE POLICY "Acesso a Empresas" ON empresas FOR ALL USING (true) WITH CHECK (true);
+  CREATE POLICY "Acesso a Usuarios" ON usuarios FOR ALL USING (true) WITH CHECK (true);
+  CREATE POLICY "Acesso a Procedimentos" ON procedimentos FOR ALL USING (true) WITH CHECK (true);
+  CREATE POLICY "Acesso a Leads" ON leads FOR ALL USING (true) WITH CHECK (true);
+  CREATE POLICY "Acesso a Fichas" ON fichas_leads FOR ALL USING (true) WITH CHECK (true);
+  CREATE POLICY "Acesso a Compras" ON compras FOR ALL USING (true) WITH CHECK (true);
+  CREATE POLICY "Acesso a Atendimentos" ON historico_atendimentos FOR ALL USING (true) WITH CHECK (true);
+  CREATE POLICY "Acesso a Tarefas" ON tarefas FOR ALL USING (true) WITH CHECK (true);
+  CREATE POLICY "Acesso a Workflows" ON workflows_automacoes FOR ALL USING (true) WITH CHECK (true);
+  CREATE POLICY "Acesso a Auditoria" ON logs_auditoria FOR ALL USING (true) WITH CHECK (true);
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
+
+-- SEED INICIAL: EMPRESA PRINCIPAL & PROCEDIMENTOS OFICIAIS
+INSERT INTO empresas (id, nome, subtitulo, cnpj, registro_profissional, telefone, email, endereco, unidade_padrao, tipo_logo, monograma_iniciais, ativa)
+VALUES (
+  '00000000-0000-0000-0000-000000000001',
+  'Dra. Agda Rodrigues',
+  'Harmonização Facial & Estética Avançada',
+  '12.345.678/0001-90',
+  'CRM/SP 123456 • RQE 78901',
+  '(11) 98765-4321',
+  'contato@agdarodrigues.com.br',
+  'Av. Brigadeiro Faria Lima, 3477 - Itaim Bibi, São Paulo - SP',
+  'Consultório Principal',
+  'monograma',
+  'AR',
+  true
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO procedimentos (id, empresa_id, nome, categoria, valor, formatos_pagamento, duracao_dias, descricao, orientacoes, ativo)
+VALUES
+(
+  '10000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000001',
+  'Toxina Botulínica (Botox Facial Completo)',
+  'Injetáveis',
+  1800.00,
+  'À vista com 5% desc. via Pix, ou até 10x de R$ 180,00 sem juros',
+  150,
+  'Relaxamento muscular para tratamento preventivo e corretivo de rugas de expressão (testa, glabela, pés de galinha).',
+  'Duração média de 4 a 6 meses. Agendar retorno de avaliação aos 15 dias e reativação no 5º mês.',
+  true
+),
+(
+  '10000000-0000-0000-0000-000000000002',
+  '00000000-0000-0000-0000-000000000001',
+  'Preenchimento Labial / Ácido Hialurônico (1ml)',
+  'Injetáveis',
+  1600.00,
+  'À vista via Pix com 5% desc. ou até 10x no cartão',
+  270,
+  'Contorno, hidratação profunda e volumização labial com ácido hialurônico de alta tecnologia.',
+  'Duração de 9 a 12 meses. Explicar hidratação pós-procedimento e evitar calor nas primeiras 48h.',
+  true
+),
+(
+  '10000000-0000-0000-0000-000000000003',
+  '00000000-0000-0000-0000-000000000001',
+  'Bioestimulador de Colágeno (Sculptra / Radiesse)',
+  'Bioestimuladores',
+  2800.00,
+  'À vista ou até 12x no cartão de crédito',
+  365,
+  'Estímulo biológico profundo de colágeno para firmeza tecidual e rejuvenescimento estrutural.',
+  'Pico de resultado aos 3 meses. Duração de até 24 meses. Massagem 5x5x5 nos primeiros 5 dias.',
+  true
+),
+(
+  '10000000-0000-0000-0000-000000000004',
+  '00000000-0000-0000-0000-000000000001',
+  'Harmonização Facial Full Face Personalizada',
+  'Harmonização',
+  5500.00,
+  'Condições exclusivas de parcelamento em até 12x sem juros',
+  365,
+  'Protocolo estruturado combinando preenchimentos e toxina para realçar traços naturais.',
+  'Acompanhamento fotográfico antes e depois aos 30 e 90 dias.',
+  true
+),
+(
+  '10000000-0000-0000-0000-000000000005',
+  '00000000-0000-0000-0000-000000000001',
+  'Limpeza de Pele Profunda com Hidratação de Ouro',
+  'Facial',
+  320.00,
+  'À vista via Pix ou até 3x no cartão',
+  45,
+  'Higienização facial profunda, extração delicada de cravos e máscara rejuvenescedora com partículas de ouro.',
+  'Recomendada manutenção a cada 30 a 45 dias para preservar o viço cutâneo.',
+  true
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- SEED DE USUÁRIOS & EQUIPE DA CLÍNICA
+INSERT INTO usuarios (id, empresa_id, nome, email, senha_hash, cargo, role, iniciais, cor_badge, telefone, ativo, criado_por, observacoes)
+VALUES
+(
+  '20000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000001',
+  'Gestão / Coordenação Geral',
+  'gestao@agdarodrigues.med.br',
+  'Agda@2026',
+  'Gestor Geral / Administrador',
+  'GESTOR',
+  'GG',
+  '#1A1A1A',
+  '(11) 98765-1005',
+  true,
+  'Sistema / Administrador',
+  'Acesso total a todas as áreas, métricas, configurações e gestão de acessos'
+),
+(
+  '20000000-0000-0000-0000-000000000002',
+  '00000000-0000-0000-0000-000000000001',
+  'Dra. Agda Rodrigues',
+  'dra.agda@agdarodrigues.med.br',
+  'Agda@2026',
+  'Médica Especialista em Harmonização Facial',
+  'MEDICO',
+  'AR',
+  '#5C3A22',
+  '(11) 98765-1000',
+  true,
+  'Gestão / Coordenação Geral',
+  'Responsável técnica, harmonização facial, bioestimuladores e preenchimentos'
+),
+(
+  '20000000-0000-0000-0000-000000000003',
+  '00000000-0000-0000-0000-000000000001',
+  'Dra. Camila (Médica Injetora)',
+  'dra.camila@agdarodrigues.med.br',
+  'Agda@2026',
+  'Médica Cirurgiã / Injetora',
+  'MEDICO',
+  'DC',
+  '#8A6142',
+  '(11) 98765-1001',
+  true,
+  'Gestão / Coordenação Geral',
+  'Consultas e procedimentos de toxina botulínica e bioestimuladores'
+),
+(
+  '20000000-0000-0000-0000-000000000004',
+  '00000000-0000-0000-0000-000000000001',
+  'Recepção / Secretária 1',
+  'secretaria1@agdarodrigues.med.br',
+  'Agda@2026',
+  'Atendimento & Pré-Vendas',
+  'RECEPCAO_COMERCIAL',
+  'S1',
+  '#8F887E',
+  '(11) 98765-1003',
+  true,
+  'Gestão / Coordenação Geral',
+  'Atendimento WhatsApp, captação de pacientes e agendamento de consultas'
+),
+(
+  '20000000-0000-0000-0000-000000000005',
+  '00000000-0000-0000-0000-000000000001',
+  'Recepção / Secretária 2',
+  'secretaria2@agdarodrigues.med.br',
+  'Agda@2026',
+  'Acompanhamento & Pós-Procedimento',
+  'POS_VENDA',
+  'S2',
+  '#6E6E6E',
+  '(11) 98765-1004',
+  true,
+  'Gestão / Coordenação Geral',
+  'Pós-consulta, confirmação de procedimentos e acompanhamento de retornos'
+)
+ON CONFLICT (id) DO NOTHING;
 `;
 
   const copiarSql = () => {
@@ -528,7 +801,19 @@ ALTER TABLE compras ENABLE ROW LEVEL SECURITY;
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {/* Botão de Apagar Dados das Pacientes (Exclusivo Gestor Master com Senha) */}
+          <button
+            id="btn-apagar-dados-pacientes-header"
+            type="button"
+            onClick={handleAbrirModalApagarPacientes}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-sm text-xs font-bold uppercase tracking-wider text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-300 transition-colors cursor-pointer shadow-xs"
+            title="Apagar dados de pacientes com confirmação de senha do Gestor Master"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+            <span>Apagar Dados de Pacientes</span>
+          </button>
+
           <button
             id="btn-testar-conexao-supabase-header"
             type="button"
@@ -553,6 +838,30 @@ ALTER TABLE compras ENABLE ROW LEVEL SECURITY;
           </button>
         </div>
       </div>
+
+      {/* FEEDBACK STATUS BANNER */}
+      {feedbackStatus && (
+        <div
+          id="banner-feedback-status-pacientes"
+          className={`p-4 rounded-sm text-xs font-semibold flex items-center justify-between gap-3 border shadow-xs animate-in fade-in slide-in-from-top-2 ${
+            feedbackStatus.tipo === 'sucesso'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+              : 'bg-rose-50 border-rose-300 text-rose-950'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 text-emerald-700 shrink-0" />
+            <span className="leading-relaxed">{feedbackStatus.texto}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFeedbackStatus(null)}
+            className="text-xs font-bold px-2 py-1 hover:bg-black/5 rounded-xs cursor-pointer shrink-0"
+          >
+            ✕ Fechar
+          </button>
+        </div>
+      )}
 
       {/* NAVEGAÇÃO DE SUB-ABAS */}
       <div className="flex items-center gap-1 border-b border-[#D9D6D0] overflow-x-auto pb-px">
@@ -935,6 +1244,31 @@ ALTER TABLE compras ENABLE ROW LEVEL SECURITY;
                 </div>
               </div>
             )}
+
+            {/* ZONA DE GESTÃO MASTER: APAGAR DADOS DE PACIENTES */}
+            <div className="p-4 sm:p-5 rounded-sm border border-rose-300 bg-rose-50/40 space-y-3 mt-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-xs font-bold text-rose-950 uppercase tracking-wider">
+                    <ShieldAlert className="w-4 h-4 text-rose-700" />
+                    <span>Zona do Gestor Master: Apagar Dados de Pacientes do Banco</span>
+                  </div>
+                  <p className="text-xs text-rose-900/80 leading-relaxed max-w-3xl">
+                    Remove permanentemente todos os <strong>{leads.length}</strong> pacientes/leads, <strong>{fichas.length}</strong> fichas cadastrais e <strong>{compras.length}</strong> compras registradas no banco de dados (Firestore, Supabase e local). Requer confirmação da sua senha de login.
+                  </p>
+                </div>
+
+                <button
+                  id="btn-apagar-dados-pacientes-migracao"
+                  type="button"
+                  onClick={handleAbrirModalApagarPacientes}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-sm text-xs font-bold uppercase tracking-wider text-white bg-rose-700 hover:bg-rose-800 transition-colors cursor-pointer shadow-xs shrink-0"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Apagar Pacientes ({leads.length})</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1076,6 +1410,142 @@ ALTER TABLE compras ENABLE ROW LEVEL SECURITY;
                 );
               })()}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE SEGURANÇA: APAGAR DADOS DE PACIENTES (EXCLUSIVO GESTOR MASTER COM SENHA) */}
+      {modalApagarPacientesAberto && (
+        <div
+          id="modal-apagar-dados-pacientes-backdrop"
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div
+            id="modal-apagar-dados-pacientes-container"
+            className="bg-white rounded-sm border border-rose-300 p-6 max-w-lg w-full shadow-2xl space-y-5 animate-in fade-in zoom-in-95"
+          >
+            {/* Header do Modal */}
+            <div className="flex items-start gap-3 border-b border-rose-200 pb-4 text-rose-950">
+              <div className="w-11 h-11 rounded-sm bg-rose-100 flex items-center justify-center text-rose-800 shrink-0 border border-rose-300">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm sm:text-base font-bold uppercase tracking-wider text-rose-950">
+                    Apagar Dados de Pacientes
+                  </h3>
+                  <button
+                    type="button"
+                    disabled={isApagando}
+                    onClick={handleFecharModalApagarPacientes}
+                    className="text-[#6E6E6E] hover:text-[#1A1A1A] text-xs font-bold p-1 rounded-sm cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <p className="text-xs text-rose-800 font-medium mt-0.5">
+                  Autenticação de Segurança Exclusiva do Gestor Master
+                </p>
+              </div>
+            </div>
+
+            {/* Alerta de Impacto */}
+            <div className="space-y-2.5 text-xs text-[#1A1A1A] leading-relaxed bg-[#FAF9F5] p-4 rounded-sm border border-[#D9D6D0]">
+              <div className="flex items-center gap-1.5 text-rose-900 font-bold uppercase tracking-wider text-[11px]">
+                <AlertTriangle className="w-4 h-4 text-rose-700 shrink-0" />
+                <span>Atenção: Ação Destrutiva Irreversível</span>
+              </div>
+              <p className="text-[#6E6E6E]">
+                Esta operação apagará definitivamente todos os <strong>{leads.length} pacientes/leads</strong>, <strong>{fichas.length} fichas complementares</strong> e <strong>{compras.length} registros de compras</strong> do banco de dados (Firestore, Supabase e armazenamento local).
+              </p>
+              <p className="text-[11px] text-rose-900 font-semibold bg-rose-50 p-2 rounded-xs border border-rose-200">
+                O catálogo de procedimentos, cadastros de colaboradores e configurações da clínica serão preservados intactos.
+              </p>
+            </div>
+
+            {/* Identificação do Gestor */}
+            <div className="flex items-center justify-between px-3.5 py-2.5 bg-[#F2EFEA]/40 rounded-sm border border-[#D9D6D0] text-xs">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-[#6E6E6E] block">Gestor Responsável</span>
+                <span className="font-bold text-[#1A1A1A]">{responsavelNome}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold text-[#6E6E6E] block">Nível de Acesso</span>
+                <span className="text-[11px] font-bold text-[#5C3A22] bg-[#5C3A22]/10 px-2 py-0.5 rounded-xs">
+                  {responsavelAtivo?.cargo || (isGestor ? 'Gestor Master' : 'Colaborador')}
+                </span>
+              </div>
+            </div>
+
+            {/* Formulário com Campo de Senha */}
+            <form onSubmit={handleConfirmarApagarPacientes} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#1A1A1A] mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-rose-700" />
+                    <span>Digite sua Senha de Login para Confirmar:</span>
+                  </span>
+                  <span className="text-[10px] text-rose-700 font-semibold">Obrigatório</span>
+                </label>
+                <div className="relative">
+                  <input
+                    id="input-senha-confirmacao-apagar-pacientes"
+                    type={senhaVisivel ? 'text' : 'password'}
+                    value={senhaConfirmacao}
+                    onChange={(e) => {
+                      setSenhaConfirmacao(e.target.value);
+                      if (erroSenha) setErroSenha(null);
+                    }}
+                    placeholder="Digite a senha do seu usuário de login..."
+                    autoFocus
+                    disabled={isApagando}
+                    className="w-full pl-3 pr-10 py-2.5 text-xs bg-white border border-[#D9D6D0] focus:border-rose-600 focus:ring-1 focus:ring-rose-600 rounded-sm text-[#1A1A1A] font-mono outline-hidden"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSenhaVisivel(!senhaVisivel)}
+                    tabIndex={-1}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#8F887E] hover:text-[#1A1A1A] cursor-pointer"
+                  >
+                    {senhaVisivel ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <span className="text-[10.5px] text-[#6E6E6E] mt-1 block">
+                  Informe a senha cadastrada para o seu usuário gestor ({responsavelAtivo?.email || usuarioLogado?.email || 'gestor'}).
+                </span>
+              </div>
+
+              {/* Mensagem de Erro de Senha */}
+              {erroSenha && (
+                <div className="p-3 bg-rose-50 border border-rose-300 rounded-sm flex items-start gap-2 text-xs text-rose-900 animate-shake">
+                  <AlertTriangle className="w-4 h-4 text-rose-700 shrink-0 mt-0.5" />
+                  <span className="font-semibold">{erroSenha}</span>
+                </div>
+              )}
+
+              {/* Botões de Ação */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#D9D6D0]">
+                <button
+                  type="button"
+                  disabled={isApagando}
+                  onClick={handleFecharModalApagarPacientes}
+                  className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-[#6E6E6E] hover:bg-[#F2EFEA] rounded-sm transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  id="btn-confirmar-apagar-pacientes-submit"
+                  type="submit"
+                  disabled={isApagando || !senhaConfirmacao.trim()}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-white bg-rose-700 hover:bg-rose-800 rounded-sm transition-colors cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Trash2 className={`w-4 h-4 ${isApagando ? 'animate-bounce' : ''}`} />
+                  <span>{isApagando ? 'Apagando do Banco...' : 'Confirmar e Apagar Dados'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

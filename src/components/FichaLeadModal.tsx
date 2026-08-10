@@ -4,6 +4,7 @@ import {
   User,
   Phone,
   Calendar,
+  CalendarClock,
   MapPin,
   FileText,
   DollarSign,
@@ -26,6 +27,8 @@ import {
   Layers,
   Maximize2,
   Minimize2,
+  RotateCcw,
+  ArrowRight,
 } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
 import { useEmpresa } from '../context/EmpresaContext';
@@ -41,52 +44,24 @@ import {
   OrigemLead,
   TODAS_ORIGENS,
   ProcedimentoClinica,
+  StatusConfirmacaoAgendamento,
+  TODOS_STATUS_CONFIRMACAO_AGENDAMENTO,
 } from '../types';
+import { SEED_USUARIOS } from '../data/seedData';
 import { formatarMoeda, formatarDataBR, obterDataHoje } from '../utils/formatters';
+import {
+  obterProximaEtapa,
+  avancarProximaEtapa,
+  reiniciarCadencia,
+  verificarSeTodasEtapasConcluidas,
+  ETAPAS_CONCLUIDAS_LABEL,
+} from '../utils/cadencia';
 
 interface FichaLeadModalProps {
   leadId?: string | null;
   isOpen?: boolean;
   onClose?: () => void;
 }
-
-// Sugestões de etapas rápidas por situação (alinhadas com a cadência oficial)
-const ETAPAS_SUGERIDAS: Record<SituacaoLead, string[]> = {
-  'Em captação': [
-    'Contato 1 (dia 1)',
-    'Contato 2 (dia 3)',
-    'Contato 3 (dia 5)',
-    'Contato 4 (dia 9)',
-    'Contato 5 (dia 17)',
-  ],
-  'Consulta agendada': [], // Sem etapa de acompanhamento
-  'Pós consulta': [
-    'Contato 1 (dia 1)',
-    'Contato 2 (dia 3)',
-    'Contato 3 (dia 5)',
-    'Contato 4 (dia 9)',
-    'Contato 5 (dia 17)',
-  ],
-  'Procedimento agendado': [], // Sem etapa de acompanhamento
-  'Pós procedimento': [
-    'Contato 1 (dia 1)',
-    'Contato 2 (dia 7)',
-    'Contato 3 (dia 15)',
-    'Contato 4 - Confirmação do retorno (dia 29)',
-  ],
-  'Reativação': [
-    'Contato 1 (dia 1)',
-    'Contato 2 (dia 3)',
-    'Contato 3 (dia 5)',
-    'Contato 4 (dia 9)',
-    'Contato 5 (dia 17)',
-  ],
-  'Nutrição': [
-    'Fluxo de conteúdo 1 (Cuidados)',
-    'Fluxo de conteúdo 2 (Novidades)',
-    'Convite para evento / Botox Day',
-  ],
-};
 
 // Sugestões de motivos de perda para agilizar
 const MOTIVOS_PERDA_SUGERIDOS = [
@@ -151,8 +126,8 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
     if (colaboradoresAtivos.length > 0) {
       return colaboradoresAtivos.map((u) => u.nome);
     }
-    return responsaveis || [];
-  }, [colaboradoresAtivos, responsaveis]);
+    return SEED_USUARIOS.map((u) => u.nome);
+  }, [colaboradoresAtivos]);
 
   const corPrimaria = config.estetica?.corPrimaria || '#5C3A22';
   const corSecundaria = config.estetica?.corSecundaria || '#8A6142';
@@ -198,6 +173,22 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
   const [dataNascimento, setDataNascimento] = useState('');
   const [endereco, setEndereco] = useState('');
   const [observacoes, setObservacoes] = useState('');
+
+  // Estados locais para Consulta Agendada e Lembrete 24h
+  const [dataAgendamento, setDataAgendamento] = useState('');
+  const [horarioAgendamento, setHorarioAgendamento] = useState('14:00');
+  const [profissionalAgendamento, setProfissionalAgendamento] = useState('');
+  const [tipoConsulta, setTipoConsulta] = useState('Avaliação de Harmonização Facial');
+  const [unidadeAgendamento, setUnidadeAgendamento] = useState('Consultório Principal');
+  const [observacoesAgendamento, setObservacoesAgendamento] = useState(
+    'Chegar 15 minutos antes. Vir sem maquiagem facial ou protetor solar com cor.'
+  );
+  const [statusConfirmacaoAgendamento, setStatusConfirmacaoAgendamento] =
+    useState<StatusConfirmacaoAgendamento>('Agendada');
+  const [lembrete24hEnviado, setLembrete24hEnviado] = useState(false);
+  const [dataEnvioLembrete24h, setDataEnvioLembrete24h] = useState('');
+  const [mensagemLembrete24hEnviadaPor, setMensagemLembrete24hEnviadaPor] = useState('');
+  const [showBlocoAgendamento, setShowBlocoAgendamento] = useState(false);
 
   // Estados locais de Perda (quando statusVenda === 'Perdido')
   const [motivoPerda, setMotivoPerda] = useState('');
@@ -260,9 +251,45 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
       setPossivelValor(currentLead.possivelValor || 0);
       setStatusVenda(currentLead.statusVenda || 'Em processo');
       setDataEntrada(currentLead.dataEntrada || obterDataHoje());
+      const especialistaCadastrado =
+        colaboradoresAtivos.find((u) => u.role === 'MEDICO')?.nome ||
+        colaboradoresAtivos[0]?.nome ||
+        SEED_USUARIOS.find((u) => u.role === 'MEDICO')?.nome ||
+        SEED_USUARIOS[0]?.nome ||
+        '';
+
       setResponsavel(
-        currentLead.responsavel || (colaboradoresAtivos[0]?.nome || responsaveis[0] || 'Gestão Geral')
+        currentLead.responsavel || (colaboradoresAtivos[0]?.nome || SEED_USUARIOS[0]?.nome || 'Gestão / Coordenação Geral')
       );
+
+      // Sincronizar dados do Agendamento e Lembrete 24h
+      setDataAgendamento(currentLead.dataAgendamento || '');
+      setHorarioAgendamento(currentLead.horarioAgendamento || '14:00');
+      setProfissionalAgendamento(
+        currentLead.profissionalAgendamento ||
+          (currentLead.responsavel && colaboradoresAtivos.some((c) => c.nome === currentLead.responsavel)
+            ? currentLead.responsavel
+            : especialistaCadastrado)
+      );
+      setTipoConsulta(
+        currentLead.tipoConsulta || currentLead.interesse || 'Avaliação de Harmonização Facial'
+      );
+      setUnidadeAgendamento(currentLead.unidadeAgendamento || 'Consultório Principal');
+      setObservacoesAgendamento(
+        currentLead.observacoesAgendamento ||
+          'Chegar 15 minutos antes. Vir sem maquiagem facial ou protetor solar com cor.'
+      );
+      setStatusConfirmacaoAgendamento(currentLead.statusConfirmacaoAgendamento || 'Agendada');
+      setLembrete24hEnviado(Boolean(currentLead.lembrete24hEnviado));
+      setDataEnvioLembrete24h(currentLead.dataEnvioLembrete24h || '');
+      setMensagemLembrete24hEnviadaPor(currentLead.mensagemLembrete24hEnviadaPor || '');
+
+      const isConsultaAgendada =
+        currentLead.situacao === 'Consulta agendada' ||
+        currentLead.situacao === 'Procedimento agendado' ||
+        Boolean(currentLead.dataAgendamento);
+      setShowBlocoAgendamento(isConsultaAgendada);
+
       setIsEditingDadosBasicos(false);
     }
 
@@ -302,6 +329,14 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
   // Ao trocar de situação dentro da edição, busca a etapa correspondente à situação
   const handleSituacaoChange = (novaSituacao: SituacaoLead) => {
     setSituacao(novaSituacao);
+    if (novaSituacao === 'Consulta agendada' || novaSituacao === 'Procedimento agendado') {
+      setShowBlocoAgendamento(true);
+      if (!dataAgendamento) {
+        const d = new Date();
+        d.setDate(d.getDate() + 1);
+        setDataAgendamento(d.toISOString().split('T')[0]);
+      }
+    }
     if (lead) {
       const etapaDaNovaSituacao = lead.etapaPorSituacao?.[novaSituacao] || '';
       setEtapa(etapaDaNovaSituacao);
@@ -331,6 +366,16 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
       statusVenda,
       dataEntrada,
       responsavel,
+      dataAgendamento: dataAgendamento || undefined,
+      horarioAgendamento: horarioAgendamento || undefined,
+      profissionalAgendamento: profissionalAgendamento || undefined,
+      tipoConsulta: tipoConsulta || undefined,
+      unidadeAgendamento: unidadeAgendamento || undefined,
+      observacoesAgendamento: observacoesAgendamento || undefined,
+      statusConfirmacaoAgendamento,
+      lembrete24hEnviado,
+      dataEnvioLembrete24h: dataEnvioLembrete24h || undefined,
+      mensagemLembrete24hEnviadaPor: mensagemLembrete24hEnviadaPor || undefined,
     });
 
     const isSemEtapa =
@@ -348,10 +393,10 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
     }
 
     setIsEditingDadosBasicos(false);
-    dispararFeedback('Dados básicos atualizados com sucesso!');
+    dispararFeedback('Dados básicos e agendamento atualizados com sucesso!');
   };
 
-  // Salvar a Ficha completa (dados complementares e observações)
+  // Salvar a Ficha completa (dados complementares, agendamento e observações)
   const handleSalvarFichaCompleta = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!activeLeadId || !nome.trim()) return;
@@ -365,6 +410,16 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
       statusVenda,
       dataEntrada,
       responsavel,
+      dataAgendamento: dataAgendamento || undefined,
+      horarioAgendamento: horarioAgendamento || undefined,
+      profissionalAgendamento: profissionalAgendamento || undefined,
+      tipoConsulta: tipoConsulta || undefined,
+      unidadeAgendamento: unidadeAgendamento || undefined,
+      observacoesAgendamento: observacoesAgendamento || undefined,
+      statusConfirmacaoAgendamento,
+      lembrete24hEnviado,
+      dataEnvioLembrete24h: dataEnvioLembrete24h || undefined,
+      mensagemLembrete24hEnviadaPor: mensagemLembrete24hEnviadaPor || undefined,
     });
 
     // 2. Atualizar Etapa
@@ -386,7 +441,70 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
     });
 
     setIsEditingDadosBasicos(false);
-    dispararFeedback('Ficha do paciente salva com sucesso!');
+    dispararFeedback('Ficha completa e agendamento salvos com sucesso!');
+  };
+
+  // Helper para gerar mensagem do WhatsApp para o Lembrete 24h
+  const gerarTextoLembrete24h = () => {
+    const nomePaciente = (nome || lead?.nome || 'Paciente').trim();
+    const clinicaNome = config.nomeEmpresa || 'Dra. Agda Rodrigues';
+    const tipo = tipoConsulta || interesse || 'sua avaliação de Harmonização Facial';
+    const profissional = profissionalAgendamento || responsavel || 'nossa especialista';
+    const dataFmt = formatarDataBR(dataAgendamento || obterDataHoje());
+    const horario = horarioAgendamento || '14:00';
+    const unidade = unidadeAgendamento || 'nossa clínica';
+    const obs = observacoesAgendamento
+      ? `\n\n📌 *Orientações importantes:* ${observacoesAgendamento}`
+      : '';
+
+    return (
+      `Olá, *${nomePaciente}*! Tudo bem?\n\n` +
+      `Aqui é da equipe da *${clinicaNome}*.\n\n` +
+      `Passando para confirmar sua consulta de *${tipo}* com *${profissional}*, agendada para *${dataFmt}* às *${horario}* na unidade *${unidade}*.` +
+      obs +
+      `\n\nPodemos confirmar sua presença? Por favor, responda com *1 para CONFIRMAR* ou nos avise caso precise remarcar o horário.\n\nAguardamos você! ✨`
+    );
+  };
+
+  // Disparar WhatsApp 24h diretamente
+  const handleDispararWhatsApp24hModal = async () => {
+    if (!activeLeadId) return;
+    const telNumeros = telefone.replace(/\D/g, '');
+    const textoMsg = gerarTextoLembrete24h();
+
+    if (telNumeros) {
+      window.open(`https://wa.me/55${telNumeros}?text=${encodeURIComponent(textoMsg)}`, '_blank');
+    }
+
+    const agora = new Date().toLocaleString('pt-BR');
+    setLembrete24hEnviado(true);
+    setDataEnvioLembrete24h(agora);
+    setMensagemLembrete24hEnviadaPor(responsavel || 'Secretária');
+
+    await atualizarLead(activeLeadId, {
+      lembrete24hEnviado: true,
+      dataEnvioLembrete24h: agora,
+      mensagemLembrete24hEnviadaPor: responsavel || 'Secretária',
+    });
+
+    dispararFeedback('Lembrete 24h enviado via WhatsApp e registrado na ficha!');
+  };
+
+  // Marcar Lembrete 24h como enviado manualmente
+  const handleMarcarLembrete24hEnviadoModal = async () => {
+    if (!activeLeadId) return;
+    const agora = new Date().toLocaleString('pt-BR');
+    setLembrete24hEnviado(true);
+    setDataEnvioLembrete24h(agora);
+    setMensagemLembrete24hEnviadaPor(responsavel || 'Secretária');
+
+    await atualizarLead(activeLeadId, {
+      lembrete24hEnviado: true,
+      dataEnvioLembrete24h: agora,
+      mensagemLembrete24hEnviadaPor: responsavel || 'Secretária',
+    });
+
+    dispararFeedback('Lembrete de 24h marcado como enviado com sucesso!');
   };
 
   // Lançar nova compra no mini-formulário
@@ -436,10 +554,29 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
   const isVendaFeita = statusVenda === 'Venda feita';
   const isSemEtapa =
     situacao === 'Consulta agendada' || situacao === 'Procedimento agendado';
-  const opcoesSugeridas = ETAPAS_SUGERIDAS[situacao] || [];
-  const etapaAtualExibida = isSemEtapa
-    ? '-'
-    : lead.etapaPorSituacao?.[lead.situacao] || '-';
+  const etapaArmazenada = lead.etapaPorSituacao?.[situacao] || etapa;
+  const proximaEtapaCalculada = isSemEtapa ? '-' : obterProximaEtapa(situacao, etapaArmazenada);
+  const todasConcluidas = isSemEtapa ? false : verificarSeTodasEtapasConcluidas(situacao, etapaArmazenada);
+
+  const handleConcluirProximaEtapa = async () => {
+    if (!activeLeadId || isSemEtapa) return;
+    const res = avancarProximaEtapa(situacao, etapaArmazenada);
+    setEtapa(res.proximaEtapa);
+    await definirEtapaPorSituacao(activeLeadId, situacao, res.proximaEtapa);
+    if (res.todasConcluidas) {
+      dispararFeedback('Todas as etapas da cadência foram concluídas!');
+    } else {
+      dispararFeedback(`Etapa concluída! Próximo passo: ${res.proximaEtapa}`);
+    }
+  };
+
+  const handleReiniciarCadencia = async () => {
+    if (!activeLeadId || isSemEtapa) return;
+    const primeira = reiniciarCadencia(situacao);
+    setEtapa(primeira);
+    await definirEtapaPorSituacao(activeLeadId, situacao, primeira);
+    dispararFeedback('Cadência reiniciada a partir do primeiro contato.');
+  };
 
   // Obter iniciais do paciente para o avatar
   const iniciaisPaciente = (nome || lead.nome || 'P')
@@ -824,14 +961,53 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                       </span>
                     </div>
 
-                    {/* Etapa Atual */}
-                    <div className="p-3 rounded-sm bg-[#F8F7F4] border border-[#D9D6D0] space-y-1">
-                      <span className="text-[10px] font-bold text-[#6E6E6E] uppercase tracking-wider block">
-                        Etapa Atual
-                      </span>
-                      <span className="text-xs font-semibold text-[#1A1A1A] block truncate">
-                        {etapaAtualExibida}
-                      </span>
+                    {/* Próxima Etapa */}
+                    <div className="p-3 rounded-sm bg-[#F8F7F4] border border-[#D9D6D0] space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-[#6E6E6E] uppercase tracking-wider block">
+                          Próxima Etapa
+                        </span>
+                        {todasConcluidas && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-xs bg-emerald-100 text-emerald-800 uppercase tracking-wider">
+                            Concluída
+                          </span>
+                        )}
+                      </div>
+                      {isSemEtapa ? (
+                        <span className="text-xs text-[#8F887E] block">-</span>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <span
+                            className={`text-xs font-semibold block truncate ${
+                              todasConcluidas ? 'text-emerald-800' : 'text-[#1A1A1A]'
+                            }`}
+                          >
+                            {proximaEtapaCalculada}
+                          </span>
+                          {!todasConcluidas ? (
+                            <button
+                              id="btn-concluir-etapa-leitura"
+                              type="button"
+                              onClick={handleConcluirProximaEtapa}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[10px] uppercase tracking-wider transition-colors cursor-pointer shadow-2xs w-full justify-center"
+                              title="Marcar etapa como realizada e calcular automaticamente a próxima etapa"
+                            >
+                              <Check className="w-3.5 h-3.5 text-white" />
+                              <span>Concluído</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={handleReiniciarCadencia}
+                              className="text-[10px] text-[#5C3A22] hover:underline font-bold uppercase tracking-wider cursor-pointer flex items-center gap-1"
+                              title="Reiniciar a sequência de etapas desde o primeiro contato"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              <span>Reiniciar cadência</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Interesse / Procedimento */}
@@ -853,7 +1029,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                         <div className="pt-1.5 border-t border-[#D9D6D0]/60 space-y-1">
                           <div className="flex items-center justify-between text-[10px] text-[#6E6E6E]">
                             <span>Tabela: <strong className="text-[#1A1A1A]">{formatarMoeda(procAssociado.valor)}</strong></span>
-                            <span>Efeito: <strong className="text-[#1A1A1A]">{procAssociado.duracaoMediaDias} dias</strong></span>
+                            <span>Efeito: <strong className="text-[#1A1A1A]">{procAssociado.duracaoDias} dias</strong></span>
                           </div>
                           {procAssociado.formatosPagamento && (
                             <div className="text-[10px] text-[#5C3A22] font-medium truncate" title={procAssociado.formatosPagamento}>
@@ -964,36 +1140,55 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                         </select>
                       </div>
 
-                      {/* Etapa Atual da Situação (Menu Suspenso Não-Preenchível) */}
+                      {/* Próxima Etapa da Situação (Calculada Automaticamente com Botão Concluído) */}
                       <div className="space-y-1">
                         <label
-                          htmlFor="edit-lead-etapa"
                           className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
                         >
-                          Etapa ({situacao})
+                          Próxima Etapa ({situacao})
                         </label>
                         {isSemEtapa ? (
                           <div className="w-full h-9 px-3 text-xs flex items-center text-[#8F887E] bg-[#E5E2DC] rounded-sm border border-[#D9D6D0]">
                             Sem acompanhamento
                           </div>
                         ) : (
-                          <select
-                            id="edit-lead-etapa"
-                            value={etapa}
-                            onChange={(e) => setEtapa(e.target.value)}
-                            className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white font-semibold text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer"
-                          >
-                            <option value="">Selecione a etapa...</option>
-                            {/* Mantém opção atual se não estiver na lista padrão */}
-                            {etapa && !opcoesSugeridas.includes(etapa) && (
-                              <option value={etapa}>{etapa}</option>
-                            )}
-                            {opcoesSugeridas.map((sugestao) => (
-                              <option key={sugestao} value={sugestao}>
-                                {sugestao}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-9 px-3 text-xs flex items-center justify-between bg-white text-[#1A1A1A] font-semibold rounded-sm border border-[#D9D6D0] shadow-2xs overflow-hidden">
+                                <span className="truncate">{proximaEtapaCalculada}</span>
+                                {todasConcluidas && (
+                                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded-xs shrink-0 uppercase">
+                                    Finalizada
+                                  </span>
+                                )}
+                              </div>
+                              {!todasConcluidas ? (
+                                <button
+                                  id="btn-concluir-etapa-edicao"
+                                  type="button"
+                                  onClick={handleConcluirProximaEtapa}
+                                  className="h-9 px-3 rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-2xs flex items-center gap-1.5 shrink-0"
+                                  title="Marcar etapa como realizada e avançar automaticamente para a próxima etapa"
+                                >
+                                  <Check className="w-3.5 h-3.5 text-white" />
+                                  <span>Concluído</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={handleReiniciarCadencia}
+                                  className="h-9 px-2.5 rounded-sm bg-[#F2EFEA] hover:bg-[#E5E2DC] text-[#1A1A1A] font-bold text-[11px] uppercase tracking-wider transition-colors cursor-pointer border border-[#D9D6D0] flex items-center gap-1 shrink-0"
+                                  title="Reiniciar cadência desde o primeiro contato"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                  <span>Reiniciar</span>
+                                </button>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-[#6E6E6E]">
+                              Calculada automaticamente com base na última etapa executada.
+                            </p>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1058,7 +1253,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                                 <optgroup key={categoria} label={categoria}>
                                   {lista.map((proc) => (
                                     <option key={proc.id} value={proc.nome}>
-                                      {proc.nome} — R$ {proc.valor.toLocaleString('pt-BR')} ({proc.duracaoMediaDias}d)
+                                      {proc.nome} — R$ {proc.valor.toLocaleString('pt-BR')} ({proc.duracaoDias}d)
                                     </option>
                                   ))}
                                 </optgroup>
@@ -1087,7 +1282,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                               </div>
                               <div>
                                 <span className="font-bold text-[#1A1A1A]">⏳ Efeito: </span>
-                                <span>{procAssociado.duracaoMediaDias} dias</span>
+                                <span>{procAssociado.duracaoDias} dias</span>
                               </div>
                             </div>
                           </div>
@@ -1184,6 +1379,420 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* -------------------------------------------------------------------
+                  BLOCO DE AGENDAMENTO DA CONSULTA & LEMBRETE 24H
+                  (Aberto quando a situação for Consulta agendada ou solicitado)
+                 ------------------------------------------------------------------- */}
+              <div
+                id="bloco-agendamento-consulta"
+                className={`p-4 sm:p-5 rounded-sm border shadow-xs space-y-4 transition-all duration-200 ${
+                  situacao === 'Consulta agendada' || Boolean(dataAgendamento) || showBlocoAgendamento
+                    ? 'bg-amber-50/40 border-amber-300 ring-1 ring-amber-300'
+                    : 'bg-white border-[#D9D6D0]'
+                }`}
+              >
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#D9D6D0] pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className="w-7 h-7 rounded-sm flex items-center justify-center font-bold text-white shadow-xs"
+                      style={{ backgroundColor: corPrimaria }}
+                    >
+                      <CalendarClock className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-[#1A1A1A]">
+                          Agendamento da Consulta & Lembrete 24h
+                        </h3>
+                        {dataAgendamento && (
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-sm border ${
+                              statusConfirmacaoAgendamento === 'Confirmada'
+                                ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                : statusConfirmacaoAgendamento === 'Realizada'
+                                ? 'bg-[#5C3A22]/10 text-[#5C3A22] border-[#5C3A22]/30'
+                                : 'bg-amber-100 text-amber-900 border-amber-300'
+                            }`}
+                          >
+                            {statusConfirmacaoAgendamento}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-[#6E6E6E]">
+                        Data, horário, especialista, orientações e envio da confirmação de 24h antes
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {dataAgendamento ? (
+                      <span className="text-[11px] font-bold text-[#1A1A1A] bg-white px-2.5 py-1 rounded-sm border border-[#D9D6D0] font-mono">
+                        📅 {formatarDataBR(dataAgendamento)} às {horarioAgendamento}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setDate(d.getDate() + 1);
+                          setDataAgendamento(d.toISOString().split('T')[0]);
+                          setSituacao('Consulta agendada');
+                          setStatusVenda('Agendado');
+                          setShowBlocoAgendamento(true);
+                        }}
+                        className="text-[11px] font-bold text-[#5C3A22] hover:underline uppercase tracking-wider cursor-pointer"
+                      >
+                        + Definir data de agendamento
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Campos do Agendamento */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                  {/* Data da Consulta com Atalhos Rápidos */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label
+                        htmlFor="input-agendamento-data"
+                        className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                      >
+                        Data da Consulta <span className="text-rose-600">*</span>
+                      </label>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setDataAgendamento(obterDataHoje())}
+                          className="text-[10px] text-[#5C3A22] hover:underline font-bold uppercase cursor-pointer"
+                        >
+                          Hoje
+                        </button>
+                        <span className="text-[10px] text-[#D9D6D0]">|</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const d = new Date();
+                            d.setDate(d.getDate() + 1);
+                            setDataAgendamento(d.toISOString().split('T')[0]);
+                          }}
+                          className="text-[10px] text-[#5C3A22] hover:underline font-bold uppercase cursor-pointer"
+                        >
+                          Amanhã
+                        </button>
+                        <span className="text-[10px] text-[#D9D6D0]">|</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const d = new Date();
+                            d.setDate(d.getDate() + 7);
+                            setDataAgendamento(d.toISOString().split('T')[0]);
+                          }}
+                          className="text-[10px] text-[#5C3A22] hover:underline font-bold uppercase cursor-pointer"
+                        >
+                          +7d
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      id="input-agendamento-data"
+                      type="date"
+                      value={dataAgendamento}
+                      onChange={(e) => {
+                        setDataAgendamento(e.target.value);
+                        if (situacao !== 'Consulta agendada') {
+                          setSituacao('Consulta agendada');
+                        }
+                      }}
+                      className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-semibold focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
+                    />
+                  </div>
+
+                  {/* Horário da Consulta */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label
+                        htmlFor="input-agendamento-horario"
+                        className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                      >
+                        Horário da Consulta <span className="text-rose-600">*</span>
+                      </label>
+                      <div className="flex items-center gap-1">
+                        {['09:00', '14:00', '16:00'].map((hr) => (
+                          <button
+                            key={hr}
+                            type="button"
+                            onClick={() => setHorarioAgendamento(hr)}
+                            className="text-[9px] text-[#5C3A22] hover:underline font-bold uppercase cursor-pointer"
+                          >
+                            {hr}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <input
+                      id="input-agendamento-horario"
+                      type="text"
+                      value={horarioAgendamento}
+                      onChange={(e) => setHorarioAgendamento(e.target.value)}
+                      placeholder="Ex: 14:00, 15:30..."
+                      className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-semibold font-mono focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
+                    />
+                  </div>
+
+                  {/* Profissional / Especialista */}
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="select-agendamento-profissional"
+                      className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                    >
+                      Especialista / Médico
+                    </label>
+                    <select
+                      id="select-agendamento-profissional"
+                      value={profissionalAgendamento}
+                      onChange={(e) => setProfissionalAgendamento(e.target.value)}
+                      className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer"
+                    >
+                      {colaboradoresAtivos.length > 0 ? (
+                        colaboradoresAtivos.map((colab) => (
+                          <option key={colab.id} value={colab.nome}>
+                            {colab.nome} {colab.cargo ? `— ${colab.cargo}` : ''}
+                          </option>
+                        ))
+                      ) : (
+                        listaNomesResponsaveis.map((resp) => (
+                          <option key={resp} value={resp}>
+                            {resp}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+
+                  {/* Status da Confirmação */}
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="select-agendamento-status-confirmacao"
+                      className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                    >
+                      Status da Confirmação
+                    </label>
+                    <select
+                      id="select-agendamento-status-confirmacao"
+                      value={statusConfirmacaoAgendamento}
+                      onChange={(e) =>
+                        setStatusConfirmacaoAgendamento(
+                          e.target.value as StatusConfirmacaoAgendamento
+                        )
+                      }
+                      className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white font-bold text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer"
+                    >
+                      {TODOS_STATUS_CONFIRMACAO_AGENDAMENTO.map((st) => (
+                        <option key={st} value={st}>
+                          {st}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-1">
+                  {/* Procedimento / Tipo de Consulta */}
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="input-agendamento-tipo-consulta"
+                      className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                    >
+                      Procedimento / Tipo de Consulta
+                    </label>
+                    <input
+                      id="input-agendamento-tipo-consulta"
+                      type="text"
+                      value={tipoConsulta}
+                      onChange={(e) => setTipoConsulta(e.target.value)}
+                      placeholder="Ex: Avaliação Facial, Botox, Preenchimento..."
+                      className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
+                    />
+                  </div>
+
+                  {/* Unidade / Consultório */}
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="input-agendamento-unidade"
+                      className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                    >
+                      Unidade / Sala de Atendimento
+                    </label>
+                    <input
+                      id="input-agendamento-unidade"
+                      type="text"
+                      value={unidadeAgendamento}
+                      onChange={(e) => setUnidadeAgendamento(e.target.value)}
+                      placeholder="Ex: Consultório Principal, Sala Jardins..."
+                      className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                {/* Orientações Prévias ao Paciente */}
+                <div className="space-y-1">
+                  <label
+                    htmlFor="textarea-agendamento-orientacoes"
+                    className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                  >
+                    Orientações Prévias ao Paciente (serão enviadas no lembrete de 24h)
+                  </label>
+                  <input
+                    id="textarea-agendamento-orientacoes"
+                    type="text"
+                    value={observacoesAgendamento}
+                    onChange={(e) => setObservacoesAgendamento(e.target.value)}
+                    placeholder="Ex: Chegar 15 minutos antes. Vir sem maquiagem facial ou protetor solar com cor."
+                    className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden placeholder:text-[#8F887E]"
+                  />
+                </div>
+
+                {/* -------------------------------------------------------------------
+                    SUB-BLOCO: ETAPA DO LEMBRETE DE 24 HORAS ANTES (SECRETÁRIA)
+                   ------------------------------------------------------------------- */}
+                <div
+                  id="subbloco-lembrete-24h"
+                  className="p-3.5 sm:p-4 rounded-sm bg-white border border-[#D9D6D0] space-y-3"
+                >
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-[#D9D6D0] pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Send className="w-4 h-4 text-emerald-700" />
+                      <div>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-[#1A1A1A] flex items-center gap-2">
+                          <span>Etapa: Mensagem de Lembrete 24h Antes</span>
+                          {lembrete24hEnviado ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm bg-emerald-100 text-emerald-900 border border-emerald-300">
+                              ✓ Enviado
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm bg-amber-100 text-amber-900 border border-amber-300">
+                              ⏰ Pendente de Envio
+                            </span>
+                          )}
+                        </h4>
+                        <p className="text-[10px] text-[#6E6E6E]">
+                          {lembrete24hEnviado && dataEnvioLembrete24h
+                            ? `Disparado em ${dataEnvioLembrete24h} por ${mensagemLembrete24hEnviadaPor || 'Secretária'}`
+                            : 'A secretária deve enviar a confirmação para a paciente 24 horas antes do horário marcado.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        id="btn-disparar-whatsapp-24h-ficha"
+                        type="button"
+                        onClick={handleDispararWhatsApp24hModal}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs uppercase tracking-wider shadow-xs transition-all cursor-pointer"
+                        title="Abrir WhatsApp com o texto pronto do lembrete e marcar como enviado"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5 text-white" />
+                        <span>Disparar WhatsApp 24h</span>
+                      </button>
+
+                      {!lembrete24hEnviado ? (
+                        <button
+                          type="button"
+                          onClick={handleMarcarLembrete24hEnviadoModal}
+                          className="px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A] bg-[#F2EFEA] hover:bg-[#E5E2DC] border border-[#D9D6D0] rounded-sm transition-colors cursor-pointer"
+                        >
+                          Marcar como Enviado
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLembrete24hEnviado(false);
+                            setDataEnvioLembrete24h('');
+                            if (activeLeadId) {
+                              atualizarLead(activeLeadId, {
+                                lembrete24hEnviado: false,
+                                dataEnvioLembrete24h: '',
+                              });
+                            }
+                            dispararFeedback('Lembrete 24h resetado para pendente.');
+                          }}
+                          className="text-[10px] text-[#8F887E] hover:text-[#1A1A1A] underline cursor-pointer"
+                        >
+                          Reenviar / Resetar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Pré-visualização da Mensagem Formatada */}
+                  <div className="p-3 rounded-sm bg-[#F8F7F4] border border-[#D9D6D0] space-y-1.5">
+                    <span className="text-[10px] font-bold text-[#6E6E6E] uppercase tracking-wider block">
+                      💬 Modelo da Mensagem Oficial do WhatsApp:
+                    </span>
+                    <p className="text-xs text-[#1A1A1A] font-mono leading-relaxed whitespace-pre-line bg-white p-2.5 rounded-sm border border-[#D9D6D0]">
+                      {gerarTextoLembrete24h()}
+                    </p>
+                  </div>
+
+                  {/* Ações de Resposta Rápida da Paciente */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <span className="text-[11px] font-bold text-[#6E6E6E] uppercase tracking-wider">
+                      Resposta da Paciente:
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStatusConfirmacaoAgendamento('Confirmada');
+                          if (activeLeadId) {
+                            atualizarLead(activeLeadId, {
+                              statusConfirmacaoAgendamento: 'Confirmada',
+                            });
+                          }
+                          dispararFeedback('Presença confirmada pela paciente!');
+                        }}
+                        className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 transition-colors cursor-pointer"
+                      >
+                        ✓ Paciente Confirmou
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStatusConfirmacaoAgendamento('Remarcada');
+                          if (activeLeadId) {
+                            atualizarLead(activeLeadId, {
+                              statusConfirmacaoAgendamento: 'Remarcada',
+                            });
+                          }
+                          dispararFeedback('Status atualizado para Remarcada.');
+                        }}
+                        className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 transition-colors cursor-pointer"
+                      >
+                        🔄 Pediu para Remarcar
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStatusConfirmacaoAgendamento('Cancelada');
+                          if (activeLeadId) {
+                            atualizarLead(activeLeadId, {
+                              statusConfirmacaoAgendamento: 'Cancelada',
+                            });
+                          }
+                          dispararFeedback('Consulta marcada como cancelada.');
+                        }}
+                        className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm bg-rose-100 hover:bg-rose-200 text-rose-900 border border-rose-300 transition-colors cursor-pointer"
+                      >
+                        ✕ Cancelou
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* -------------------------------------------------------------------

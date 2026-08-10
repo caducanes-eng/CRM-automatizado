@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   UserPlus,
   Flame,
+  CalendarClock,
   CalendarCheck,
   Sparkles,
   RotateCcw,
@@ -13,6 +14,8 @@ import {
   ShieldCheck,
   LogOut,
   SlidersHorizontal,
+  Crown,
+  Building2,
 } from 'lucide-react';
 import { SectionId, NavigationItem } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -50,6 +53,12 @@ export const navigationItems: {
         label: 'Em captação',
         description: 'Novos contatos e primeiros retornos',
         icon: Flame,
+      },
+      {
+        id: 'consulta_agendada',
+        label: 'Consultas agendadas',
+        description: 'Agendamentos e lembretes de 24h',
+        icon: CalendarClock,
       },
       {
         id: 'pos_consulta',
@@ -114,6 +123,14 @@ export const navigationItems: {
         restritoGestor: true,
         badge: 'Gestor',
       },
+      {
+        id: 'painel_plataforma',
+        label: 'Gestão da Plataforma',
+        description: 'Multi-clínicas, empresas e super administradores',
+        icon: Crown,
+        exclusivoPlataforma: true,
+        badge: 'Master',
+      },
     ],
   },
 ];
@@ -126,7 +143,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { responsavelAtivo, responsavelNome, isGestor, podeAcessarSecao, deslogar } = useAuth();
   const { isFirestoreConnected } = useCrm();
-  const { config } = useEmpresa();
+  const { config, isPlataformaAdmin, empresas, empresaAtivaId, definirEmpresaAtivaId } = useEmpresa();
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
 
   const c = obterCoresSidebarCompletas(config.estetica);
@@ -226,7 +243,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           {navigationItems.map((group, groupIdx) => {
             const itensVisiveis = group.items.filter((item) => {
-              if (item.restritoGestor && !isGestor) {
+              if (item.exclusivoPlataforma && !isPlataformaAdmin) {
+                return false;
+              }
+              if (item.restritoGestor && !isGestor && !isPlataformaAdmin) {
                 return false;
               }
               return podeAcessarSecao(item.id);
@@ -251,6 +271,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     const isHovered = hoveredItemId === item.id;
                     const isPrimaryQuick = item.isPrimary;
                     const isGestorExclusivo = item.restritoGestor;
+                    const isPlataformaExclusivo = item.exclusivoPlataforma;
 
                     // Estilização dinâmica com base nos estados configurados:
                     let itemStyle: React.CSSProperties = {
@@ -316,6 +337,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             }
                           >
                             Padrão
+                          </span>
+                        ) : isPlataformaExclusivo ? (
+                          <span
+                            className="text-[8.5px] font-bold tracking-wider uppercase px-1 py-0.5 rounded-sm bg-amber-400/20 text-amber-300 border border-amber-400/30"
+                          >
+                            Master
                           </span>
                         ) : isGestorExclusivo ? (
                           <span

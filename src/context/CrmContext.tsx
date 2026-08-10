@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db, sanitizeForFirestore } from '../lib/firebase';
 import { useAuth } from './AuthContext';
+import { useEmpresa } from './EmpresaContext';
 import {
   Lead,
   FichaLead,
@@ -30,6 +31,7 @@ import {
   ResultadoImportacao,
 } from '../types';
 import {
+  ID_EMPRESA_PADRAO,
   SEED_LEADS,
   SEED_FICHAS,
   SEED_COMPRAS,
@@ -53,12 +55,17 @@ function generateId(prefix: string): string {
 }
 
 interface CrmContextType {
-  // Dados brutos
+  // Dados brutos filtrados pela empresa ativa
   leads: Lead[];
   fichas: FichaLead[];
   compras: Compra[];
   responsaveis: string[];
   procedimentos: ProcedimentoClinica[];
+
+  // Dados globais (todas as empresas para gestão da plataforma)
+  todosLeads: Lead[];
+  todasCompras: Compra[];
+  todosProcedimentos: ProcedimentoClinica[];
 
   // Estatísticas e Inteligência de Procedimentos
   estatisticasProcedimentos: EstatisticasProcedimento[];
@@ -178,6 +185,8 @@ const CrmContext = createContext<CrmContextType | undefined>(undefined);
 
 export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { user, usuarios } = useAuth();
+  const { empresaAtivaId } = useEmpresa();
+  const targetEmpresaId = empresaAtivaId || ID_EMPRESA_PADRAO;
 
   // Chave de controle de limpeza de dados de teste
   const STORAGE_KEY_LIMPEZA_TESTES = 'crm_estetica_limpeza_testes_v3';
@@ -489,6 +498,21 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   }, [user?.uid]);
 
+  // Sincronização de responsáveis com os usuários colaboradores cadastrados no sistema
+  useEffect(() => {
+    if (usuarios && usuarios.length > 0) {
+      const nomes = usuarios
+        .filter((u) => !u.deleted_at && u.ativo !== false)
+        .map((u) => u.nome);
+      if (nomes.length > 0) {
+        setResponsaveis(nomes);
+        try {
+          localStorage.setItem(STORAGE_KEYS.RESPONSAVEIS, JSON.stringify(nomes));
+        } catch (e) {}
+      }
+    }
+  }, [usuarios]);
+
   // Sincronização com Cache Local (para resiliência offline)
   useEffect(() => {
     try {
@@ -560,6 +584,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       const novoLead: Lead = {
         id: leadId,
+        empresaId: targetEmpresaId,
         nome: payload.nome.trim(),
         situacao: situacao,
         etapaPorSituacao: etapaPorSituacao,
@@ -580,6 +605,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const novaFicha: FichaLead = {
         id: generateId('ficha'),
         leadId: leadId,
+        empresaId: targetEmpresaId,
         telefone: payload.ficha?.telefone || '',
         origemLead: payload.ficha?.origemLead || 'WhatsApp',
         dataNascimento: payload.ficha?.dataNascimento || '',
@@ -1066,6 +1092,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const novaCompra: Compra = {
         id: generateId('compra'),
         leadId: payload.leadId,
+        empresaId: targetEmpresaId,
         data: payload.data || hoje,
         procedimento: payload.procedimento.trim(),
         valor: Number(payload.valor) || 0,
@@ -1140,6 +1167,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const novoId = generateId('proc');
       const novoProc: ProcedimentoClinica = {
         id: novoId,
+        empresaId: targetEmpresaId,
         nome: payload.nome.trim(),
         categoria: payload.categoria?.trim() || 'Estética Facial',
         valor: Number(payload.valor) || 0,
@@ -1678,11 +1706,47 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [user]);
 
-  // Filtra apenas itens não deletados para consumo padrão das telas com memoização estável
-  const leadsAtivos = useMemo(() => leads.filter((l) => !l.deleted_at), [leads]);
-  const fichasAtivas = useMemo(() => fichas.filter((f) => !f.deleted_at), [fichas]);
-  const comprasAtivas = useMemo(() => compras.filter((c) => !c.deleted_at), [compras]);
-  const procedimentosAtivos = useMemo(() => procedimentos.filter((p) => !p.deleted_at), [procedimentos]);
+  // Filtra apenas itens não deletados para consumo padrão das telas com isolamento por empresa
+  const todosLeads = useMemo(() => leads.filter((l) => !l.deleted_at), [leads]);
+  const todasCompras = useMemo(() => compras.filter((c) => !c.deleted_at), [compras]);
+  const todosProcedimentos = useMemo(() => procedimentos.filter((p) => !p.deleted_at), [procedimentos]);
+
+  const leadsAtivos = useMemo(() => {
+    return todosLeads.filter((l) => {
+      if (targetEmpresaId === ID_EMPRESA_PADRAO) {
+        return !l.empresaId || l.empresaId === ID_EMPRESA_PADRAO;
+      }
+      return l.empresaId === targetEmpresaId;
+    });
+  }, [todosLeads, targetEmpresaId]);
+
+  const fichasAtivas = useMemo(() => {
+    return fichas.filter((f) => {
+      if (f.deleted_at) return false;
+      if (targetEmpresaId === ID_EMPRESA_PADRAO) {
+        return !f.empresaId || f.empresaId === ID_EMPRESA_PADRAO;
+      }
+      return f.empresaId === targetEmpresaId;
+    });
+  }, [fichas, targetEmpresaId]);
+
+  const comprasAtivas = useMemo(() => {
+    return todasCompras.filter((c) => {
+      if (targetEmpresaId === ID_EMPRESA_PADRAO) {
+        return !c.empresaId || c.empresaId === ID_EMPRESA_PADRAO;
+      }
+      return c.empresaId === targetEmpresaId;
+    });
+  }, [todasCompras, targetEmpresaId]);
+
+  const procedimentosAtivos = useMemo(() => {
+    return todosProcedimentos.filter((p) => {
+      if (targetEmpresaId === ID_EMPRESA_PADRAO) {
+        return !p.empresaId || p.empresaId === ID_EMPRESA_PADRAO;
+      }
+      return p.empresaId === targetEmpresaId;
+    });
+  }, [todosProcedimentos, targetEmpresaId]);
 
   // Inteligência de Mercado e Métricas dos Procedimentos
   const estatisticasProcedimentos = useMemo((): EstatisticasProcedimento[] => {
@@ -1788,6 +1852,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         compras: comprasAtivas,
         responsaveis: responsaveisEfetivos,
         procedimentos: procedimentosAtivos,
+        todosLeads,
+        todasCompras,
+        todosProcedimentos,
         estatisticasProcedimentos,
         isFirestoreConnected,
         isSyncing,

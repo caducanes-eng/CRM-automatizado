@@ -40,6 +40,11 @@ import {
   calcularStatusCadencia,
   verificarSeDeveContatarHoje,
   StatusCadencia,
+  obterProximaEtapa,
+  avancarProximaEtapa,
+  reiniciarCadencia,
+  verificarSeTodasEtapasConcluidas,
+  ETAPAS_CONCLUIDAS_LABEL,
 } from '../utils/cadencia';
 import { ImportExportModal } from './ImportExportModal';
 
@@ -73,7 +78,7 @@ interface ColumnConfig {
 export const COLUNAS_TABELA_LEADS: ColumnConfig[] = [
   { key: 'nome', label: 'Paciente', defaultWidth: 220, minWidth: 140, sortField: 'nome' },
   { key: 'situacao', label: 'Situação', defaultWidth: 170, minWidth: 130, sortField: 'situacao' },
-  { key: 'etapa', label: 'Etapa Atual', defaultWidth: 150, minWidth: 110, sortField: 'etapa' },
+  { key: 'etapa', label: 'Próxima Etapa', defaultWidth: 170, minWidth: 120, sortField: 'etapa' },
   { key: 'interesse', label: 'Interesse', defaultWidth: 170, minWidth: 110, sortField: 'interesse' },
   { key: 'possivelValor', label: 'Possível Valor', defaultWidth: 130, minWidth: 100, align: 'right', sortField: 'possivelValor' },
   { key: 'totalComprado', label: 'Total Realizado', defaultWidth: 130, minWidth: 100, align: 'right', sortField: 'totalComprado' },
@@ -139,8 +144,12 @@ export function getSituacaoEstilo(situacao: SituacaoLead | string) {
 }
 
 export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpenNovoPaciente }) => {
-  const { leads, compras, atualizarLead, abrirFichaLead } = useCrm();
+  const { leads, compras, atualizarLead, abrirFichaLead, definirEtapaPorSituacao } = useCrm();
   const { config } = useEmpresa();
+
+  // Modal de confirmação de etapa realizada: "Etapa realizada? Concluída ou cancelar"
+  const [modalEtapaLead, setModalEtapaLead] = useState<Lead | null>(null);
+  const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
 
   // Cores dinâmicas selecionadas para a barra lateral / navegação
   const cores = useMemo(() => obterCoresSidebarCompletas(config.estetica), [config.estetica]);
@@ -151,6 +160,41 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
     } else {
       abrirFichaLead(leadId);
     }
+  };
+
+  // Abrir caixa de confirmação da etapa ao clicar na célula da coluna
+  const handleAbrirModalEtapa = (lead: Lead) => {
+    const isSemAcompanhamento =
+      lead.situacao === 'Consulta agendada' || lead.situacao === 'Procedimento agendado';
+    if (isSemAcompanhamento) return;
+    setModalEtapaLead(lead);
+  };
+
+  // Concluir etapa da paciente e avançar automaticamente
+  const handleConcluirEtapaLead = async () => {
+    if (!modalEtapaLead) return;
+    const situacao = modalEtapaLead.situacao;
+    const etapaArmazenada = modalEtapaLead.etapaPorSituacao?.[situacao];
+    const res = avancarProximaEtapa(situacao, etapaArmazenada);
+    await definirEtapaPorSituacao(modalEtapaLead.id, situacao, res.proximaEtapa);
+    setModalEtapaLead(null);
+    setFeedbackToast(
+      res.todasConcluidas
+        ? `Todas as etapas da cadência concluídas para ${modalEtapaLead.nome}!`
+        : `Etapa concluída para ${modalEtapaLead.nome}! Próximo passo: ${res.proximaEtapa}`
+    );
+    setTimeout(() => setFeedbackToast(null), 3200);
+  };
+
+  // Reiniciar sequência de cadência se necessário
+  const handleReiniciarCadenciaLead = async () => {
+    if (!modalEtapaLead) return;
+    const situacao = modalEtapaLead.situacao;
+    const primeira = reiniciarCadencia(situacao);
+    await definirEtapaPorSituacao(modalEtapaLead.id, situacao, primeira);
+    setModalEtapaLead(null);
+    setFeedbackToast(`Cadência reiniciada para ${modalEtapaLead.nome}.`);
+    setTimeout(() => setFeedbackToast(null), 3200);
   };
 
   // Estados de Filtro
@@ -345,13 +389,13 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
     return map;
   }, [compras]);
 
-  // Função para obter a etapa exibida para um lead
+  // Função para obter a próxima etapa calculada para um lead
   const obterEtapaExibida = (lead: Lead): string => {
     if (lead.situacao === 'Consulta agendada' || lead.situacao === 'Procedimento agendado') {
       return '-';
     }
-    const etapa = lead.etapaPorSituacao?.[lead.situacao];
-    return etapa && etapa.trim() ? etapa : '-';
+    const etapaArmazenada = lead.etapaPorSituacao?.[lead.situacao];
+    return obterProximaEtapa(lead.situacao, etapaArmazenada);
   };
 
   // Alternar ordenação
@@ -861,15 +905,34 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                       </select>
                     </td>
 
-                    {/* Etapa atual */}
+                    {/* Próxima Etapa (Clicável para abrir: "Etapa realizada? Concluída ou cancelar") */}
                     <td className="py-3 px-3">
                       {etapaExibida === '-' ? (
                         <span className="text-[#8F887E] font-mono text-center block w-6">-</span>
-                      ) : (
-                        <span className="inline-block px-2 py-0.5 rounded-sm bg-white text-[#1A1A1A] border border-[#D9D6D0] text-[11px] max-w-full truncate shadow-2xs">
-                          {etapaExibida}
-                        </span>
-                      )}
+                      ) : (() => {
+                        const etapaArmazenada = lead.etapaPorSituacao?.[lead.situacao];
+                        const todasConcluidas = verificarSeTodasEtapasConcluidas(lead.situacao, etapaArmazenada);
+                        return (
+                          <button
+                            id={`btn-etapa-lead-${lead.id}`}
+                            type="button"
+                            onClick={() => handleAbrirModalEtapa(lead)}
+                            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-sm text-xs font-semibold border transition-all cursor-pointer shadow-2xs group max-w-full text-left ${
+                              todasConcluidas
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                                : 'bg-white text-[#1A1A1A] border-[#D9D6D0] hover:border-[#5C3A22] hover:bg-[#F2EFEA]'
+                            }`}
+                            title="Clique para responder: Etapa realizada? Concluída ou cancelar"
+                          >
+                            {todasConcluidas ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            ) : (
+                              <Clock className="w-3.5 h-3.5 text-[#5C3A22] group-hover:text-emerald-700 shrink-0" />
+                            )}
+                            <span className="truncate">{etapaExibida}</span>
+                          </button>
+                        );
+                      })()}
                     </td>
 
                     {/* Interesse */}
@@ -966,6 +1029,151 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
           Exibindo {leadsFiltradosEOrdenados.length} de {leads.length} paciente(s)
         </div>
       </div>
+
+      {/* Feedback Toast */}
+      {feedbackToast && (
+        <div
+          id="toast-feedback-etapa"
+          className="fixed bottom-6 right-6 z-50 bg-[#1A1A1A] text-white px-4 py-3 rounded-sm shadow-xl border border-[#5C3A22] text-xs font-semibold flex items-center gap-2 animate-in slide-in-from-bottom-2 duration-200"
+        >
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{feedbackToast}</span>
+        </div>
+      )}
+
+      {/* Modal de Confirmação: Etapa realizada? Concluída ou cancelar */}
+      {modalEtapaLead && (
+        <div
+          id="modal-confirmacao-etapa-backdrop"
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setModalEtapaLead(null)}
+        >
+          <div
+            id="modal-confirmacao-etapa-container"
+            className="bg-white rounded-sm shadow-2xl border border-[#D9D6D0] w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header com título de alto contraste */}
+            <div className="px-5 py-4 bg-[#1A1A1A] text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-[#C9A882]" />
+                <h3 className="text-sm font-bold uppercase tracking-wider text-white">
+                  Etapa realizada?
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalEtapaLead(null)}
+                className="text-white/70 hover:text-white cursor-pointer"
+                title="Fechar caixa de pergunta"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Conteúdo da Caixa de Pergunta */}
+            <div className="p-5 space-y-4">
+              {/* Identificação do Paciente */}
+              <div className="p-3.5 bg-[#F8F7F4] rounded-sm border border-[#D9D6D0] space-y-1">
+                <span className="text-[10px] font-bold text-[#6E6E6E] uppercase tracking-wider block">
+                  Paciente
+                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-bold text-[#1A1A1A] truncate">
+                    {modalEtapaLead.nome}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm bg-white border border-[#D9D6D0] text-[#1A1A1A] shrink-0">
+                    {modalEtapaLead.situacao}
+                  </span>
+                </div>
+              </div>
+
+              {/* Etapa Atual / Próxima */}
+              {(() => {
+                const situacao = modalEtapaLead.situacao;
+                const etapaArmazenada = modalEtapaLead.etapaPorSituacao?.[situacao];
+                const todasJaConcluidas = verificarSeTodasEtapasConcluidas(situacao, etapaArmazenada);
+                const etapaAtualCalculada = obterProximaEtapa(situacao, etapaArmazenada);
+                const previsaoAvanco = avancarProximaEtapa(situacao, etapaArmazenada);
+
+                if (todasJaConcluidas) {
+                  return (
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-sm text-center space-y-2">
+                      <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
+                      <p className="text-xs font-bold text-emerald-900">
+                        Todas as etapas da cadência já foram concluídas!
+                      </p>
+                      <p className="text-[11px] text-emerald-700">
+                        Deseja reiniciar a sequência de acompanhamento a partir do primeiro contato?
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3">
+                    <div className="p-3.5 bg-[#F2EFEA] border border-[#D9D6D0] rounded-sm space-y-1">
+                      <span className="text-[10px] font-bold text-[#6E6E6E] uppercase tracking-wider block">
+                        Etapa a ser concluída agora:
+                      </span>
+                      <span className="text-sm font-bold text-[#1A1A1A] block">
+                        {etapaAtualCalculada}
+                      </span>
+                    </div>
+
+                    <div className="text-xs text-[#6E6E6E] space-y-1">
+                      <p>
+                        Ao marcar como <strong className="text-emerald-800">Concluída</strong>, o sistema calculará automaticamente o próximo passo:
+                      </p>
+                      <div className="p-2.5 rounded-sm bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-900 flex items-center gap-2">
+                        <span className="text-emerald-700 font-bold">→</span>
+                        <span>{previsaoAvanco.proximaEtapa}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Ações: Concluída ou Cancelar */}
+            <div className="px-5 py-3.5 bg-[#F8F7F4] border-t border-[#D9D6D0] flex items-center justify-end gap-2.5">
+              <button
+                id="btn-cancelar-pergunta-etapa"
+                type="button"
+                onClick={() => setModalEtapaLead(null)}
+                className="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] hover:bg-[#F2EFEA] transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+
+              {verificarSeTodasEtapasConcluidas(
+                modalEtapaLead.situacao,
+                modalEtapaLead.etapaPorSituacao?.[modalEtapaLead.situacao]
+              ) ? (
+                <button
+                  id="btn-reiniciar-pergunta-etapa"
+                  type="button"
+                  onClick={handleReiniciarCadenciaLead}
+                  className="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-sm bg-[#5C3A22] hover:bg-[#4A2E1B] text-white transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reiniciar Cadência</span>
+                </button>
+              ) : (
+                <button
+                  id="btn-confirmar-pergunta-etapa"
+                  type="button"
+                  onClick={handleConcluirEtapaLead}
+                  className="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                  <span>Concluída</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Central de Importação, Exportação e Tabela Modelo */}
       <ImportExportModal

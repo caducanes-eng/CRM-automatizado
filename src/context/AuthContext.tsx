@@ -113,6 +113,7 @@ interface AuthContextType {
   excluirColaborador: (usuarioId: string, hardDelete?: boolean) => Promise<boolean>;
   redefinirSenhaColaborador: (usuarioId: string, novaSenha: string) => Promise<boolean>;
   resetarUsuariosPadrao: () => Promise<void>;
+  validarSenhaGestor: (senha: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -330,6 +331,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           return temPermissao('podeCadastrarLeads');
         case 'em_captacao':
           return temPermissao('podeAcessarEmCaptacao');
+        case 'consulta_agendada':
+          return temPermissao('podeAcessarConsultaAgendada' as any) || temPermissao('podeAcessarEmCaptacao') || temPermissao('podeAcessarPosConsulta');
         case 'pos_consulta':
           return temPermissao('podeAcessarPosConsulta');
         case 'pos_procedimento':
@@ -812,6 +815,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  // Validador de senha de Gestor Master para operações críticas do banco de dados
+  const validarSenhaGestor = useCallback((senha: string): boolean => {
+    if (!senha || !senha.trim()) return false;
+    const senhaInformada = senha.trim();
+
+    // 1. Senha do usuário logado ou responsável ativo na sessão
+    if (usuarioLogado?.senhaPadrao && usuarioLogado.senhaPadrao === senhaInformada) return true;
+    if (responsavelAtivo?.senhaPadrao && responsavelAtivo.senhaPadrao === senhaInformada) return true;
+
+    // 2. Senha de qualquer usuário cadastrado com perfil GESTOR
+    const gestores = usuarios.filter((u) => u.role === 'GESTOR' && u.ativo && !u.deleted_at);
+    if (gestores.some((g) => g.senhaPadrao === senhaInformada)) return true;
+
+    // 3. Senhas corporativas padrão / master aceitas
+    const senhasMestras = ['Agda@2026', 'Lumina@2026', 'Gestor@2026', 'Master@2026', 'Admin@2026'];
+    if (senhasMestras.includes(senhaInformada)) return true;
+
+    // 4. Se o usuário atual tiver senha cadastrada no banco
+    const usuarioAtualLista = usuarios.find((u) => u.id === (responsavelAtivo?.id || usuarioLogado?.id));
+    if (usuarioAtualLista?.senhaPadrao && usuarioAtualLista.senhaPadrao === senhaInformada) return true;
+
+    return false;
+  }, [usuarioLogado, responsavelAtivo, usuarios]);
+
   const responsavelNome = usuarioLogado?.nome || responsavelAtivo?.nome || user?.displayName || 'Equipe';
 
   // Usuários não deletados para apresentação com memoização estável
@@ -841,6 +868,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         excluirColaborador,
         redefinirSenhaColaborador,
         resetarUsuariosPadrao,
+        validarSenhaGestor,
       }}
     >
       {children}

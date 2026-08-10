@@ -4,23 +4,163 @@ import {
   Compra,
   ProcedimentoClinica,
   UsuarioColaborador,
+  Empresa,
+  EmpresaMembro,
+  PlataformaAdmin,
   PERMISSOES_PRESET_GESTOR,
   PERMISSOES_PRESET_MEDICO,
   PERMISSOES_PRESET_RECEPCAO,
   PERMISSOES_PRESET_POS_VENDA,
 } from '../types';
 
-export const SEED_RESPONSAVEIS = [
-  'Secretária 1',
-  'Secretária 2',
-  'Gestor(a)',
-  'Dra. Agda Rodrigues',
-  'Dra. Camila',
+export const ID_EMPRESA_PADRAO = '00000000-0000-0000-0000-000000000001';
+
+// =========================================================================
+// GESTORES GLOBAIS DA PLATAFORMA (SUPER ADMINS)
+// =========================================================================
+export const SEED_PLATAFORMA_ADMINS: PlataformaAdmin[] = [
+  {
+    id: 'admin-plat-caducanes',
+    userId: 'user-cadu',
+    email: 'caducanes@gmail.com',
+    nome: 'Cadu Canes (Gestor Geral da Plataforma)',
+    criadoPor: 'Sistema',
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 365).toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    version: 1,
+  },
+  {
+    id: 'admin-plat-gestao',
+    userId: 'user-gestao',
+    email: 'gestao@agdarodrigues.med.br',
+    nome: 'Gestão da Plataforma',
+    criadoPor: 'Sistema',
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 365).toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    version: 1,
+  },
+];
+
+// =========================================================================
+// EMPRESAS CADASTRADAS NO SISTEMA
+// =========================================================================
+export const SEED_EMPRESAS: Empresa[] = [
+  {
+    id: ID_EMPRESA_PADRAO,
+    nome: 'Dra. Agda Rodrigues',
+    subtitulo: 'Harmonização Facial & Medicina Estética de Alta Performance',
+    cnpj: '45.123.456/0001-89',
+    registroProfissional: 'CRM/SP 198.432 - RQE 87.654',
+    telefone: '(11) 98765-4321',
+    email: 'contato@agdarodrigues.med.br',
+    endereco: 'Av. Brigadeiro Faria Lima, 3477 - 14º andar, Itaim Bibi - São Paulo/SP',
+    horarioFuncionamento: 'Segunda a Sexta: 08h às 20h | Sábado: 08h às 14h',
+    unidadePadrao: 'Consultório Principal - Sala 1402',
+    status: 'ativa',
+    tipoLogo: 'monograma',
+    monogramaIniciais: 'AR',
+    logoAltura: 'padrao',
+    logoAjusteLateral: 'padrao',
+    logoFundoHeader: 'integrado',
+    adminPrincipalId: 'user-agda',
+    adminPrincipalEmail: 'dra.agda@agdarodrigues.med.br',
+    adminPrincipalNome: 'Dra. Agda Rodrigues',
+    totalUsuarios: 5,
+    totalPacientes: 0,
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 180).toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    version: 1,
+  },
+];
+
+// =========================================================================
+// MEMBROS VINCULADOS ÀS EMPRESAS
+// =========================================================================
+export const SEED_EMPRESA_MEMBROS: EmpresaMembro[] = [
+  {
+    id: 'membro-01',
+    userId: 'user-gestao',
+    empresaId: ID_EMPRESA_PADRAO,
+    papel: 'admin',
+    ativo: true,
+    usuarioNome: 'Gestão / Coordenação Geral',
+    usuarioEmail: 'gestao@agdarodrigues.med.br',
+    usuarioCargo: 'Gestor Geral / Administrador',
+    ultimoAcesso: new Date().toISOString(),
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 90).toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    version: 1,
+  },
+  {
+    id: 'membro-02',
+    userId: 'user-agda',
+    empresaId: ID_EMPRESA_PADRAO,
+    papel: 'admin',
+    ativo: true,
+    usuarioNome: 'Dra. Agda Rodrigues',
+    usuarioEmail: 'dra.agda@agdarodrigues.med.br',
+    usuarioCargo: 'Médica Especialista em Harmonização Facial',
+    ultimoAcesso: new Date(Date.now() - 1000 * 60 * 60 * 1).toISOString(),
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 90).toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    version: 1,
+  },
+  {
+    id: 'membro-03',
+    userId: 'user-camila',
+    empresaId: ID_EMPRESA_PADRAO,
+    papel: 'medico',
+    ativo: true,
+    usuarioNome: 'Dra. Camila (Médica Injetora)',
+    usuarioEmail: 'dra.camila@agdarodrigues.med.br',
+    usuarioCargo: 'Médica Cirurgiã / Injetora',
+    ultimoAcesso: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 80).toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    version: 1,
+  },
+  {
+    id: 'membro-04',
+    userId: 'user-sec1',
+    empresaId: ID_EMPRESA_PADRAO,
+    papel: 'recepcao',
+    ativo: true,
+    usuarioNome: 'Recepção / Secretária 1',
+    usuarioEmail: 'secretaria1@agdarodrigues.med.br',
+    usuarioCargo: 'Atendimento & Pré-Vendas',
+    ultimoAcesso: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 60).toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    version: 1,
+  },
+  {
+    id: 'membro-05',
+    userId: 'user-sec2',
+    empresaId: ID_EMPRESA_PADRAO,
+    papel: 'pos_venda',
+    ativo: true,
+    usuarioNome: 'Recepção / Secretária 2',
+    usuarioEmail: 'secretaria2@agdarodrigues.med.br',
+    usuarioCargo: 'Acompanhamento & Pós-Procedimento',
+    ultimoAcesso: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 50).toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    version: 1,
+  },
 ];
 
 export const SEED_USUARIOS: UsuarioColaborador[] = [
   {
     id: 'user-gestao',
+    empresaId: ID_EMPRESA_PADRAO,
     nome: 'Gestão / Coordenação Geral',
     email: 'gestao@agdarodrigues.med.br',
     senhaPadrao: 'Agda@2026',
@@ -41,6 +181,7 @@ export const SEED_USUARIOS: UsuarioColaborador[] = [
   },
   {
     id: 'user-agda',
+    empresaId: ID_EMPRESA_PADRAO,
     nome: 'Dra. Agda Rodrigues (Resp. Técnica)',
     email: 'dra.agda@agdarodrigues.med.br',
     senhaPadrao: 'Agda@2026',
@@ -61,6 +202,7 @@ export const SEED_USUARIOS: UsuarioColaborador[] = [
   },
   {
     id: 'user-camila',
+    empresaId: ID_EMPRESA_PADRAO,
     nome: 'Dra. Camila (Médica Injetora)',
     email: 'dra.camila@agdarodrigues.med.br',
     senhaPadrao: 'Agda@2026',
@@ -81,6 +223,7 @@ export const SEED_USUARIOS: UsuarioColaborador[] = [
   },
   {
     id: 'user-sec1',
+    empresaId: ID_EMPRESA_PADRAO,
     nome: 'Recepção / Secretária 1',
     email: 'secretaria1@agdarodrigues.med.br',
     senhaPadrao: 'Agda@2026',
@@ -101,6 +244,7 @@ export const SEED_USUARIOS: UsuarioColaborador[] = [
   },
   {
     id: 'user-sec2',
+    empresaId: ID_EMPRESA_PADRAO,
     nome: 'Recepção / Secretária 2',
     email: 'secretaria2@agdarodrigues.med.br',
     senhaPadrao: 'Agda@2026',
@@ -121,6 +265,8 @@ export const SEED_USUARIOS: UsuarioColaborador[] = [
   },
 ];
 
+export const SEED_RESPONSAVEIS: string[] = SEED_USUARIOS.map((u) => u.nome);
+
 // =========================================================================
 // BANCO DE DADOS LIMPO (Sem dados simulados ou fictícios de teste)
 // =========================================================================
@@ -134,6 +280,7 @@ export const SEED_COMPRAS: Compra[] = [];
 export const SEED_PROCEDIMENTOS: ProcedimentoClinica[] = [
   {
     id: 'proc-toxina-botulinica-01',
+    empresaId: ID_EMPRESA_PADRAO,
     nome: 'Toxina Botulínica (Botox) - Terço Superior Completo',
     categoria: 'Injetáveis',
     valor: 1400,
@@ -149,6 +296,7 @@ export const SEED_PROCEDIMENTOS: ProcedimentoClinica[] = [
   },
   {
     id: 'proc-preench-labial-02',
+    empresaId: ID_EMPRESA_PADRAO,
     nome: 'Preenchimento Labial com Ácido Hialurônico (1ml)',
     categoria: 'Facial',
     valor: 1600,
@@ -164,6 +312,7 @@ export const SEED_PROCEDIMENTOS: ProcedimentoClinica[] = [
   },
   {
     id: 'proc-bioestimulador-03',
+    empresaId: ID_EMPRESA_PADRAO,
     nome: 'Bioestimulador de Colágeno (Radiesse / Sculptra)',
     categoria: 'Bioestimuladores',
     valor: 3400,
@@ -179,6 +328,7 @@ export const SEED_PROCEDIMENTOS: ProcedimentoClinica[] = [
   },
   {
     id: 'proc-harmonizacao-04',
+    empresaId: ID_EMPRESA_PADRAO,
     nome: 'Harmonização Facial Full Face',
     categoria: 'Harmonização',
     valor: 6800,
@@ -194,6 +344,7 @@ export const SEED_PROCEDIMENTOS: ProcedimentoClinica[] = [
   },
   {
     id: 'proc-fios-pdo-05',
+    empresaId: ID_EMPRESA_PADRAO,
     nome: 'Fios de PDO de Tração e Sustentação',
     categoria: 'Facial',
     valor: 3200,
@@ -209,6 +360,7 @@ export const SEED_PROCEDIMENTOS: ProcedimentoClinica[] = [
   },
   {
     id: 'proc-lipo-papada-06',
+    empresaId: ID_EMPRESA_PADRAO,
     nome: 'Lipo Enzimática de Papada (Protocolo)',
     categoria: 'Facial',
     valor: 1950,
@@ -224,6 +376,7 @@ export const SEED_PROCEDIMENTOS: ProcedimentoClinica[] = [
   },
   {
     id: 'proc-limpeza-pele-07',
+    empresaId: ID_EMPRESA_PADRAO,
     nome: 'Limpeza de Pele Profunda com Hidratação de Ouro',
     categoria: 'Cuidados Faciais',
     valor: 350,
@@ -239,6 +392,7 @@ export const SEED_PROCEDIMENTOS: ProcedimentoClinica[] = [
   },
   {
     id: 'proc-peeling-08',
+    empresaId: ID_EMPRESA_PADRAO,
     nome: 'Peeling Químico Médio com Renovação Cutânea',
     categoria: 'Cuidados Faciais',
     valor: 650,
@@ -254,6 +408,7 @@ export const SEED_PROCEDIMENTOS: ProcedimentoClinica[] = [
   },
   {
     id: 'proc-lavieen-09',
+    empresaId: ID_EMPRESA_PADRAO,
     nome: 'Protocolo Laser Lavieen (Rejuvenescimento BB Laser)',
     categoria: 'Tecnologias & Laser',
     valor: 2800,

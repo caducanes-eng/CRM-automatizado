@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS empresas (
 
 CREATE INDEX IF NOT EXISTS idx_empresas_active ON empresas(id) WHERE deleted_at IS NULL;
 
+DROP TRIGGER IF EXISTS trg_empresas_updated_at ON empresas;
 CREATE TRIGGER trg_empresas_updated_at
 BEFORE UPDATE ON empresas
 FOR EACH ROW
@@ -89,6 +90,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 CREATE INDEX IF NOT EXISTS idx_usuarios_empresa ON usuarios(empresa_id) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_usuarios_email ON usuarios(email) WHERE deleted_at IS NULL;
 
+DROP TRIGGER IF EXISTS trg_usuarios_updated_at ON usuarios;
 CREATE TRIGGER trg_usuarios_updated_at
 BEFORE UPDATE ON usuarios
 FOR EACH ROW
@@ -117,6 +119,7 @@ CREATE TABLE IF NOT EXISTS procedimentos (
 CREATE INDEX IF NOT EXISTS idx_procedimentos_empresa ON procedimentos(empresa_id) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_procedimentos_nome ON procedimentos(empresa_id, nome) WHERE deleted_at IS NULL;
 
+DROP TRIGGER IF EXISTS trg_procedimentos_updated_at ON procedimentos;
 CREATE TRIGGER trg_procedimentos_updated_at
 BEFORE UPDATE ON procedimentos
 FOR EACH ROW
@@ -153,6 +156,7 @@ CREATE INDEX IF NOT EXISTS idx_leads_status_venda ON leads(empresa_id, status_ve
 CREATE INDEX IF NOT EXISTS idx_leads_data_entrada ON leads(empresa_id, data_entrada) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_leads_responsavel ON leads(empresa_id, responsavel) WHERE deleted_at IS NULL;
 
+DROP TRIGGER IF EXISTS trg_leads_updated_at ON leads;
 CREATE TRIGGER trg_leads_updated_at
 BEFORE UPDATE ON leads
 FOR EACH ROW
@@ -182,6 +186,7 @@ CREATE INDEX IF NOT EXISTS idx_fichas_empresa ON fichas_leads(empresa_id) WHERE 
 CREATE INDEX IF NOT EXISTS idx_fichas_lead_id ON fichas_leads(lead_id) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_fichas_telefone ON fichas_leads(telefone) WHERE deleted_at IS NULL;
 
+DROP TRIGGER IF EXISTS trg_fichas_leads_updated_at ON fichas_leads;
 CREATE TRIGGER trg_fichas_leads_updated_at
 BEFORE UPDATE ON fichas_leads
 FOR EACH ROW
@@ -210,6 +215,7 @@ CREATE INDEX IF NOT EXISTS idx_compras_lead ON compras(lead_id) WHERE deleted_at
 CREATE INDEX IF NOT EXISTS idx_compras_data ON compras(empresa_id, data) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_compras_procedimento ON compras(procedimento_id) WHERE deleted_at IS NULL;
 
+DROP TRIGGER IF EXISTS trg_compras_updated_at ON compras;
 CREATE TRIGGER trg_compras_updated_at
 BEFORE UPDATE ON compras
 FOR EACH ROW
@@ -238,6 +244,7 @@ CREATE TABLE IF NOT EXISTS historico_atendimentos (
 CREATE INDEX IF NOT EXISTS idx_atendimentos_lead ON historico_atendimentos(lead_id, data_hora DESC) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_atendimentos_empresa ON historico_atendimentos(empresa_id) WHERE deleted_at IS NULL;
 
+DROP TRIGGER IF EXISTS trg_historico_atendimentos_updated_at ON historico_atendimentos;
 CREATE TRIGGER trg_historico_atendimentos_updated_at
 BEFORE UPDATE ON historico_atendimentos
 FOR EACH ROW
@@ -265,6 +272,7 @@ CREATE TABLE IF NOT EXISTS tarefas (
 CREATE INDEX IF NOT EXISTS idx_tarefas_empresa_status ON tarefas(empresa_id, status, data_vencimento) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_tarefas_lead ON tarefas(lead_id) WHERE deleted_at IS NULL;
 
+DROP TRIGGER IF EXISTS trg_tarefas_updated_at ON tarefas;
 CREATE TRIGGER trg_tarefas_updated_at
 BEFORE UPDATE ON tarefas
 FOR EACH ROW
@@ -289,6 +297,7 @@ CREATE TABLE IF NOT EXISTS workflows_automacoes (
 
 CREATE INDEX IF NOT EXISTS idx_workflows_empresa ON workflows_automacoes(empresa_id, evento_gatilho) WHERE deleted_at IS NULL;
 
+DROP TRIGGER IF EXISTS trg_workflows_updated_at ON workflows_automacoes;
 CREATE TRIGGER trg_workflows_updated_at
 BEFORE UPDATE ON workflows_automacoes
 FOR EACH ROW
@@ -395,7 +404,7 @@ VALUES
 ),
 (
   '10000000-0000-0000-0000-000000000002',
-  '00000000-0000-0000-0000-000000000002',
+  '00000000-0000-0000-0000-000000000001',
   'Preenchimento Labial / Ácido Hialurônico (1ml)',
   'Injetáveis',
   1600.00,
@@ -407,7 +416,7 @@ VALUES
 ),
 (
   '10000000-0000-0000-0000-000000000003',
-  '00000000-0000-0000-0000-000000000003',
+  '00000000-0000-0000-0000-000000000001',
   'Bioestimulador de Colágeno (Sculptra / Radiesse)',
   'Bioestimuladores',
   2800.00,
@@ -419,7 +428,7 @@ VALUES
 ),
 (
   '10000000-0000-0000-0000-000000000004',
-  '00000000-0000-0000-0000-000000000004',
+  '00000000-0000-0000-0000-000000000001',
   'Harmonização Facial Full Face Personalizada',
   'Harmonização',
   5500.00,
@@ -431,7 +440,7 @@ VALUES
 ),
 (
   '10000000-0000-0000-0000-000000000005',
-  '00000000-0000-0000-0000-000000000005',
+  '00000000-0000-0000-0000-000000000001',
   'Limpeza de Pele Profunda com Hidratação de Ouro',
   'Facial',
   320.00,
@@ -442,3 +451,86 @@ VALUES
   true
 )
 ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
+-- SEED DE USUÁRIOS & EQUIPE DA CLÍNICA
+-- ============================================================================
+INSERT INTO usuarios (id, empresa_id, nome, email, senha_hash, cargo, role, iniciais, cor_badge, telefone, ativo, criado_por, observacoes)
+VALUES
+(
+  '20000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000001',
+  'Gestão / Coordenação Geral',
+  'gestao@agdarodrigues.med.br',
+  'Agda@2026',
+  'Gestor Geral / Administrador',
+  'GESTOR',
+  'GG',
+  '#1A1A1A',
+  '(11) 98765-1005',
+  true,
+  'Sistema / Administrador',
+  'Acesso total a todas as áreas, métricas, configurações e gestão de acessos'
+),
+(
+  '20000000-0000-0000-0000-000000000002',
+  '00000000-0000-0000-0000-000000000001',
+  'Dra. Agda Rodrigues',
+  'dra.agda@agdarodrigues.med.br',
+  'Agda@2026',
+  'Médica Especialista em Harmonização Facial',
+  'MEDICO',
+  'AR',
+  '#5C3A22',
+  '(11) 98765-1000',
+  true,
+  'Gestão / Coordenação Geral',
+  'Responsável técnica, harmonização facial, bioestimuladores e preenchimentos'
+),
+(
+  '20000000-0000-0000-0000-000000000003',
+  '00000000-0000-0000-0000-000000000001',
+  'Dra. Camila (Médica Injetora)',
+  'dra.camila@agdarodrigues.med.br',
+  'Agda@2026',
+  'Médica Cirurgiã / Injetora',
+  'MEDICO',
+  'DC',
+  '#8A6142',
+  '(11) 98765-1001',
+  true,
+  'Gestão / Coordenação Geral',
+  'Consultas e procedimentos de toxina botulínica e bioestimuladores'
+),
+(
+  '20000000-0000-0000-0000-000000000004',
+  '00000000-0000-0000-0000-000000000001',
+  'Recepção / Secretária 1',
+  'secretaria1@agdarodrigues.med.br',
+  'Agda@2026',
+  'Atendimento & Pré-Vendas',
+  'RECEPCAO_COMERCIAL',
+  'S1',
+  '#8F887E',
+  '(11) 98765-1003',
+  true,
+  'Gestão / Coordenação Geral',
+  'Atendimento WhatsApp, captação de pacientes e agendamento de consultas'
+),
+(
+  '20000000-0000-0000-0000-000000000005',
+  '00000000-0000-0000-0000-000000000001',
+  'Recepção / Secretária 2',
+  'secretaria2@agdarodrigues.med.br',
+  'Agda@2026',
+  'Acompanhamento & Pós-Procedimento',
+  'POS_VENDA',
+  'S2',
+  '#6E6E6E',
+  '(11) 98765-1004',
+  true,
+  'Gestão / Coordenação Geral',
+  'Pós-consulta, confirmação de procedimentos e acompanhamento de retornos'
+)
+ON CONFLICT (id) DO NOTHING;
+

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCrm } from '../context/CrmContext';
-import { SituacaoLead } from '../types';
+import { SituacaoLead, Lead } from '../types';
 import { formatarDataBR } from '../utils/formatters';
 import {
   calcularDiasCorridos,
@@ -28,6 +28,10 @@ import {
   verificarSeDeveContatarHoje,
   obterOpcoesCadenciaPorSituacao,
   StatusCadencia,
+  obterProximaEtapa,
+  avancarProximaEtapa,
+  reiniciarCadencia,
+  verificarSeTodasEtapasConcluidas,
 } from '../utils/cadencia';
 
 interface CadenciaViewProps {
@@ -49,6 +53,10 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
     abrirFichaLead,
   } = useCrm();
 
+  // Modal de confirmação: "Etapa realizada? Concluída ou cancelar"
+  const [modalEtapaLead, setModalEtapaLead] = useState<Lead | null>(null);
+  const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+
   // Estados de busca e filtros locais
   const [termoBusca, setTermoBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('Todos');
@@ -59,6 +67,36 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
     campo: 'diasCorridos',
     direcao: 'desc',
   });
+
+  // Abrir caixa de confirmação da etapa ao clicar na célula
+  const handleAbrirModalEtapa = (lead: Lead) => {
+    setModalEtapaLead(lead);
+  };
+
+  // Concluir etapa realizada e calcular automaticamente o próximo passo
+  const handleConcluirEtapaLead = async () => {
+    if (!modalEtapaLead) return;
+    const etapaArmazenada = modalEtapaLead.etapaPorSituacao?.[situacao];
+    const res = avancarProximaEtapa(situacao, etapaArmazenada);
+    await definirEtapaPorSituacao(modalEtapaLead.id, situacao, res.proximaEtapa);
+    setModalEtapaLead(null);
+    setFeedbackToast(
+      res.todasConcluidas
+        ? `Todas as etapas da cadência concluídas para ${modalEtapaLead.nome}!`
+        : `Etapa concluída para ${modalEtapaLead.nome}! Próximo passo: ${res.proximaEtapa}`
+    );
+    setTimeout(() => setFeedbackToast(null), 3200);
+  };
+
+  // Reiniciar sequência de cadência desde o primeiro contato
+  const handleReiniciarCadenciaLead = async () => {
+    if (!modalEtapaLead) return;
+    const primeira = reiniciarCadencia(situacao);
+    await definirEtapaPorSituacao(modalEtapaLead.id, situacao, primeira);
+    setModalEtapaLead(null);
+    setFeedbackToast(`Cadência reiniciada para ${modalEtapaLead.nome}.`);
+    setTimeout(() => setFeedbackToast(null), 3200);
+  };
 
   // Opções de cadência oficiais para esta situação
   const opcoesCadencia = useMemo(() => {
@@ -435,9 +473,9 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
                   </button>
                 </th>
 
-                {/* 4. Etapa atual */}
-                <th scope="col" className="py-3 px-4 min-w-[220px] font-bold uppercase tracking-wider text-[11px] text-white">
-                  <span className="text-white font-bold">Etapa atual</span>
+                {/* 4. Próxima Etapa */}
+                <th scope="col" className="py-3 px-4 min-w-[200px] font-bold uppercase tracking-wider text-[11px] text-white">
+                  <span className="text-white font-bold">Próxima Etapa</span>
                 </th>
 
                 {/* 5. Etapa esperada */}
@@ -487,6 +525,9 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
                 leadsExibidos.map((lead, idx) => {
                   const isEven = idx % 2 === 1;
                   const rowBg = isEven ? 'bg-[#F2EFEA]/50 hover:bg-[#F2EFEA]' : 'bg-white hover:bg-[#F2EFEA]/30';
+                  const etapaArmazenada = lead.etapaPorSituacao?.[situacao];
+                  const todasConcluidas = verificarSeTodasEtapasConcluidas(situacao, etapaArmazenada);
+                  const proximaEtapaCalculada = obterProximaEtapa(situacao, etapaArmazenada);
 
                   return (
                     <tr
@@ -543,25 +584,26 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
                         </span>
                       </td>
 
-                      {/* 4. Etapa atual */}
+                      {/* 4. Próxima Etapa (Clicável para abrir: "Etapa realizada? Concluída ou cancelar") */}
                       <td className="py-3 px-4">
-                        <select
-                          id={`select-etapa-atual-${lead.id}`}
-                          value={lead.etapaAtual}
-                          onChange={(e) => handleMudarEtapa(lead.id, e.target.value)}
-                          className={`w-full h-8 px-2 text-xs rounded-sm border font-medium transition-all focus:outline-hidden cursor-pointer ${
-                            !lead.etapaAtual
-                              ? 'border-[#D9D6D0] bg-white text-[#8F887E]'
-                              : 'border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22]'
+                        <button
+                          id={`btn-etapa-cadencia-${lead.id}`}
+                          type="button"
+                          onClick={() => handleAbrirModalEtapa(lead)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-semibold border transition-all cursor-pointer shadow-2xs group max-w-full text-left ${
+                            todasConcluidas
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                              : 'bg-white text-[#1A1A1A] border-[#D9D6D0] hover:border-[#5C3A22] hover:bg-[#F2EFEA]'
                           }`}
+                          title="Clique para responder: Etapa realizada? Concluída ou cancelar"
                         >
-                          <option value="">-- Selecione a etapa --</option>
-                          {opcoesCadencia.map((opcao) => (
-                            <option key={opcao} value={opcao}>
-                              {opcao}
-                            </option>
-                          ))}
-                        </select>
+                          {todasConcluidas ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          ) : (
+                            <Clock className="w-3.5 h-3.5 text-[#5C3A22] group-hover:text-emerald-700 shrink-0" />
+                          )}
+                          <span className="truncate">{proximaEtapaCalculada}</span>
+                        </button>
                       </td>
 
                       {/* 5. Etapa esperada */}
@@ -608,6 +650,150 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
           </span>
         </div>
       </div>
+
+      {/* Feedback Toast */}
+      {feedbackToast && (
+        <div
+          id="toast-feedback-etapa-cadencia"
+          className="fixed bottom-6 right-6 z-50 bg-[#1A1A1A] text-white px-4 py-3 rounded-sm shadow-xl border border-[#5C3A22] text-xs font-semibold flex items-center gap-2 animate-in slide-in-from-bottom-2 duration-200"
+        >
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{feedbackToast}</span>
+        </div>
+      )}
+
+      {/* Modal de Confirmação: Etapa realizada? Concluída ou cancelar */}
+      {modalEtapaLead && (
+        <div
+          id="modal-confirmacao-cadencia-backdrop"
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setModalEtapaLead(null)}
+        >
+          <div
+            id="modal-confirmacao-cadencia-container"
+            className="bg-white rounded-sm shadow-2xl border border-[#D9D6D0] w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-5 py-4 bg-[#1A1A1A] text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-[#C9A882]" />
+                <h3 className="text-sm font-bold uppercase tracking-wider text-white">
+                  Etapa realizada?
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalEtapaLead(null)}
+                className="text-white/70 hover:text-white cursor-pointer"
+                title="Fechar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Conteúdo da Caixa de Pergunta */}
+            <div className="p-5 space-y-4">
+              {/* Identificação do Paciente */}
+              <div className="p-3.5 bg-[#F8F7F4] rounded-sm border border-[#D9D6D0] space-y-1">
+                <span className="text-[10px] font-bold text-[#6E6E6E] uppercase tracking-wider block">
+                  Paciente
+                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-bold text-[#1A1A1A] truncate">
+                    {modalEtapaLead.nome}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm bg-white border border-[#D9D6D0] text-[#1A1A1A] shrink-0">
+                    {situacao}
+                  </span>
+                </div>
+              </div>
+
+              {/* Etapa Atual / Próxima */}
+              {(() => {
+                const etapaArmazenada = modalEtapaLead.etapaPorSituacao?.[situacao];
+                const todasJaConcluidas = verificarSeTodasEtapasConcluidas(situacao, etapaArmazenada);
+                const etapaAtualCalculada = obterProximaEtapa(situacao, etapaArmazenada);
+                const previsaoAvanco = avancarProximaEtapa(situacao, etapaArmazenada);
+
+                if (todasJaConcluidas) {
+                  return (
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-sm text-center space-y-2">
+                      <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
+                      <p className="text-xs font-bold text-emerald-900">
+                        Todas as etapas da cadência já foram concluídas!
+                      </p>
+                      <p className="text-[11px] text-emerald-700">
+                        Deseja reiniciar a sequência de acompanhamento a partir do primeiro contato?
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3">
+                    <div className="p-3.5 bg-[#F2EFEA] border border-[#D9D6D0] rounded-sm space-y-1">
+                      <span className="text-[10px] font-bold text-[#6E6E6E] uppercase tracking-wider block">
+                        Etapa a ser concluída agora:
+                      </span>
+                      <span className="text-sm font-bold text-[#1A1A1A] block">
+                        {etapaAtualCalculada}
+                      </span>
+                    </div>
+
+                    <div className="text-xs text-[#6E6E6E] space-y-1">
+                      <p>
+                        Ao marcar como <strong className="text-emerald-800">Concluída</strong>, o sistema calculará automaticamente o próximo passo:
+                      </p>
+                      <div className="p-2.5 rounded-sm bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-900 flex items-center gap-2">
+                        <span className="text-emerald-700 font-bold">→</span>
+                        <span>{previsaoAvanco.proximaEtapa}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Ações: Concluída ou Cancelar */}
+            <div className="px-5 py-3.5 bg-[#F8F7F4] border-t border-[#D9D6D0] flex items-center justify-end gap-2.5">
+              <button
+                id="btn-cancelar-pergunta-cadencia"
+                type="button"
+                onClick={() => setModalEtapaLead(null)}
+                className="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] hover:bg-[#F2EFEA] transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+
+              {verificarSeTodasEtapasConcluidas(
+                situacao,
+                modalEtapaLead.etapaPorSituacao?.[situacao]
+              ) ? (
+                <button
+                  id="btn-reiniciar-pergunta-cadencia"
+                  type="button"
+                  onClick={handleReiniciarCadenciaLead}
+                  className="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-sm bg-[#5C3A22] hover:bg-[#4A2E1B] text-white transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reiniciar Cadência</span>
+                </button>
+              ) : (
+                <button
+                  id="btn-confirmar-pergunta-cadencia"
+                  type="button"
+                  onClick={handleConcluirEtapaLead}
+                  className="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                  <span>Concluída</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 };
