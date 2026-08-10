@@ -10,6 +10,13 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db, sanitizeForFirestore } from '../lib/firebase';
+import { supabaseService, supabaseMapper } from '../services/supabaseService';
+import {
+  isSupabaseConfigured,
+  getSupabaseClient,
+  logRealtimeEvent,
+  setRealtimeStatus,
+} from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { useEmpresa } from './EmpresaContext';
 import {
@@ -498,6 +505,159 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   }, [user?.uid]);
 
+  // 3. Listener e Sincronização em Tempo Real com Supabase Realtime (WebSockets)
+  useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      return;
+    }
+
+    const client = getSupabaseClient();
+    if (!client) return;
+
+    setRealtimeStatus('CONECTANDO');
+    logRealtimeEvent('SISTEMA', 'SYSTEM', 'Iniciando canal de escuta em tempo real com o Supabase...');
+
+    const channel = client
+      .channel('crm_realtime_data_channel')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'leads' },
+        (payload) => {
+          const newRow = payload.new as Record<string, any> | undefined;
+          const oldRow = payload.old as Record<string, any> | undefined;
+          const { eventType } = payload;
+          logRealtimeEvent('leads', eventType as any, `Evento ${eventType} em leads: ${newRow?.nome || oldRow?.id || 'Registro'}`);
+          if (eventType === 'INSERT' || eventType === 'UPDATE') {
+            if (newRow && !newRow.deleted_at) {
+              const leadItem = supabaseMapper.dbToLead(newRow as any);
+              setLeads((prev) => {
+                const idx = prev.findIndex((l) => l.id === leadItem.id);
+                if (idx >= 0) {
+                  const updated = [...prev];
+                  updated[idx] = leadItem;
+                  return updated;
+                }
+                return [leadItem, ...prev];
+              });
+            } else if (newRow && newRow.deleted_at) {
+              setLeads((prev) => prev.filter((l) => l.id !== newRow.id));
+            }
+          } else if (eventType === 'DELETE') {
+            if (oldRow?.id) {
+              setLeads((prev) => prev.filter((l) => l.id !== oldRow.id));
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'fichas_leads' },
+        (payload) => {
+          const newRow = payload.new as Record<string, any> | undefined;
+          const oldRow = payload.old as Record<string, any> | undefined;
+          const { eventType } = payload;
+          logRealtimeEvent('fichas_leads', eventType as any, `Evento ${eventType} em fichas_leads`);
+          if (eventType === 'INSERT' || eventType === 'UPDATE') {
+            if (newRow && !newRow.deleted_at) {
+              const fichaItem = supabaseMapper.dbToFicha(newRow as any);
+              setFichas((prev) => {
+                const idx = prev.findIndex((f) => f.id === fichaItem.id || f.leadId === fichaItem.leadId);
+                if (idx >= 0) {
+                  const updated = [...prev];
+                  updated[idx] = fichaItem;
+                  return updated;
+                }
+                return [fichaItem, ...prev];
+              });
+            } else if (newRow && newRow.deleted_at) {
+              setFichas((prev) => prev.filter((f) => f.id !== newRow.id && f.leadId !== newRow.lead_id));
+            }
+          } else if (eventType === 'DELETE') {
+            if (oldRow?.id) {
+              setFichas((prev) => prev.filter((f) => f.id !== oldRow.id && f.leadId !== oldRow.lead_id));
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'compras' },
+        (payload) => {
+          const newRow = payload.new as Record<string, any> | undefined;
+          const oldRow = payload.old as Record<string, any> | undefined;
+          const { eventType } = payload;
+          logRealtimeEvent('compras', eventType as any, `Evento ${eventType} em compras: ${newRow?.procedimento || oldRow?.id || 'Venda'}`);
+          if (eventType === 'INSERT' || eventType === 'UPDATE') {
+            if (newRow && !newRow.deleted_at) {
+              const compraItem = supabaseMapper.dbToCompra(newRow as any);
+              setCompras((prev) => {
+                const idx = prev.findIndex((c) => c.id === compraItem.id);
+                if (idx >= 0) {
+                  const updated = [...prev];
+                  updated[idx] = compraItem;
+                  return updated;
+                }
+                return [compraItem, ...prev];
+              });
+            } else if (newRow && newRow.deleted_at) {
+              setCompras((prev) => prev.filter((c) => c.id !== newRow.id));
+            }
+          } else if (eventType === 'DELETE') {
+            if (oldRow?.id) {
+              setCompras((prev) => prev.filter((c) => c.id !== oldRow.id));
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'procedimentos' },
+        (payload) => {
+          const newRow = payload.new as Record<string, any> | undefined;
+          const oldRow = payload.old as Record<string, any> | undefined;
+          const { eventType } = payload;
+          logRealtimeEvent('procedimentos', eventType as any, `Evento ${eventType} em procedimentos: ${newRow?.nome || oldRow?.id}`);
+          if (eventType === 'INSERT' || eventType === 'UPDATE') {
+            if (newRow && !newRow.deleted_at) {
+              const procItem = supabaseMapper.dbToProcedimento(newRow as any);
+              setProcedimentos((prev) => {
+                const idx = prev.findIndex((p) => p.id === procItem.id);
+                if (idx >= 0) {
+                  const updated = [...prev];
+                  updated[idx] = procItem;
+                  return updated;
+                }
+                return [...prev, procItem];
+              });
+            } else if (newRow && newRow.deleted_at) {
+              setProcedimentos((prev) => prev.filter((p) => p.id !== newRow.id));
+            }
+          } else if (eventType === 'DELETE') {
+            if (oldRow?.id) {
+              setProcedimentos((prev) => prev.filter((p) => p.id !== oldRow.id));
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          setRealtimeStatus('CONECTADO');
+          logRealtimeEvent('SISTEMA', 'SYSTEM', '🟢 Supabase Realtime Ativo! Conexão bidirecional estabelecida.');
+        } else if (status === 'CHANNEL_ERROR') {
+          setRealtimeStatus('ERRO');
+          logRealtimeEvent('SISTEMA', 'SYSTEM', '⚠️ Erro ao assinar canal Supabase Realtime.');
+        } else if (status === 'CLOSED') {
+          setRealtimeStatus('DESCONECTADO');
+        }
+      });
+
+    return () => {
+      try {
+        channel.unsubscribe();
+      } catch (e) {}
+    };
+  }, []);
+
   // Sincronização de responsáveis com os usuários colaboradores cadastrados no sistema
   useEffect(() => {
     if (usuarios && usuarios.length > 0) {
@@ -633,6 +793,16 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.error('Erro ao persistir novo Lead no Firestore:', err);
       }
 
+      // 3. Espelhamento no Supabase (se configurado)
+      if (isSupabaseConfigured()) {
+        try {
+          await supabaseService.salvarLead(novoLead);
+          await supabaseService.salvarFicha(novaFicha);
+        } catch (eSupabase) {
+          console.warn('Aviso: falha ao espelhar novo lead/ficha no Supabase:', eSupabase);
+        }
+      }
+
       return novoLead;
     },
     [responsaveis, user]
@@ -740,6 +910,17 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.error('Erro ao atualizar Lead no Firestore:', err);
       }
 
+      if (isSupabaseConfigured() && leadAtualizado) {
+        try {
+          await supabaseService.salvarLead(leadAtualizado);
+          if (fichaAtualizada) {
+            await supabaseService.salvarFicha(fichaAtualizada);
+          }
+        } catch (eSupabase) {
+          console.warn('Aviso ao sincronizar lead atualizado no Supabase:', eSupabase);
+        }
+      }
+
       return leadAtualizado;
     },
     [user]
@@ -771,6 +952,14 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       } catch (err) {
         console.error('Erro ao reativar Lead no Firestore:', err);
+      }
+
+      if (isSupabaseConfigured() && leadAtualizado) {
+        try {
+          await supabaseService.salvarLead(leadAtualizado);
+        } catch (eSupabase) {
+          console.warn('Aviso ao sincronizar lead reativado no Supabase:', eSupabase);
+        }
       }
 
       return leadAtualizado;
@@ -828,6 +1017,17 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.error('Erro ao marcar lead como perdido no Firestore:', err);
       }
 
+      if (isSupabaseConfigured() && leadAtualizado) {
+        try {
+          await supabaseService.salvarLead(leadAtualizado);
+          if (fichaAtualizada) {
+            await supabaseService.salvarFicha(fichaAtualizada);
+          }
+        } catch (eSupabase) {
+          console.warn('Aviso ao sincronizar lead perdido no Supabase:', eSupabase);
+        }
+      }
+
       return leadAtualizado;
     },
     [user]
@@ -836,6 +1036,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const excluirLead = useCallback(
     async (leadId: string, hardDelete = true): Promise<boolean> => {
       const timestamp = new Date().toISOString();
+      const leadAlvo = leads.find((l) => l.id === leadId);
 
       if (hardDelete) {
         setLeads((prev) => prev.filter((l) => l.id !== leadId));
@@ -888,6 +1089,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } catch (err) {
           console.error('Erro ao excluir Lead do Firestore:', err);
         }
+
+        if (isSupabaseConfigured() && leadAlvo) {
+          try {
+            await supabaseService.salvarLead({
+              ...leadAlvo,
+              deleted_at: timestamp,
+              updated_at: timestamp,
+            });
+          } catch (eSupabase) {
+            console.warn('Aviso ao excluir lead no Supabase:', eSupabase);
+          }
+        }
       } else {
         // Soft delete obrigatório conforme PROJECT_RULES
         setLeads((prev) =>
@@ -907,10 +1120,22 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } catch (err) {
           console.error('Erro ao realizar soft-delete no Firestore:', err);
         }
+
+        if (isSupabaseConfigured() && leadAlvo) {
+          try {
+            await supabaseService.salvarLead({
+              ...leadAlvo,
+              deleted_at: timestamp,
+              updated_at: timestamp,
+            });
+          } catch (eSupabase) {
+            console.warn('Aviso ao realizar soft delete no Supabase:', eSupabase);
+          }
+        }
       }
       return true;
     },
-    [user]
+    [user, leads]
   );
 
   const obterLeadPorId = useCallback(
@@ -1075,6 +1300,14 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.error('Erro ao atualizar Ficha no Firestore:', err);
       }
 
+      if (isSupabaseConfigured() && fichaAtualizada) {
+        try {
+          await supabaseService.salvarFicha(fichaAtualizada);
+        } catch (eSupabase) {
+          console.warn('Aviso ao sincronizar ficha no Supabase:', eSupabase);
+        }
+      }
+
       return fichaAtualizada;
     },
     [user]
@@ -1125,6 +1358,14 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.error('Erro ao lançar Compra no Firestore:', err);
       }
 
+      if (isSupabaseConfigured()) {
+        try {
+          await supabaseService.salvarCompra(novaCompra);
+        } catch (eSupabase) {
+          console.warn('Aviso ao salvar compra no Supabase:', eSupabase);
+        }
+      }
+
       return novaCompra;
     },
     [user]
@@ -1133,6 +1374,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const removerCompra = useCallback(
     async (compraId: string): Promise<boolean> => {
       const timestamp = new Date().toISOString();
+      const compraAlvo = compras.find((c) => c.id === compraId);
       setCompras((prev) =>
         prev.map((c) => (c.id === compraId ? { ...c, deleted_at: timestamp, version: c.version + 1 } : c))
       );
@@ -1145,9 +1387,21 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.error('Erro ao remover Compra no Firestore:', err);
       }
 
+      if (isSupabaseConfigured() && compraAlvo) {
+        try {
+          await supabaseService.salvarCompra({
+            ...compraAlvo,
+            deleted_at: timestamp,
+            updated_at: timestamp,
+          });
+        } catch (eSupabase) {
+          console.warn('Aviso ao remover compra no Supabase:', eSupabase);
+        }
+      }
+
       return true;
     },
-    [user]
+    [user, compras]
   );
 
   const obterComprasPorLead = useCallback(
@@ -1192,6 +1446,14 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.error('Erro ao salvar procedimento no Firestore:', err);
       }
 
+      if (isSupabaseConfigured()) {
+        try {
+          await supabaseService.salvarProcedimento(novoProc);
+        } catch (eSupabase) {
+          console.warn('Aviso ao salvar procedimento no Supabase:', eSupabase);
+        }
+      }
+
       return novoProc;
     },
     [user]
@@ -1231,6 +1493,14 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.error('Erro ao atualizar procedimento no Firestore:', err);
       }
 
+      if (isSupabaseConfigured() && procAtualizado) {
+        try {
+          await supabaseService.salvarProcedimento(procAtualizado);
+        } catch (eSupabase) {
+          console.warn('Aviso ao atualizar procedimento no Supabase:', eSupabase);
+        }
+      }
+
       return procAtualizado;
     },
     [user]
@@ -1239,6 +1509,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const excluirProcedimento = useCallback(
     async (id: string): Promise<boolean> => {
       const timestamp = new Date().toISOString();
+      const procAlvo = procedimentos.find((p) => p.id === id);
       setProcedimentos((prev) =>
         prev.map((p) => (p.id === id ? { ...p, deleted_at: timestamp, version: p.version + 1 } : p))
       );
@@ -1251,9 +1522,21 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.error('Erro ao excluir procedimento do Firestore:', err);
       }
 
+      if (isSupabaseConfigured() && procAlvo) {
+        try {
+          await supabaseService.salvarProcedimento({
+            ...procAlvo,
+            deleted_at: timestamp,
+            updated_at: timestamp,
+          });
+        } catch (eSupabase) {
+          console.warn('Aviso ao excluir procedimento no Supabase:', eSupabase);
+        }
+      }
+
       return true;
     },
-    [user]
+    [user, procedimentos]
   );
 
   const obterProcedimentoPorId = useCallback(

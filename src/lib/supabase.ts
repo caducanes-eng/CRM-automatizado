@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 
 const STORAGE_KEY_SUPABASE = 'crm_supabase_config_v1';
 
@@ -8,8 +8,87 @@ export interface SupabaseConfig {
   origem: 'env' | 'custom' | 'nenhuma';
 }
 
+export interface RealtimeEventLog {
+  id: string;
+  timestamp: string;
+  tabela: string;
+  evento: 'INSERT' | 'UPDATE' | 'DELETE' | 'SYSTEM';
+  descricao: string;
+  detalhes?: any;
+}
+
+export type RealtimeConnectionStatus = 'DESCONECTADO' | 'CONECTANDO' | 'CONECTADO' | 'ERRO';
+export type RealtimeLogEntry = RealtimeEventLog;
+export type RealtimeStatusType = RealtimeConnectionStatus;
+
 let cachedClient: SupabaseClient | null = null;
 let lastClientKey = '';
+let globalRealtimeChannel: RealtimeChannel | null = null;
+let currentRealtimeStatus: RealtimeConnectionStatus = 'DESCONECTADO';
+const realtimeStatusListeners: Set<(status: RealtimeConnectionStatus) => void> = new Set();
+const realtimeLogs: RealtimeEventLog[] = [];
+const realtimeLogListeners: Set<(log: RealtimeEventLog) => void> = new Set();
+
+/**
+ * Registra um log de evento em tempo real e notifica observadores
+ */
+export function logRealtimeEvent(
+  tabela: string,
+  evento: 'INSERT' | 'UPDATE' | 'DELETE' | 'SYSTEM',
+  descricao: string,
+  detalhes?: any
+): void {
+  const log: RealtimeEventLog = {
+    id: 'rt-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
+    timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    tabela,
+    evento,
+    descricao,
+    detalhes,
+  };
+
+  realtimeLogs.unshift(log);
+  if (realtimeLogs.length > 50) {
+    realtimeLogs.pop();
+  }
+
+  realtimeLogListeners.forEach((fn) => {
+    try {
+      fn(log);
+    } catch (e) {}
+  });
+}
+
+/**
+ * Atualiza o status da conexão em tempo real e notifica ouvintes
+ */
+export function setRealtimeStatus(status: RealtimeConnectionStatus): void {
+  currentRealtimeStatus = status;
+  realtimeStatusListeners.forEach((fn) => {
+    try {
+      fn(status);
+    } catch (e) {}
+  });
+}
+
+export function getRealtimeStatus(): RealtimeConnectionStatus {
+  return currentRealtimeStatus;
+}
+
+export function subscribeRealtimeStatus(fn: (status: RealtimeConnectionStatus) => void): () => void {
+  realtimeStatusListeners.add(fn);
+  fn(currentRealtimeStatus);
+  return () => realtimeStatusListeners.delete(fn);
+}
+
+export function subscribeRealtimeLogs(fn: (log: RealtimeEventLog) => void): () => void {
+  realtimeLogListeners.add(fn);
+  return () => realtimeLogListeners.delete(fn);
+}
+
+export function getRealtimeLogs(): RealtimeEventLog[] {
+  return [...realtimeLogs];
+}
 
 /**
  * Obtém as credenciais ativas do Supabase (prioridade: localStorage configurado > variáveis VITE_*)
@@ -63,8 +142,19 @@ export function saveSupabaseConfig(url: string, anonKey: string): void {
   );
 
   // Invalida cliente em cache para reinicializar
+  if (globalRealtimeChannel) {
+    try {
+      globalRealtimeChannel.unsubscribe();
+    } catch (e) {}
+    globalRealtimeChannel = null;
+  }
   cachedClient = null;
   lastClientKey = '';
+
+  logRealtimeEvent('SISTEMA', 'SYSTEM', 'Novas credenciais do Supabase salvas no navegador.');
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('supabase-config-changed'));
+  }
 }
 
 /**
@@ -72,8 +162,19 @@ export function saveSupabaseConfig(url: string, anonKey: string): void {
  */
 export function clearSupabaseConfig(): void {
   localStorage.removeItem(STORAGE_KEY_SUPABASE);
+  if (globalRealtimeChannel) {
+    try {
+      globalRealtimeChannel.unsubscribe();
+    } catch (e) {}
+    globalRealtimeChannel = null;
+  }
   cachedClient = null;
   lastClientKey = '';
+  setRealtimeStatus('DESCONECTADO');
+  logRealtimeEvent('SISTEMA', 'SYSTEM', 'Credenciais do Supabase removidas.');
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('supabase-config-changed'));
+  }
 }
 
 /**
@@ -103,6 +204,11 @@ export function getSupabaseClient(): SupabaseClient | null {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 20,
+        },
       },
     });
     lastClientKey = currentKey;
@@ -182,6 +288,10 @@ export async function testSupabaseConnection(
     const { error: errLeads } = await client.from('leads').select('id').limit(1);
     if (!errLeads) tabelasValidadas.push('leads');
 
+    // Testa tabela fichas_leads
+    const { error: errFichas } = await client.from('fichas_leads').select('id').limit(1);
+    if (!errFichas) tabelasValidadas.push('fichas_leads');
+
     // Testa tabela procedimentos
     const { error: errProc } = await client.from('procedimentos').select('id').limit(1);
     if (!errProc) tabelasValidadas.push('procedimentos');
@@ -194,9 +304,15 @@ export async function testSupabaseConnection(
     const { error: errUsuarios } = await client.from('usuarios').select('id').limit(1);
     if (!errUsuarios) tabelasValidadas.push('usuarios');
 
+    // Testa tabela empresa_membros
+    const { error: errMembros } = await client.from('empresa_membros').select('id').limit(1);
+    if (!errMembros) tabelasValidadas.push('empresa_membros');
+
+    logRealtimeEvent('SISTEMA', 'SYSTEM', `Conexão validada com sucesso. ${tabelasValidadas.length} tabelas prontas.`);
+
     return {
       sucesso: true,
-      mensagem: `Conexão ativa e autenticada! (${tabelasValidadas.length} tabelas identificadas)`,
+      mensagem: `Conexão ativa, autenticada e pronta! (${tabelasValidadas.length} tabelas identificadas)`,
       tabelasEncontradas: tabelasValidadas,
       detalhes: { empresasEncontradas: empresas?.length || 0 },
     };

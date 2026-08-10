@@ -1,12 +1,13 @@
 -- ============================================================================
 -- ARQUITETURA DE BANCO DE DADOS CRM ESTÉTICA & CLÍNICAS (SUPABASE / POSTGRESQL)
 -- ============================================================================
--- Padrão de Arquitetura:
+-- Padrão de Arquitetura & Governança do Projeto:
 -- 1. Todas as tabelas possuem: id (UUID), created_at, updated_at, deleted_at, version
 -- 2. Soft delete obrigatório (deleted_at IS NULL para registros ativos)
 -- 3. Versionamento otimista automático por trigger (version = version + 1 em UPDATE)
 -- 4. Relacionamentos explícitos e índices parciais otimizados
--- 5. Multi-inquilino seguro via empresa_id
+-- 5. Multi-inquilino robusto e isolado via empresa_id
+-- 6. Suporte completo a todas as informações e características visuais das clínicas
 -- ============================================================================
 
 -- Habilitar extensões necessárias para UUID e Criptografia
@@ -26,26 +27,33 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================================================
--- 1. TABELA: empresas (Clínicas e Unidades)
+-- 1. TABELA: empresas (Clínicas, Consultórios e Unidades)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS empresas (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nome VARCHAR(255) NOT NULL,
   subtitulo VARCHAR(255),
-  cnpj VARCHAR(20),
+  cnpj VARCHAR(50),
   registro_profissional VARCHAR(100),
   telefone VARCHAR(50),
   email VARCHAR(255),
   endereco TEXT,
   horario_funcionamento VARCHAR(255),
   unidade_padrao VARCHAR(100) DEFAULT 'Consultório Principal',
+  status VARCHAR(50) NOT NULL DEFAULT 'ativa' CHECK (status IN ('ativa', 'suspensa')),
   tipo_logo VARCHAR(50) DEFAULT 'monograma' CHECK (tipo_logo IN ('imagem', 'monograma')),
   logo_url TEXT,
   monograma_iniciais VARCHAR(10) DEFAULT 'AR',
   logo_altura VARCHAR(50) DEFAULT 'padrao',
   logo_ajuste_lateral VARCHAR(50) DEFAULT 'total',
   logo_fundo_header VARCHAR(50) DEFAULT 'integrado',
-  estetica_config JSONB DEFAULT '{}'::jsonb,
+  estetica_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+  esteticas_salvas JSONB NOT NULL DEFAULT '[]'::jsonb,
+  admin_principal_id UUID NULL,
+  admin_principal_email VARCHAR(255),
+  admin_principal_nome VARCHAR(255),
+  total_usuarios INTEGER NOT NULL DEFAULT 0,
+  total_pacientes INTEGER NOT NULL DEFAULT 0,
   ativa BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -53,7 +61,17 @@ CREATE TABLE IF NOT EXISTS empresas (
   version INTEGER NOT NULL DEFAULT 1
 );
 
+-- Garantir colunas adicionais para bases legadas
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT 'ativa';
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS esteticas_salvas JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS admin_principal_id UUID NULL;
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS admin_principal_email VARCHAR(255);
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS admin_principal_nome VARCHAR(255);
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS total_usuarios INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS total_pacientes INTEGER NOT NULL DEFAULT 0;
+
 CREATE INDEX IF NOT EXISTS idx_empresas_active ON empresas(id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_empresas_status ON empresas(status) WHERE deleted_at IS NULL;
 
 DROP TRIGGER IF EXISTS trg_empresas_updated_at ON empresas;
 CREATE TRIGGER trg_empresas_updated_at
@@ -62,7 +80,59 @@ FOR EACH ROW
 EXECUTE FUNCTION set_updated_at_and_version();
 
 -- ============================================================================
--- 2. TABELA: usuarios (Colaboradores, Médicos, Secretárias, Gestores)
+-- 2. TABELA: empresa_membros (Vínculo de Usuários & Níveis de Acesso por Clínica)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS empresa_membros (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+  papel VARCHAR(50) NOT NULL DEFAULT 'operador' CHECK (papel IN ('admin', 'operador', 'medico', 'recepcao', 'pos_venda')),
+  ativo BOOLEAN NOT NULL DEFAULT true,
+  usuario_nome VARCHAR(255),
+  usuario_email VARCHAR(255),
+  usuario_cargo VARCHAR(100),
+  ultimo_acesso TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ NULL,
+  version INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_empresa_membros_empresa ON empresa_membros(empresa_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_empresa_membros_user ON empresa_membros(user_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_empresa_membros_email ON empresa_membros(usuario_email) WHERE deleted_at IS NULL;
+
+DROP TRIGGER IF EXISTS trg_empresa_membros_updated_at ON empresa_membros;
+CREATE TRIGGER trg_empresa_membros_updated_at
+BEFORE UPDATE ON empresa_membros
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at_and_version();
+
+-- ============================================================================
+-- 3. TABELA: plataforma_admins (Gestores Globais da Plataforma Multi-Clínica)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS plataforma_admins (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  nome VARCHAR(255),
+  criado_por VARCHAR(255),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ NULL,
+  version INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_plataforma_admins_email ON plataforma_admins(email) WHERE deleted_at IS NULL;
+
+DROP TRIGGER IF EXISTS trg_plataforma_admins_updated_at ON plataforma_admins;
+CREATE TRIGGER trg_plataforma_admins_updated_at
+BEFORE UPDATE ON plataforma_admins
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at_and_version();
+
+-- ============================================================================
+-- 4. TABELA: usuarios (Colaboradores, Médicos, Secretárias, Gestores)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS usuarios (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -97,7 +167,7 @@ FOR EACH ROW
 EXECUTE FUNCTION set_updated_at_and_version();
 
 -- ============================================================================
--- 3. TABELA: procedimentos (Catálogo Oficial de Procedimentos & Inteligência)
+-- 5. TABELA: procedimentos (Catálogo Oficial de Procedimentos & Inteligência)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS procedimentos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -126,7 +196,7 @@ FOR EACH ROW
 EXECUTE FUNCTION set_updated_at_and_version();
 
 -- ============================================================================
--- 4. TABELA: leads (Pacientes & Contatos do Funil)
+-- 6. TABELA: leads (Pacientes & Contatos do Funil)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS leads (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -163,7 +233,7 @@ FOR EACH ROW
 EXECUTE FUNCTION set_updated_at_and_version();
 
 -- ============================================================================
--- 5. TABELA: fichas_leads (Ficha Cadastral e Clínica Complementar 1:1)
+-- 7. TABELA: fichas_leads (Ficha Cadastral e Clínica Complementar 1:1)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS fichas_leads (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -193,7 +263,7 @@ FOR EACH ROW
 EXECUTE FUNCTION set_updated_at_and_version();
 
 -- ============================================================================
--- 6. TABELA: compras (Histórico de Vendas & Procedimentos Realizados N:1)
+-- 8. TABELA: compras (Histórico de Vendas & Procedimentos Realizados N:1)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS compras (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -222,7 +292,7 @@ FOR EACH ROW
 EXECUTE FUNCTION set_updated_at_and_version();
 
 -- ============================================================================
--- 7. TABELA: historico_atendimentos (Timeline e Registro Imutável de Eventos)
+-- 9. TABELA: historico_atendimentos (Timeline e Registro Imutável de Eventos)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS historico_atendimentos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -251,7 +321,7 @@ FOR EACH ROW
 EXECUTE FUNCTION set_updated_at_and_version();
 
 -- ============================================================================
--- 8. TABELA: tarefas (Automação de Tarefas & Cadência Comercial)
+-- 10. TABELA: tarefas (Automação de Tarefas & Cadência Comercial)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS tarefas (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -279,13 +349,13 @@ FOR EACH ROW
 EXECUTE FUNCTION set_updated_at_and_version();
 
 -- ============================================================================
--- 9. TABELA: workflows_automacoes (Motor de Workflows Configurável)
+-- 11. TABELA: workflows_automacoes (Motor de Workflows Configurável)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS workflows_automacoes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
   nome VARCHAR(255) NOT NULL,
-  evento_gatilho VARCHAR(100) NOT NULL, -- Ex: 'LEAD_CRIADO', 'ETAPA_ALTERADA', 'VENDA_CONCLUIDA', 'PROCEDIMENTO_EXPIRANDO'
+  evento_gatilho VARCHAR(100) NOT NULL,
   condicoes JSONB NOT NULL DEFAULT '[]'::jsonb,
   acoes JSONB NOT NULL DEFAULT '[]'::jsonb,
   ativo BOOLEAN NOT NULL DEFAULT true,
@@ -304,15 +374,15 @@ FOR EACH ROW
 EXECUTE FUNCTION set_updated_at_and_version();
 
 -- ============================================================================
--- 10. TABELA: logs_auditoria (Auditoria e Rastreabilidade Completa)
+-- 12. TABELA: logs_auditoria (Auditoria e Rastreabilidade Completa)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS logs_auditoria (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
   usuario_id UUID,
-  entidade VARCHAR(100) NOT NULL, -- 'leads', 'fichas_leads', 'compras', 'procedimentos', 'usuarios'
+  entidade VARCHAR(100) NOT NULL,
   entidade_id UUID NOT NULL,
-  acao VARCHAR(50) NOT NULL, -- 'INSERT', 'UPDATE', 'SOFT_DELETE', 'HARD_DELETE', 'LOGIN'
+  acao VARCHAR(50) NOT NULL,
   dados_anteriores JSONB,
   dados_novos JSONB,
   ip VARCHAR(50),
@@ -330,6 +400,8 @@ CREATE INDEX IF NOT EXISTS idx_auditoria_entidade ON logs_auditoria(entidade, en
 -- POLÍTICAS DE SEGURANÇA (ROW LEVEL SECURITY - RLS)
 -- ============================================================================
 ALTER TABLE empresas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE empresa_membros ENABLE ROW LEVEL SECURITY;
+ALTER TABLE plataforma_admins ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE procedimentos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
@@ -344,193 +416,101 @@ ALTER TABLE logs_auditoria ENABLE ROW LEVEL SECURITY;
 DO $$
 BEGIN
   -- Empresas
+  DROP POLICY IF EXISTS "Acesso a Empresas" ON empresas;
   CREATE POLICY "Acesso a Empresas" ON empresas FOR ALL USING (true) WITH CHECK (true);
+
+  -- Membros
+  DROP POLICY IF EXISTS "Acesso a Empresa Membros" ON empresa_membros;
+  CREATE POLICY "Acesso a Empresa Membros" ON empresa_membros FOR ALL USING (true) WITH CHECK (true);
+
+  -- Admins Plataforma
+  DROP POLICY IF EXISTS "Acesso a Plataforma Admins" ON plataforma_admins;
+  CREATE POLICY "Acesso a Plataforma Admins" ON plataforma_admins FOR ALL USING (true) WITH CHECK (true);
+
   -- Usuários
+  DROP POLICY IF EXISTS "Acesso a Usuarios" ON usuarios;
   CREATE POLICY "Acesso a Usuarios" ON usuarios FOR ALL USING (true) WITH CHECK (true);
+
   -- Procedimentos
+  DROP POLICY IF EXISTS "Acesso a Procedimentos" ON procedimentos;
   CREATE POLICY "Acesso a Procedimentos" ON procedimentos FOR ALL USING (true) WITH CHECK (true);
+
   -- Leads
+  DROP POLICY IF EXISTS "Acesso a Leads" ON leads;
   CREATE POLICY "Acesso a Leads" ON leads FOR ALL USING (true) WITH CHECK (true);
+
   -- Fichas
+  DROP POLICY IF EXISTS "Acesso a Fichas" ON fichas_leads;
   CREATE POLICY "Acesso a Fichas" ON fichas_leads FOR ALL USING (true) WITH CHECK (true);
+
   -- Compras
+  DROP POLICY IF EXISTS "Acesso a Compras" ON compras;
   CREATE POLICY "Acesso a Compras" ON compras FOR ALL USING (true) WITH CHECK (true);
+
   -- Atendimentos
+  DROP POLICY IF EXISTS "Acesso a Atendimentos" ON historico_atendimentos;
   CREATE POLICY "Acesso a Atendimentos" ON historico_atendimentos FOR ALL USING (true) WITH CHECK (true);
+
   -- Tarefas
+  DROP POLICY IF EXISTS "Acesso a Tarefas" ON tarefas;
   CREATE POLICY "Acesso a Tarefas" ON tarefas FOR ALL USING (true) WITH CHECK (true);
+
   -- Workflows
+  DROP POLICY IF EXISTS "Acesso a Workflows" ON workflows_automacoes;
   CREATE POLICY "Acesso a Workflows" ON workflows_automacoes FOR ALL USING (true) WITH CHECK (true);
+
   -- Auditoria
+  DROP POLICY IF EXISTS "Acesso a Auditoria" ON logs_auditoria;
   CREATE POLICY "Acesso a Auditoria" ON logs_auditoria FOR ALL USING (true) WITH CHECK (true);
 EXCEPTION WHEN OTHERS THEN
   NULL;
 END $$;
 
 -- ============================================================================
--- SEED INICIAL: EMPRESA PRINCIPAL & PROCEDIMENTOS OFICIAIS
+-- HABILITAÇÃO DO SUPABASE REALTIME & IDENTIDADE DE RÉPLICA
 -- ============================================================================
-INSERT INTO empresas (id, nome, subtitulo, cnpj, registro_profissional, telefone, email, endereco, unidade_padrao, tipo_logo, monograma_iniciais, ativa)
-VALUES (
-  '00000000-0000-0000-0000-000000000001',
-  'Dra. Agda Rodrigues',
-  'Harmonização Facial & Estética Avançada',
-  '12.345.678/0001-90',
-  'CRM/SP 123456 • RQE 78901',
-  '(11) 98765-4321',
-  'contato@agdarodrigues.com.br',
-  'Av. Brigadeiro Faria Lima, 3477 - Itaim Bibi, São Paulo - SP',
-  'Consultório Principal',
-  'monograma',
-  'AR',
-  true
-)
-ON CONFLICT (id) DO NOTHING;
+-- Permite que o Supabase envie e receba eventos em tempo real (INSERT, UPDATE, DELETE)
+-- refletindo instantaneamente as alterações feitas no sistema ou no banco de dados.
 
--- Seed de Procedimentos da Clínica
-INSERT INTO procedimentos (id, empresa_id, nome, categoria, valor, formatos_pagamento, duracao_dias, descricao, orientacoes, ativo)
-VALUES
-(
-  '10000000-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000001',
-  'Toxina Botulínica (Botox Facial Completo)',
-  'Injetáveis',
-  1800.00,
-  'À vista com 5% desc. via Pix, ou até 10x de R$ 180,00 sem juros',
-  150,
-  'Relaxamento muscular para tratamento preventivo e corretivo de rugas de expressão (testa, glabela, pés de galinha).',
-  'Duração média de 4 a 6 meses. Agendar retorno de avaliação aos 15 dias e reativação no 5º mês.',
-  true
-),
-(
-  '10000000-0000-0000-0000-000000000002',
-  '00000000-0000-0000-0000-000000000001',
-  'Preenchimento Labial / Ácido Hialurônico (1ml)',
-  'Injetáveis',
-  1600.00,
-  'À vista via Pix com 5% desc. ou até 10x no cartão',
-  270,
-  'Contorno, hidratação profunda e volumização labial com ácido hialurônico de alta tecnologia.',
-  'Duração de 9 a 12 meses. Explicar hidratação pós-procedimento e evitar calor nas primeiras 48h.',
-  true
-),
-(
-  '10000000-0000-0000-0000-000000000003',
-  '00000000-0000-0000-0000-000000000001',
-  'Bioestimulador de Colágeno (Sculptra / Radiesse)',
-  'Bioestimuladores',
-  2800.00,
-  'À vista ou até 12x no cartão de crédito',
-  365,
-  'Estímulo biológico profundo de colágeno para firmeza tecidual e rejuvenescimento estrutural.',
-  'Pico de resultado aos 3 meses. Duração de até 24 meses. Massagem 5x5x5 nos primeiros 5 dias.',
-  true
-),
-(
-  '10000000-0000-0000-0000-000000000004',
-  '00000000-0000-0000-0000-000000000001',
-  'Harmonização Facial Full Face Personalizada',
-  'Harmonização',
-  5500.00,
-  'Condições exclusivas de parcelamento em até 12x sem juros',
-  365,
-  'Protocolo estruturado combinando preenchimentos e toxina para realçar traços naturais.',
-  'Acompanhamento fotográfico antes e depois aos 30 e 90 dias.',
-  true
-),
-(
-  '10000000-0000-0000-0000-000000000005',
-  '00000000-0000-0000-0000-000000000001',
-  'Limpeza de Pele Profunda com Hidratação de Ouro',
-  'Facial',
-  320.00,
-  'À vista via Pix ou até 3x no cartão',
-  45,
-  'Higienização facial profunda, extração delicada de cravos e máscara rejuvenescedora com partículas de ouro.',
-  'Recomendada manutenção a cada 30 a 45 dias para preservar o viço cutâneo.',
-  true
-)
-ON CONFLICT (id) DO NOTHING;
+DO $$
+BEGIN
+  -- Cria a publicação se não existir ou adiciona as tabelas à publicação padrão
+  IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    CREATE PUBLICATION supabase_realtime;
+  END IF;
 
--- ============================================================================
--- SEED DE USUÁRIOS & EQUIPE DA CLÍNICA
--- ============================================================================
-INSERT INTO usuarios (id, empresa_id, nome, email, senha_hash, cargo, role, iniciais, cor_badge, telefone, ativo, criado_por, observacoes)
-VALUES
-(
-  '20000000-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000001',
-  'Gestão / Coordenação Geral',
-  'gestao@agdarodrigues.med.br',
-  'Agda@2026',
-  'Gestor Geral / Administrador',
-  'GESTOR',
-  'GG',
-  '#1A1A1A',
-  '(11) 98765-1005',
-  true,
-  'Sistema / Administrador',
-  'Acesso total a todas as áreas, métricas, configurações e gestão de acessos'
-),
-(
-  '20000000-0000-0000-0000-000000000002',
-  '00000000-0000-0000-0000-000000000001',
-  'Dra. Agda Rodrigues',
-  'dra.agda@agdarodrigues.med.br',
-  'Agda@2026',
-  'Médica Especialista em Harmonização Facial',
-  'MEDICO',
-  'AR',
-  '#5C3A22',
-  '(11) 98765-1000',
-  true,
-  'Gestão / Coordenação Geral',
-  'Responsável técnica, harmonização facial, bioestimuladores e preenchimentos'
-),
-(
-  '20000000-0000-0000-0000-000000000003',
-  '00000000-0000-0000-0000-000000000001',
-  'Dra. Camila (Médica Injetora)',
-  'dra.camila@agdarodrigues.med.br',
-  'Agda@2026',
-  'Médica Cirurgiã / Injetora',
-  'MEDICO',
-  'DC',
-  '#8A6142',
-  '(11) 98765-1001',
-  true,
-  'Gestão / Coordenação Geral',
-  'Consultas e procedimentos de toxina botulínica e bioestimuladores'
-),
-(
-  '20000000-0000-0000-0000-000000000004',
-  '00000000-0000-0000-0000-000000000001',
-  'Recepção / Secretária 1',
-  'secretaria1@agdarodrigues.med.br',
-  'Agda@2026',
-  'Atendimento & Pré-Vendas',
-  'RECEPCAO_COMERCIAL',
-  'S1',
-  '#8F887E',
-  '(11) 98765-1003',
-  true,
-  'Gestão / Coordenação Geral',
-  'Atendimento WhatsApp, captação de pacientes e agendamento de consultas'
-),
-(
-  '20000000-0000-0000-0000-000000000005',
-  '00000000-0000-0000-0000-000000000001',
-  'Recepção / Secretária 2',
-  'secretaria2@agdarodrigues.med.br',
-  'Agda@2026',
-  'Acompanhamento & Pós-Procedimento',
-  'POS_VENDA',
-  'S2',
-  '#6E6E6E',
-  '(11) 98765-1004',
-  true,
-  'Gestão / Coordenação Geral',
-  'Pós-consulta, confirmação de procedimentos e acompanhamento de retornos'
-)
-ON CONFLICT (id) DO NOTHING;
+  ALTER PUBLICATION supabase_realtime ADD TABLE empresas;
+  ALTER PUBLICATION supabase_realtime ADD TABLE empresa_membros;
+  ALTER PUBLICATION supabase_realtime ADD TABLE plataforma_admins;
+  ALTER PUBLICATION supabase_realtime ADD TABLE usuarios;
+  ALTER PUBLICATION supabase_realtime ADD TABLE procedimentos;
+  ALTER PUBLICATION supabase_realtime ADD TABLE leads;
+  ALTER PUBLICATION supabase_realtime ADD TABLE fichas_leads;
+  ALTER PUBLICATION supabase_realtime ADD TABLE compras;
+  ALTER PUBLICATION supabase_realtime ADD TABLE historico_atendimentos;
+  ALTER PUBLICATION supabase_realtime ADD TABLE tarefas;
+  ALTER PUBLICATION supabase_realtime ADD TABLE workflows_automacoes;
+  ALTER PUBLICATION supabase_realtime ADD TABLE logs_auditoria;
+EXCEPTION WHEN OTHERS THEN
+  -- Ignora caso alguma tabela já pertença à publicação
+  NULL;
+END $$;
 
+-- Configurar REPLICA IDENTITY FULL para que UPDATEs e DELETEs contenham o payload completo
+ALTER TABLE empresas REPLICA IDENTITY FULL;
+ALTER TABLE empresa_membros REPLICA IDENTITY FULL;
+ALTER TABLE plataforma_admins REPLICA IDENTITY FULL;
+ALTER TABLE usuarios REPLICA IDENTITY FULL;
+ALTER TABLE procedimentos REPLICA IDENTITY FULL;
+ALTER TABLE leads REPLICA IDENTITY FULL;
+ALTER TABLE fichas_leads REPLICA IDENTITY FULL;
+ALTER TABLE compras REPLICA IDENTITY FULL;
+ALTER TABLE historico_atendimentos REPLICA IDENTITY FULL;
+ALTER TABLE tarefas REPLICA IDENTITY FULL;
+ALTER TABLE workflows_automacoes REPLICA IDENTITY FULL;
+ALTER TABLE logs_auditoria REPLICA IDENTITY FULL;
+
+-- NOTA ARQUITETURAL:
+-- Este script SQL contém estritamente a arquitetura DDL, índices, triggers e publicações Realtime.
+-- Nenhum dado de exemplo (seed) é inserido por este arquivo. O Supabase receberá os dados 
+-- autênticos e sincronizados diretamente da aplicação CRM em tempo real.

@@ -6,36 +6,60 @@ import {
   ProcedimentoClinica,
   UsuarioColaborador,
   ConfiguracoesEmpresa,
+  Empresa,
+  EmpresaMembro,
+  PlataformaAdmin,
   SituacaoLead,
   StatusVenda,
   StatusGrupoNutricao,
   OrigemLead,
+  StatusEmpresa,
+  PapelEmpresa,
+  EsteticaPlataforma,
 } from '../types';
 
 export const ID_EMPRESA_PADRAO = '00000000-0000-0000-0000-000000000001';
 
 /**
- * Garante que o identificador seja um UUID válido para o PostgreSQL.
- * Se for um ID de legado (ex: 'lead-1', 'compra-abc'), gera um UUID consistente.
+ * Garante que o identificador seja um UUID v4 válido e consistente para o PostgreSQL.
+ * Se for um ID textual legado (ex: 'empresa-dra-agda-01', 'lead-1'), gera um UUID determinístico.
  */
-export function normalizarUuid(id: string): string {
-  if (!id) return crypto.randomUUID();
-  // Regex para UUID v4 / v1
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  if (uuidRegex.test(id)) {
-    return id;
-  }
-  // Se for uuid com zeros padrao
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
-    return id;
+export function normalizarUuid(id?: string | null): string {
+  if (!id) {
+    return typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : '00000000-0000-4000-8000-' + Math.random().toString(16).substring(2, 14).padEnd(12, '0');
   }
 
-  // Gera um UUID determinístico ou cria novo se não bater o padrão
-  try {
-    return crypto.randomUUID();
-  } catch {
-    return '00000000-0000-4000-8000-' + id.replace(/[^a-f0-9]/gi, '').padEnd(12, '0').slice(0, 12);
+  const str = String(id).trim();
+
+  // Se já for UUID padrão
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(str)) {
+    return str.toLowerCase();
   }
+
+  // IDs conhecidos da empresa padrão
+  if (str === '00000000-0000-0000-0000-000000000001' || str === 'empresa-agda-rodrigues-01' || str === 'empresa-padrao') {
+    return ID_EMPRESA_PADRAO;
+  }
+
+  // Gera UUID determinístico a partir do hash da string (para manter integridade referencial)
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+
+  const hex1 = ('00000000' + (h1 >>> 0).toString(16)).slice(-8);
+  const hex2 = ('00000000' + (h2 >>> 0).toString(16)).slice(-8);
+  const cleanStr = str.replace(/[^a-f0-9]/gi, '').padEnd(16, '0').slice(0, 16);
+
+  return `${hex1}-${cleanStr.slice(0, 4)}-4${cleanStr.slice(4, 7)}-8${cleanStr.slice(7, 10)}-${hex2}${cleanStr.slice(10, 14)}`.toLowerCase();
 }
 
 // ============================================================================
@@ -43,10 +67,138 @@ export function normalizarUuid(id: string): string {
 // ============================================================================
 
 export const supabaseMapper = {
+  // EMPRESA / CLÍNICA
+  empresaToDb: (empresa: Partial<Empresa> | Partial<ConfiguracoesEmpresa>, idCustom?: string) => {
+    const idEfetivo = normalizarUuid(idCustom || (empresa as any).id || ID_EMPRESA_PADRAO);
+    const nome = (empresa as any).nome || (empresa as any).nomeEmpresa || 'Dra. Agda Rodrigues';
+    const statusVal: StatusEmpresa = (empresa as any).status === 'suspensa' ? 'suspensa' : 'ativa';
+
+    return {
+      id: idEfetivo,
+      nome: String(nome).trim(),
+      subtitulo: empresa.subtitulo || '',
+      cnpj: empresa.cnpj || '',
+      registro_profissional: empresa.registroProfissional || '',
+      telefone: empresa.telefone || '',
+      email: empresa.email || '',
+      endereco: empresa.endereco || '',
+      horario_funcionamento: empresa.horarioFuncionamento || '',
+      unidade_padrao: empresa.unidadePadrao || 'Consultório Principal',
+      status: statusVal,
+      tipo_logo: (empresa.tipoLogo === 'imagem' ? 'imagem' : 'monograma') as 'imagem' | 'monograma',
+      logo_url: empresa.logoUrl || null,
+      monograma_iniciais: empresa.monogramaIniciais || 'AR',
+      logo_altura: empresa.logoAltura || 'padrao',
+      logo_ajuste_lateral: empresa.logoAjusteLateral || 'total',
+      logo_fundo_header: empresa.logoFundoHeader || 'integrado',
+      estetica_config: empresa.estetica || {},
+      esteticas_salvas: empresa.esteticasSalvas || [],
+      admin_principal_id: (empresa as any).adminPrincipalId ? normalizarUuid((empresa as any).adminPrincipalId) : null,
+      admin_principal_email: (empresa as any).adminPrincipalEmail || null,
+      admin_principal_nome: (empresa as any).adminPrincipalNome || null,
+      total_usuarios: Number((empresa as any).totalUsuarios || 0),
+      total_pacientes: Number((empresa as any).totalPacientes || 0),
+      ativa: statusVal !== 'suspensa',
+      created_at: (empresa as any).created_at || new Date().toISOString(),
+      updated_at: (empresa as any).updated_at || new Date().toISOString(),
+      deleted_at: (empresa as any).deleted_at || null,
+      version: Number((empresa as any).version || 1),
+    };
+  },
+
+  dbToEmpresa: (row: any): Empresa => ({
+    id: row.id,
+    nome: row.nome,
+    subtitulo: row.subtitulo || undefined,
+    cnpj: row.cnpj || undefined,
+    registroProfissional: row.registro_profissional || undefined,
+    telefone: row.telefone || undefined,
+    email: row.email || undefined,
+    endereco: row.endereco || undefined,
+    horarioFuncionamento: row.horario_funcionamento || undefined,
+    unidadePadrao: row.unidade_padrao || 'Consultório Principal',
+    status: (row.status as StatusEmpresa) || (row.ativa ? 'ativa' : 'suspensa'),
+    tipoLogo: row.tipo_logo || 'monograma',
+    logoUrl: row.logo_url || undefined,
+    monogramaIniciais: row.monograma_iniciais || 'AR',
+    logoAltura: row.logo_altura || 'padrao',
+    logoAjusteLateral: row.logo_ajuste_lateral || 'total',
+    logoFundoHeader: row.logo_fundo_header || 'integrado',
+    estetica: row.estetica_config as EsteticaPlataforma,
+    esteticasSalvas: (row.esteticas_salvas as EsteticaPlataforma[]) || [],
+    adminPrincipalId: row.admin_principal_id || undefined,
+    adminPrincipalEmail: row.admin_principal_email || undefined,
+    adminPrincipalNome: row.admin_principal_nome || undefined,
+    totalUsuarios: Number(row.total_usuarios || 0),
+    totalPacientes: Number(row.total_pacientes || 0),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    deleted_at: row.deleted_at,
+    version: row.version || 1,
+  }),
+
+  // EMPRESA MEMBRO
+  empresaMembroToDb: (membro: EmpresaMembro) => ({
+    id: normalizarUuid(membro.id),
+    user_id: normalizarUuid(membro.userId),
+    empresa_id: normalizarUuid(membro.empresaId),
+    papel: membro.papel || 'operador',
+    ativo: membro.ativo !== false,
+    usuario_nome: membro.usuarioNome || '',
+    usuario_email: membro.usuarioEmail || '',
+    usuario_cargo: membro.usuarioCargo || '',
+    ultimo_acesso: membro.ultimoAcesso || null,
+    created_at: membro.created_at || new Date().toISOString(),
+    updated_at: membro.updated_at || new Date().toISOString(),
+    deleted_at: membro.deleted_at || null,
+    version: Number(membro.version || 1),
+  }),
+
+  dbToEmpresaMembro: (row: any): EmpresaMembro => ({
+    id: row.id,
+    userId: row.user_id,
+    empresaId: row.empresa_id,
+    papel: row.papel as PapelEmpresa,
+    ativo: Boolean(row.ativo),
+    usuarioNome: row.usuario_nome || undefined,
+    usuarioEmail: row.usuario_email || undefined,
+    usuarioCargo: row.usuario_cargo || undefined,
+    ultimoAcesso: row.ultimo_acesso || undefined,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    deleted_at: row.deleted_at,
+    version: row.version || 1,
+  }),
+
+  // PLATAFORMA ADMIN
+  plataformaAdminToDb: (admin: PlataformaAdmin) => ({
+    id: normalizarUuid(admin.id),
+    user_id: normalizarUuid(admin.userId),
+    email: admin.email,
+    nome: admin.nome || '',
+    criado_por: admin.criadoPor || 'Sistema',
+    created_at: admin.created_at || new Date().toISOString(),
+    updated_at: admin.updated_at || new Date().toISOString(),
+    deleted_at: admin.deleted_at || null,
+    version: Number(admin.version || 1),
+  }),
+
+  dbToPlataformaAdmin: (row: any): PlataformaAdmin => ({
+    id: row.id,
+    userId: row.user_id,
+    email: row.email,
+    nome: row.nome || undefined,
+    criadoPor: row.criado_por || undefined,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    deleted_at: row.deleted_at,
+    version: row.version || 1,
+  }),
+
   // LEAD
   leadToDb: (lead: Lead, empresaId: string = ID_EMPRESA_PADRAO) => ({
     id: normalizarUuid(lead.id),
-    empresa_id: empresaId,
+    empresa_id: normalizarUuid(empresaId),
     nome: lead.nome,
     situacao: lead.situacao,
     etapa_por_situacao: lead.etapaPorSituacao || {},
@@ -90,7 +242,7 @@ export const supabaseMapper = {
   // FICHA DO LEAD
   fichaToDb: (ficha: FichaLead, empresaId: string = ID_EMPRESA_PADRAO) => ({
     id: normalizarUuid(ficha.id),
-    empresa_id: empresaId,
+    empresa_id: normalizarUuid(empresaId),
     lead_id: normalizarUuid(ficha.leadId),
     telefone: ficha.telefone || '',
     origem_lead: ficha.origemLead || 'WhatsApp',
@@ -124,7 +276,7 @@ export const supabaseMapper = {
   // COMPRA
   compraToDb: (compra: Compra, empresaId: string = ID_EMPRESA_PADRAO) => ({
     id: normalizarUuid(compra.id),
-    empresa_id: empresaId,
+    empresa_id: normalizarUuid(empresaId),
     lead_id: normalizarUuid(compra.leadId),
     data: compra.data || new Date().toISOString().split('T')[0],
     procedimento: compra.procedimento || '',
@@ -151,7 +303,7 @@ export const supabaseMapper = {
   // PROCEDIMENTO
   procedimentoToDb: (proc: ProcedimentoClinica, empresaId: string = ID_EMPRESA_PADRAO) => ({
     id: normalizarUuid(proc.id),
-    empresa_id: empresaId,
+    empresa_id: normalizarUuid(empresaId),
     nome: proc.nome,
     categoria: proc.categoria || 'Injetáveis',
     valor: Number(proc.valor || 0),
@@ -185,7 +337,7 @@ export const supabaseMapper = {
   // USUARIO
   usuarioToDb: (usuario: UsuarioColaborador, empresaId: string = ID_EMPRESA_PADRAO) => ({
     id: normalizarUuid(usuario.id),
-    empresa_id: empresaId,
+    empresa_id: normalizarUuid(empresaId),
     nome: usuario.nome,
     email: usuario.email,
     cargo: usuario.cargo || 'Colaborador',
@@ -224,32 +376,6 @@ export const supabaseMapper = {
     deleted_at: row.deleted_at,
     version: row.version || 1,
   }),
-
-  // EMPRESA
-  empresaToDb: (config: ConfiguracoesEmpresa, id: string = ID_EMPRESA_PADRAO) => ({
-    id: id,
-    nome: config.nomeEmpresa || 'Dra. Agda Rodrigues',
-    subtitulo: config.subtitulo || '',
-    cnpj: config.cnpj || '',
-    registro_profissional: config.registroProfissional || '',
-    telefone: config.telefone || '',
-    email: config.email || '',
-    endereco: config.endereco || '',
-    horario_funcionamento: config.horarioFuncionamento || '',
-    unidade_padrao: config.unidadePadrao || 'Consultório Principal',
-    tipo_logo: config.tipoLogo || 'monograma',
-    logo_url: config.logoUrl || null,
-    monograma_iniciais: config.monogramaIniciais || 'AR',
-    logo_altura: config.logoAltura || 'padrao',
-    logo_ajuste_lateral: config.logoAjusteLateral || 'total',
-    logo_fundo_header: config.logoFundoHeader || 'integrado',
-    estetica_config: config.estetica || {},
-    ativa: true,
-    created_at: new Date().toISOString(),
-    updated_at: config.updated_at || new Date().toISOString(),
-    deleted_at: null,
-    version: 1,
-  }),
 };
 
 // ============================================================================
@@ -258,6 +384,7 @@ export const supabaseMapper = {
 
 export interface RelatorioSincronizacao {
   sucesso: boolean;
+  totalEmpresas?: number;
   totalLeads: number;
   totalFichas: number;
   totalCompras: number;
@@ -269,16 +396,86 @@ export interface RelatorioSincronizacao {
 
 export const supabaseService = {
   /**
-   * Salva ou atualiza a empresa/clínica no Supabase
+   * Salva ou atualiza a empresa/clínica no Supabase (incluindo características visuais completas)
    */
-  async salvarEmpresa(config: ConfiguracoesEmpresa): Promise<boolean> {
+  async salvarEmpresa(empresa: Partial<Empresa> | Partial<ConfiguracoesEmpresa>, idCustom?: string): Promise<boolean> {
     const client = getSupabaseClient();
     if (!client) return false;
 
-    const row = supabaseMapper.empresaToDb(config);
+    const row = supabaseMapper.empresaToDb(empresa, idCustom);
     const { error } = await client.from('empresas').upsert(row, { onConflict: 'id' });
     if (error) {
       console.error('Erro ao salvar empresa no Supabase:', error);
+      throw error;
+    }
+    return true;
+  },
+
+  /**
+   * Salva todas as empresas em lote no Supabase
+   */
+  async salvarTodasEmpresas(empresas: Empresa[]): Promise<boolean> {
+    const client = getSupabaseClient();
+    if (!client || empresas.length === 0) return false;
+
+    const rows = empresas.map((e) => supabaseMapper.empresaToDb(e));
+    const { error } = await client.from('empresas').upsert(rows, { onConflict: 'id' });
+    if (error) {
+      console.error('Erro ao salvar lote de empresas no Supabase:', error);
+      throw error;
+    }
+    return true;
+  },
+
+  /**
+   * Carrega todas as empresas cadastradas no Supabase
+   */
+  async carregarEmpresas(): Promise<Empresa[]> {
+    const client = getSupabaseClient();
+    if (!client) return [];
+
+    try {
+      const { data, error } = await client
+        .from('empresas')
+        .select('*')
+        .is('deleted_at', null)
+        .order('nome', { ascending: true });
+
+      if (error) throw error;
+      return (data || []).map(supabaseMapper.dbToEmpresa);
+    } catch (e) {
+      console.error('Erro ao carregar empresas do Supabase:', e);
+      return [];
+    }
+  },
+
+  /**
+   * Salva membro de empresa no Supabase
+   */
+  async salvarMembroEmpresa(membro: EmpresaMembro): Promise<boolean> {
+    const client = getSupabaseClient();
+    if (!client) return false;
+
+    const row = supabaseMapper.empresaMembroToDb(membro);
+    const { error } = await client.from('empresa_membros').upsert(row, { onConflict: 'id' });
+    if (error) {
+      console.error('Erro ao salvar membro de empresa no Supabase:', error);
+      throw error;
+    }
+    return true;
+  },
+
+  /**
+   * Salva admin global da plataforma no Supabase
+   */
+  async salvarAdminPlataforma(admin: PlataformaAdmin): Promise<boolean> {
+    const client = getSupabaseClient();
+    if (!client) return false;
+
+    const row = supabaseMapper.plataformaAdminToDb(admin);
+    const { error } = await client.from('plataforma_admins').upsert(row, { onConflict: 'id' });
+    if (error) {
+      console.error('Erro ao salvar admin de plataforma no Supabase:', error);
       throw error;
     }
     return true;
@@ -389,6 +586,7 @@ export const supabaseService = {
    * Carrega todos os dados ativos do Supabase (WHERE deleted_at IS NULL)
    */
   async carregarDadosCompletos(): Promise<{
+    empresas: Empresa[];
     leads: Lead[];
     fichas: FichaLead[];
     compras: Compra[];
@@ -399,7 +597,14 @@ export const supabaseService = {
     if (!client) return null;
 
     try {
-      // 1. Leads ativos
+      // 1. Empresas ativas
+      const { data: rowsEmpresas } = await client
+        .from('empresas')
+        .select('*')
+        .is('deleted_at', null)
+        .order('nome', { ascending: true });
+
+      // 2. Leads ativos
       const { data: rowsLeads, error: errLeads } = await client
         .from('leads')
         .select('*')
@@ -408,7 +613,7 @@ export const supabaseService = {
 
       if (errLeads) throw errLeads;
 
-      // 2. Fichas ativas
+      // 3. Fichas ativas
       const { data: rowsFichas, error: errFichas } = await client
         .from('fichas_leads')
         .select('*')
@@ -416,7 +621,7 @@ export const supabaseService = {
 
       if (errFichas) throw errFichas;
 
-      // 3. Compras ativas
+      // 4. Compras ativas
       const { data: rowsCompras, error: errCompras } = await client
         .from('compras')
         .select('*')
@@ -425,7 +630,7 @@ export const supabaseService = {
 
       if (errCompras) throw errCompras;
 
-      // 4. Procedimentos ativos
+      // 5. Procedimentos ativos
       const { data: rowsProcedimentos, error: errProc } = await client
         .from('procedimentos')
         .select('*')
@@ -434,7 +639,7 @@ export const supabaseService = {
 
       if (errProc) throw errProc;
 
-      // 5. Usuários ativos
+      // 6. Usuários ativos
       const { data: rowsUsuarios, error: errUsers } = await client
         .from('usuarios')
         .select('*')
@@ -443,6 +648,7 @@ export const supabaseService = {
       if (errUsers) throw errUsers;
 
       return {
+        empresas: (rowsEmpresas || []).map(supabaseMapper.dbToEmpresa),
         leads: (rowsLeads || []).map(supabaseMapper.dbToLead),
         fichas: (rowsFichas || []).map(supabaseMapper.dbToFicha),
         compras: (rowsCompras || []).map(supabaseMapper.dbToCompra),
@@ -465,6 +671,9 @@ export const supabaseService = {
     procedimentos: ProcedimentoClinica[];
     usuarios: UsuarioColaborador[];
     configEmpresa: ConfiguracoesEmpresa;
+    empresas?: Empresa[];
+    empresaMembros?: EmpresaMembro[];
+    plataformaAdmins?: PlataformaAdmin[];
     onProgresso?: (etapa: string, percentual: number) => void;
   }): Promise<RelatorioSincronizacao> {
     const client = getSupabaseClient();
@@ -473,6 +682,7 @@ export const supabaseService = {
     if (!client) {
       return {
         sucesso: false,
+        totalEmpresas: 0,
         totalLeads: 0,
         totalFichas: 0,
         totalCompras: 0,
@@ -484,11 +694,43 @@ export const supabaseService = {
     }
 
     try {
-      params.onProgresso?.('Salvando empresa e clínica...', 10);
+      params.onProgresso?.('Salvando clínicas e características visuais...', 10);
+      let totalEmpresasSalvas = 0;
       try {
-        await this.salvarEmpresa(params.configEmpresa);
+        if (params.empresas && params.empresas.length > 0) {
+          const rowsEmp = params.empresas.map((e) => supabaseMapper.empresaToDb(e));
+          const { error: errE } = await client.from('empresas').upsert(rowsEmp, { onConflict: 'id' });
+          if (errE) {
+            erros.push(`Erro ao salvar empresas: ${errE.message}`);
+          } else {
+            totalEmpresasSalvas = rowsEmp.length;
+          }
+        } else {
+          await this.salvarEmpresa(params.configEmpresa);
+          totalEmpresasSalvas = 1;
+        }
       } catch (e: any) {
         erros.push(`Falha ao salvar empresa: ${e?.message}`);
+      }
+
+      // Sincroniza membros de empresa se fornecidos
+      if (params.empresaMembros && params.empresaMembros.length > 0) {
+        try {
+          const rowsMembros = params.empresaMembros.map((m) => supabaseMapper.empresaMembroToDb(m));
+          await client.from('empresa_membros').upsert(rowsMembros, { onConflict: 'id' });
+        } catch (e: any) {
+          console.warn('Aviso em membros:', e?.message);
+        }
+      }
+
+      // Sincroniza admins da plataforma se fornecidos
+      if (params.plataformaAdmins && params.plataformaAdmins.length > 0) {
+        try {
+          const rowsAdmins = params.plataformaAdmins.map((a) => supabaseMapper.plataformaAdminToDb(a));
+          await client.from('plataforma_admins').upsert(rowsAdmins, { onConflict: 'id' });
+        } catch (e: any) {
+          console.warn('Aviso em admins:', e?.message);
+        }
       }
 
       params.onProgresso?.('Sincronizando catálogo de procedimentos...', 30);
@@ -556,19 +798,21 @@ export const supabaseService = {
 
       return {
         sucesso: sucessoGeral,
+        totalEmpresas: totalEmpresasSalvas,
         totalLeads: totalLeadsSalvos,
         totalFichas: totalFichasSalvas,
         totalCompras: totalComprasSalvas,
         totalProcedimentos: totalProcSalvos,
         totalUsuarios: totalUsersSalvos,
         mensagem: sucessoGeral
-          ? 'Todos os dados foram alocados e sincronizados com sucesso no Supabase!'
+          ? 'Todos os dados, clínicas e características visuais foram salvos com sucesso no Supabase!'
           : `Sincronização parcial realizada com ${erros.length} aviso(s).`,
         erros,
       };
     } catch (error: any) {
       return {
         sucesso: false,
+        totalEmpresas: 0,
         totalLeads: 0,
         totalFichas: 0,
         totalCompras: 0,
@@ -639,4 +883,96 @@ export const supabaseService = {
       };
     }
   },
+
+  /**
+   * Consulta registros ao vivo de qualquer tabela do Supabase para visualização no painel
+   */
+  async buscarLinhasTabelaAoVivo(tabela: string, limite: number = 20): Promise<{ dados: any[]; erro?: string }> {
+    const client = getSupabaseClient();
+    if (!client) return { dados: [], erro: 'Supabase não conectado' };
+
+    try {
+      const { data, error } = await client
+        .from(tabela)
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limite);
+
+      if (error) {
+        return { dados: [], erro: error.message };
+      }
+
+      return { dados: data || [] };
+    } catch (e: any) {
+      return { dados: [], erro: e?.message || 'Erro ao consultar tabela' };
+    }
+  },
+
+  /**
+   * Executa um teste real e palpável de gravação e exclusão em tempo real no Supabase
+   */
+  async testarEnvioEmTempoReal(): Promise<{
+    sucesso: boolean;
+    latenciaMs: number;
+    mensagem: string;
+    registroCriado?: any;
+  }> {
+    const client = getSupabaseClient();
+    if (!client) {
+      return {
+        sucesso: false,
+        latenciaMs: 0,
+        mensagem: 'Supabase não está configurado. Insira a URL e a Chave Anon.',
+      };
+    }
+
+    const tInicio = performance.now();
+    const idTeste = normalizarUuid();
+    const nomeTeste = `[TESTE-TEMPO-REAL] ${new Date().toLocaleTimeString('pt-BR')}`;
+
+    try {
+      // 1. Grava lead de teste no Supabase
+      const payload = {
+        id: idTeste,
+        empresa_id: ID_EMPRESA_PADRAO,
+        nome: nomeTeste,
+        situacao: 'Em captação',
+        status_venda: 'Em processo',
+        possivel_valor: 1500,
+        interesse: 'Validação de Conexão Supabase Realtime',
+        responsavel: 'Sistema de Testes',
+        data_entrada: new Date().toISOString().split('T')[0],
+      };
+
+      const { data: insertData, error: insertError } = await client
+        .from('leads')
+        .insert(payload)
+        .select()
+        .single();
+
+      if (insertError) {
+        throw new Error(`Falha ao inserir registro de teste: ${insertError.message}`);
+      }
+
+      // 2. Imediatamente efetua soft-delete ou limpeza para não poluir
+      await client.from('leads').delete().eq('id', idTeste);
+
+      const latencia = Math.round(performance.now() - tInicio);
+
+      return {
+        sucesso: true,
+        latenciaMs: latencia,
+        mensagem: `Gravação em tempo real confirmada no Supabase em ${latencia}ms! O banco aceitou o registro e processou a transação com sucesso.`,
+        registroCriado: insertData,
+      };
+    } catch (error: any) {
+      const latencia = Math.round(performance.now() - tInicio);
+      return {
+        sucesso: false,
+        latenciaMs: latencia,
+        mensagem: error?.message || 'Falha ao executar teste de gravação no Supabase.',
+      };
+    }
+  },
 };
+

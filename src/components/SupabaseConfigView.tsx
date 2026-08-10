@@ -28,6 +28,13 @@ import {
   EyeOff,
   KeyRound,
   ShieldAlert,
+  Radio,
+  Activity,
+  Zap,
+  Search,
+  Terminal,
+  ArrowUpDown,
+  Play,
 } from 'lucide-react';
 import {
   getSupabaseConfig,
@@ -35,6 +42,11 @@ import {
   clearSupabaseConfig,
   isSupabaseConfigured,
   testSupabaseConnection,
+  getRealtimeStatus,
+  subscribeRealtimeStatus,
+  subscribeRealtimeLogs,
+  RealtimeLogEntry,
+  RealtimeStatusType,
 } from '../lib/supabase';
 import { supabaseService, RelatorioSincronizacao } from '../services/supabaseService';
 import { useCrm } from '../context/CrmContext';
@@ -59,6 +71,23 @@ export const SupabaseConfigView: React.FC = () => {
     tabelas?: string[];
   } | null>(null);
 
+  // Estados de Realtime e Monitoramento
+  const [realtimeStatus, setRealtimeStatusState] = useState<RealtimeStatusType>(getRealtimeStatus());
+  const [realtimeLogs, setRealtimeLogs] = useState<RealtimeLogEntry[]>([]);
+  const [isTestandoRealtime, setIsTestandoRealtime] = useState(false);
+  const [resultadoTesteRealtime, setResultadoTesteRealtime] = useState<{
+    sucesso: boolean;
+    mensagem: string;
+    latenciaMs?: number;
+    registroCriado?: any;
+  } | null>(null);
+
+  // Estados de Inspeção de Tabelas ao Vivo
+  const [tabelaInspecionada, setTabelaInspecionada] = useState<string>('leads');
+  const [linhasInspecionadas, setLinhasInspecionadas] = useState<any[]>([]);
+  const [isInspecionando, setIsInspecionando] = useState(false);
+  const [erroInspecao, setErroInspecao] = useState<string | null>(null);
+
   // Estados de sincronização
   const [isSincronizando, setIsSincronizando] = useState(false);
   const [progressoSincronizacao, setProgressoSincronizacao] = useState<{
@@ -69,7 +98,7 @@ export const SupabaseConfigView: React.FC = () => {
 
   // Estados de cópia e visualização
   const [copiadoSql, setCopiadoSql] = useState(false);
-  const [abaInterna, setAbaInterna] = useState<'conexao' | 'migracao' | 'schema_sql' | 'arquitetura'>('conexao');
+  const [abaInterna, setAbaInterna] = useState<'conexao' | 'realtime' | 'migracao' | 'schema_sql' | 'arquitetura'>('conexao');
   const [tabelaSelecionada, setTabelaSelecionada] = useState<string>('leads');
 
   // Estados para modal de apagar dados de pacientes (Exclusivo Gestor Master com Senha)
@@ -85,7 +114,7 @@ export const SupabaseConfigView: React.FC = () => {
 
   const corPrimaria = config.estetica?.corPrimaria || '#5C3A22';
 
-  // Carrega configurações ao montar
+  // Carrega configurações e escuta Realtime ao montar
   useEffect(() => {
     const cfg = getSupabaseConfig();
     setUrl(cfg.url);
@@ -95,6 +124,19 @@ export const SupabaseConfigView: React.FC = () => {
     if (cfg.url && cfg.anonKey) {
       executarTesteConexao(cfg.url, cfg.anonKey);
     }
+
+    const unsubStatus = subscribeRealtimeStatus((status) => {
+      setRealtimeStatusState(status);
+    });
+
+    const unsubLogs = subscribeRealtimeLogs((logs) => {
+      setRealtimeLogs(logs);
+    });
+
+    return () => {
+      unsubStatus();
+      unsubLogs();
+    };
   }, []);
 
   const executarTesteConexao = async (urlTeste?: string, keyTeste?: string) => {
@@ -114,6 +156,47 @@ export const SupabaseConfigView: React.FC = () => {
       });
     } finally {
       setIsTestando(false);
+    }
+  };
+
+  const executarTesteGravacaoRealtime = async () => {
+    setIsTestandoRealtime(true);
+    setResultadoTesteRealtime(null);
+    try {
+      const res = await supabaseService.testarEnvioEmTempoReal();
+      setResultadoTesteRealtime(res);
+      if (res.sucesso) {
+        // Se a tabela inspecionada for leads, atualiza a lista
+        if (tabelaInspecionada === 'leads') {
+          carregarLinhasTabela('leads');
+        }
+      }
+    } catch (e: any) {
+      setResultadoTesteRealtime({
+        sucesso: false,
+        mensagem: `Falha no teste: ${e?.message || 'Erro de rede ou permissão'}`,
+      });
+    } finally {
+      setIsTestandoRealtime(false);
+    }
+  };
+
+  const carregarLinhasTabela = async (tabela: string) => {
+    setIsInspecionando(true);
+    setErroInspecao(null);
+    try {
+      const res = await supabaseService.buscarLinhasTabelaAoVivo(tabela, 15);
+      if (res.erro) {
+        setErroInspecao(res.erro);
+        setLinhasInspecionadas([]);
+      } else {
+        setLinhasInspecionadas(res.dados || []);
+      }
+    } catch (e: any) {
+      setErroInspecao(e?.message || 'Erro ao consultar tabela no Supabase');
+      setLinhasInspecionadas([]);
+    } finally {
+      setIsInspecionando(false);
     }
   };
 
@@ -163,7 +246,6 @@ export const SupabaseConfigView: React.FC = () => {
       });
 
       setResultadoSinc(res);
-      // Re-testa conexão para atualizar tabelas detectadas
       await executarTesteConexao();
     } catch (error: any) {
       setResultadoSinc({
@@ -212,10 +294,8 @@ export const SupabaseConfigView: React.FC = () => {
 
     setIsApagando(true);
     try {
-      // 1. Limpa todos os leads, fichas e compras do Firestore e do estado local
       const resLocal = await limparTodosLeads();
 
-      // 2. Se o Supabase estiver conectado ou configurado, limpa as tabelas no Supabase também
       if (isSupabaseConfigured() || url) {
         await supabaseService.apagarDadosPacientesSupabase();
       }
@@ -227,7 +307,6 @@ export const SupabaseConfigView: React.FC = () => {
         texto: `Dados de pacientes apagados com sucesso do banco de dados! ${resLocal.totalRemovidos} registro(s) de pacientes, fichas e histórico de compras foram removidos.`,
       });
 
-      // Atualiza o teste de conexão se estiver configurado
       if (url && anonKey) {
         await executarTesteConexao();
       }
@@ -246,11 +325,13 @@ export const SupabaseConfigView: React.FC = () => {
   const sqlSchemaCode = `-- ============================================================================
 -- ARQUITETURA DE BANCO DE DADOS CRM ESTÉTICA & CLÍNICAS (SUPABASE / POSTGRESQL)
 -- ============================================================================
--- Governança e Regras do Projeto:
+-- Padrão de Arquitetura & Governança do Projeto:
 -- 1. Todas as tabelas possuem: id (UUID), created_at, updated_at, deleted_at, version
 -- 2. Soft delete obrigatório (deleted_at IS NULL para registros ativos)
--- 3. Versionamento otimista automático por trigger
--- 4. Multi-inquilino seguro via empresa_id
+-- 3. Versionamento otimista automático por trigger (version = version + 1 em UPDATE)
+-- 4. Multi-inquilino robusto e isolado via empresa_id
+-- 5. SUPABASE REALTIME habilitado: o Supabase recebe todos os dados em tempo real
+--    diretamente da aplicação, sem necessidade de inserts manuais ou seeds fake.
 -- ============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -271,20 +352,27 @@ CREATE TABLE IF NOT EXISTS empresas (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nome VARCHAR(255) NOT NULL,
   subtitulo VARCHAR(255),
-  cnpj VARCHAR(20),
+  cnpj VARCHAR(50),
   registro_profissional VARCHAR(100),
   telefone VARCHAR(50),
   email VARCHAR(255),
   endereco TEXT,
   horario_funcionamento VARCHAR(255),
   unidade_padrao VARCHAR(100) DEFAULT 'Consultório Principal',
+  status VARCHAR(50) NOT NULL DEFAULT 'ativa',
   tipo_logo VARCHAR(50) DEFAULT 'monograma',
   logo_url TEXT,
   monograma_iniciais VARCHAR(10) DEFAULT 'AR',
   logo_altura VARCHAR(50) DEFAULT 'padrao',
   logo_ajuste_lateral VARCHAR(50) DEFAULT 'total',
   logo_fundo_header VARCHAR(50) DEFAULT 'integrado',
-  estetica_config JSONB DEFAULT '{}'::jsonb,
+  estetica_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+  esteticas_salvas JSONB NOT NULL DEFAULT '[]'::jsonb,
+  admin_principal_id UUID NULL,
+  admin_principal_email VARCHAR(255),
+  admin_principal_nome VARCHAR(255),
+  total_usuarios INTEGER NOT NULL DEFAULT 0,
+  total_pacientes INTEGER NOT NULL DEFAULT 0,
   ativa BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -294,7 +382,39 @@ CREATE TABLE IF NOT EXISTS empresas (
 
 CREATE INDEX IF NOT EXISTS idx_empresas_active ON empresas(id) WHERE deleted_at IS NULL;
 
--- 2. TABELA: usuarios
+-- 2. TABELA: empresa_membros
+CREATE TABLE IF NOT EXISTS empresa_membros (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+  papel VARCHAR(50) NOT NULL DEFAULT 'operador',
+  ativo BOOLEAN NOT NULL DEFAULT true,
+  usuario_nome VARCHAR(255),
+  usuario_email VARCHAR(255),
+  usuario_cargo VARCHAR(100),
+  ultimo_acesso TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ NULL,
+  version INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_empresa_membros_empresa ON empresa_membros(empresa_id) WHERE deleted_at IS NULL;
+
+-- 3. TABELA: plataforma_admins
+CREATE TABLE IF NOT EXISTS plataforma_admins (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  nome VARCHAR(255),
+  criado_por VARCHAR(255),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ NULL,
+  version INTEGER NOT NULL DEFAULT 1
+);
+
+-- 4. TABELA: usuarios
 CREATE TABLE IF NOT EXISTS usuarios (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   auth_user_id UUID NULL,
@@ -320,7 +440,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 
 CREATE INDEX IF NOT EXISTS idx_usuarios_empresa ON usuarios(empresa_id) WHERE deleted_at IS NULL;
 
--- 3. TABELA: procedimentos
+-- 5. TABELA: procedimentos
 CREATE TABLE IF NOT EXISTS procedimentos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
@@ -340,7 +460,7 @@ CREATE TABLE IF NOT EXISTS procedimentos (
 
 CREATE INDEX IF NOT EXISTS idx_procedimentos_empresa ON procedimentos(empresa_id) WHERE deleted_at IS NULL;
 
--- 4. TABELA: leads
+-- 6. TABELA: leads
 CREATE TABLE IF NOT EXISTS leads (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
@@ -366,7 +486,7 @@ CREATE TABLE IF NOT EXISTS leads (
 CREATE INDEX IF NOT EXISTS idx_leads_empresa ON leads(empresa_id) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_leads_situacao ON leads(empresa_id, situacao) WHERE deleted_at IS NULL;
 
--- 5. TABELA: fichas_leads
+-- 7. TABELA: fichas_leads
 CREATE TABLE IF NOT EXISTS fichas_leads (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
@@ -386,7 +506,7 @@ CREATE TABLE IF NOT EXISTS fichas_leads (
 
 CREATE INDEX IF NOT EXISTS idx_fichas_lead_id ON fichas_leads(lead_id) WHERE deleted_at IS NULL;
 
--- 6. TABELA: compras
+-- 8. TABELA: compras
 CREATE TABLE IF NOT EXISTS compras (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
@@ -404,7 +524,7 @@ CREATE TABLE IF NOT EXISTS compras (
 
 CREATE INDEX IF NOT EXISTS idx_compras_lead ON compras(lead_id) WHERE deleted_at IS NULL;
 
--- 7. TABELA: historico_atendimentos
+-- 9. TABELA: historico_atendimentos
 CREATE TABLE IF NOT EXISTS historico_atendimentos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
@@ -424,7 +544,7 @@ CREATE TABLE IF NOT EXISTS historico_atendimentos (
 
 CREATE INDEX IF NOT EXISTS idx_atendimentos_lead ON historico_atendimentos(lead_id, data_hora DESC) WHERE deleted_at IS NULL;
 
--- 8. TABELA: tarefas
+-- 10. TABELA: tarefas
 CREATE TABLE IF NOT EXISTS tarefas (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
@@ -441,7 +561,7 @@ CREATE TABLE IF NOT EXISTS tarefas (
   version INTEGER NOT NULL DEFAULT 1
 );
 
--- 9. TABELA: workflows_automacoes
+-- 11. TABELA: workflows_automacoes
 CREATE TABLE IF NOT EXISTS workflows_automacoes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
@@ -456,7 +576,7 @@ CREATE TABLE IF NOT EXISTS workflows_automacoes (
   version INTEGER NOT NULL DEFAULT 1
 );
 
--- 10. TABELA: logs_auditoria
+-- 12. TABELA: logs_auditoria
 CREATE TABLE IF NOT EXISTS logs_auditoria (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
@@ -478,6 +598,9 @@ CREATE TABLE IF NOT EXISTS logs_auditoria (
 DROP TRIGGER IF EXISTS trg_empresas_up ON empresas;
 CREATE TRIGGER trg_empresas_up BEFORE UPDATE ON empresas FOR EACH ROW EXECUTE FUNCTION set_updated_at_and_version();
 
+DROP TRIGGER IF EXISTS trg_membros_up ON empresa_membros;
+CREATE TRIGGER trg_membros_up BEFORE UPDATE ON empresa_membros FOR EACH ROW EXECUTE FUNCTION set_updated_at_and_version();
+
 DROP TRIGGER IF EXISTS trg_usuarios_up ON usuarios;
 CREATE TRIGGER trg_usuarios_up BEFORE UPDATE ON usuarios FOR EACH ROW EXECUTE FUNCTION set_updated_at_and_version();
 
@@ -493,8 +616,10 @@ CREATE TRIGGER trg_fichas_up BEFORE UPDATE ON fichas_leads FOR EACH ROW EXECUTE 
 DROP TRIGGER IF EXISTS trg_compras_up ON compras;
 CREATE TRIGGER trg_compras_up BEFORE UPDATE ON compras FOR EACH ROW EXECUTE FUNCTION set_updated_at_and_version();
 
--- HABILITAÇÃO DE RLS
+-- HABILITAÇÃO DE ROW LEVEL SECURITY (RLS)
 ALTER TABLE empresas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE empresa_membros ENABLE ROW LEVEL SECURITY;
+ALTER TABLE plataforma_admins ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE procedimentos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
@@ -509,6 +634,8 @@ ALTER TABLE logs_auditoria ENABLE ROW LEVEL SECURITY;
 DO $$
 BEGIN
   CREATE POLICY "Acesso a Empresas" ON empresas FOR ALL USING (true) WITH CHECK (true);
+  CREATE POLICY "Acesso a Membros" ON empresa_membros FOR ALL USING (true) WITH CHECK (true);
+  CREATE POLICY "Acesso a Admins" ON plataforma_admins FOR ALL USING (true) WITH CHECK (true);
   CREATE POLICY "Acesso a Usuarios" ON usuarios FOR ALL USING (true) WITH CHECK (true);
   CREATE POLICY "Acesso a Procedimentos" ON procedimentos FOR ALL USING (true) WITH CHECK (true);
   CREATE POLICY "Acesso a Leads" ON leads FOR ALL USING (true) WITH CHECK (true);
@@ -522,167 +649,42 @@ EXCEPTION WHEN OTHERS THEN
   NULL;
 END $$;
 
--- SEED INICIAL: EMPRESA PRINCIPAL & PROCEDIMENTOS OFICIAIS
-INSERT INTO empresas (id, nome, subtitulo, cnpj, registro_profissional, telefone, email, endereco, unidade_padrao, tipo_logo, monograma_iniciais, ativa)
-VALUES (
-  '00000000-0000-0000-0000-000000000001',
-  'Dra. Agda Rodrigues',
-  'Harmonização Facial & Estética Avançada',
-  '12.345.678/0001-90',
-  'CRM/SP 123456 • RQE 78901',
-  '(11) 98765-4321',
-  'contato@agdarodrigues.com.br',
-  'Av. Brigadeiro Faria Lima, 3477 - Itaim Bibi, São Paulo - SP',
-  'Consultório Principal',
-  'monograma',
-  'AR',
-  true
-)
-ON CONFLICT (id) DO NOTHING;
+-- HABILITAÇÃO DO SUPABASE REALTIME (WEBSOCKETS)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    CREATE PUBLICATION supabase_realtime;
+  END IF;
 
-INSERT INTO procedimentos (id, empresa_id, nome, categoria, valor, formatos_pagamento, duracao_dias, descricao, orientacoes, ativo)
-VALUES
-(
-  '10000000-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000001',
-  'Toxina Botulínica (Botox Facial Completo)',
-  'Injetáveis',
-  1800.00,
-  'À vista com 5% desc. via Pix, ou até 10x de R$ 180,00 sem juros',
-  150,
-  'Relaxamento muscular para tratamento preventivo e corretivo de rugas de expressão (testa, glabela, pés de galinha).',
-  'Duração média de 4 a 6 meses. Agendar retorno de avaliação aos 15 dias e reativação no 5º mês.',
-  true
-),
-(
-  '10000000-0000-0000-0000-000000000002',
-  '00000000-0000-0000-0000-000000000001',
-  'Preenchimento Labial / Ácido Hialurônico (1ml)',
-  'Injetáveis',
-  1600.00,
-  'À vista via Pix com 5% desc. ou até 10x no cartão',
-  270,
-  'Contorno, hidratação profunda e volumização labial com ácido hialurônico de alta tecnologia.',
-  'Duração de 9 a 12 meses. Explicar hidratação pós-procedimento e evitar calor nas primeiras 48h.',
-  true
-),
-(
-  '10000000-0000-0000-0000-000000000003',
-  '00000000-0000-0000-0000-000000000001',
-  'Bioestimulador de Colágeno (Sculptra / Radiesse)',
-  'Bioestimuladores',
-  2800.00,
-  'À vista ou até 12x no cartão de crédito',
-  365,
-  'Estímulo biológico profundo de colágeno para firmeza tecidual e rejuvenescimento estrutural.',
-  'Pico de resultado aos 3 meses. Duração de até 24 meses. Massagem 5x5x5 nos primeiros 5 dias.',
-  true
-),
-(
-  '10000000-0000-0000-0000-000000000004',
-  '00000000-0000-0000-0000-000000000001',
-  'Harmonização Facial Full Face Personalizada',
-  'Harmonização',
-  5500.00,
-  'Condições exclusivas de parcelamento em até 12x sem juros',
-  365,
-  'Protocolo estruturado combinando preenchimentos e toxina para realçar traços naturais.',
-  'Acompanhamento fotográfico antes e depois aos 30 e 90 dias.',
-  true
-),
-(
-  '10000000-0000-0000-0000-000000000005',
-  '00000000-0000-0000-0000-000000000001',
-  'Limpeza de Pele Profunda com Hidratação de Ouro',
-  'Facial',
-  320.00,
-  'À vista via Pix ou até 3x no cartão',
-  45,
-  'Higienização facial profunda, extração delicada de cravos e máscara rejuvenescedora com partículas de ouro.',
-  'Recomendada manutenção a cada 30 a 45 dias para preservar o viço cutâneo.',
-  true
-)
-ON CONFLICT (id) DO NOTHING;
+  ALTER PUBLICATION supabase_realtime ADD TABLE empresas;
+  ALTER PUBLICATION supabase_realtime ADD TABLE empresa_membros;
+  ALTER PUBLICATION supabase_realtime ADD TABLE plataforma_admins;
+  ALTER PUBLICATION supabase_realtime ADD TABLE usuarios;
+  ALTER PUBLICATION supabase_realtime ADD TABLE procedimentos;
+  ALTER PUBLICATION supabase_realtime ADD TABLE leads;
+  ALTER PUBLICATION supabase_realtime ADD TABLE fichas_leads;
+  ALTER PUBLICATION supabase_realtime ADD TABLE compras;
+  ALTER PUBLICATION supabase_realtime ADD TABLE historico_atendimentos;
+  ALTER PUBLICATION supabase_realtime ADD TABLE tarefas;
+  ALTER PUBLICATION supabase_realtime ADD TABLE workflows_automacoes;
+  ALTER PUBLICATION supabase_realtime ADD TABLE logs_auditoria;
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
 
--- SEED DE USUÁRIOS & EQUIPE DA CLÍNICA
-INSERT INTO usuarios (id, empresa_id, nome, email, senha_hash, cargo, role, iniciais, cor_badge, telefone, ativo, criado_por, observacoes)
-VALUES
-(
-  '20000000-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000001',
-  'Gestão / Coordenação Geral',
-  'gestao@agdarodrigues.med.br',
-  'Agda@2026',
-  'Gestor Geral / Administrador',
-  'GESTOR',
-  'GG',
-  '#1A1A1A',
-  '(11) 98765-1005',
-  true,
-  'Sistema / Administrador',
-  'Acesso total a todas as áreas, métricas, configurações e gestão de acessos'
-),
-(
-  '20000000-0000-0000-0000-000000000002',
-  '00000000-0000-0000-0000-000000000001',
-  'Dra. Agda Rodrigues',
-  'dra.agda@agdarodrigues.med.br',
-  'Agda@2026',
-  'Médica Especialista em Harmonização Facial',
-  'MEDICO',
-  'AR',
-  '#5C3A22',
-  '(11) 98765-1000',
-  true,
-  'Gestão / Coordenação Geral',
-  'Responsável técnica, harmonização facial, bioestimuladores e preenchimentos'
-),
-(
-  '20000000-0000-0000-0000-000000000003',
-  '00000000-0000-0000-0000-000000000001',
-  'Dra. Camila (Médica Injetora)',
-  'dra.camila@agdarodrigues.med.br',
-  'Agda@2026',
-  'Médica Cirurgiã / Injetora',
-  'MEDICO',
-  'DC',
-  '#8A6142',
-  '(11) 98765-1001',
-  true,
-  'Gestão / Coordenação Geral',
-  'Consultas e procedimentos de toxina botulínica e bioestimuladores'
-),
-(
-  '20000000-0000-0000-0000-000000000004',
-  '00000000-0000-0000-0000-000000000001',
-  'Recepção / Secretária 1',
-  'secretaria1@agdarodrigues.med.br',
-  'Agda@2026',
-  'Atendimento & Pré-Vendas',
-  'RECEPCAO_COMERCIAL',
-  'S1',
-  '#8F887E',
-  '(11) 98765-1003',
-  true,
-  'Gestão / Coordenação Geral',
-  'Atendimento WhatsApp, captação de pacientes e agendamento de consultas'
-),
-(
-  '20000000-0000-0000-0000-000000000005',
-  '00000000-0000-0000-0000-000000000001',
-  'Recepção / Secretária 2',
-  'secretaria2@agdarodrigues.med.br',
-  'Agda@2026',
-  'Acompanhamento & Pós-Procedimento',
-  'POS_VENDA',
-  'S2',
-  '#6E6E6E',
-  '(11) 98765-1004',
-  true,
-  'Gestão / Coordenação Geral',
-  'Pós-consulta, confirmação de procedimentos e acompanhamento de retornos'
-)
-ON CONFLICT (id) DO NOTHING;
+-- REPLICA IDENTITY FULL PARA TRANSMISSÃO BIDIRECIONAL COMPLETA
+ALTER TABLE empresas REPLICA IDENTITY FULL;
+ALTER TABLE empresa_membros REPLICA IDENTITY FULL;
+ALTER TABLE plataforma_admins REPLICA IDENTITY FULL;
+ALTER TABLE usuarios REPLICA IDENTITY FULL;
+ALTER TABLE procedimentos REPLICA IDENTITY FULL;
+ALTER TABLE leads REPLICA IDENTITY FULL;
+ALTER TABLE fichas_leads REPLICA IDENTITY FULL;
+ALTER TABLE compras REPLICA IDENTITY FULL;
+ALTER TABLE historico_atendimentos REPLICA IDENTITY FULL;
+ALTER TABLE tarefas REPLICA IDENTITY FULL;
+ALTER TABLE workflows_automacoes REPLICA IDENTITY FULL;
+ALTER TABLE logs_auditoria REPLICA IDENTITY FULL;
 `;
 
   const copiarSql = () => {
@@ -739,6 +741,12 @@ ON CONFLICT (id) DO NOTHING;
       colunas: ['id (UUID)', 'nome', 'subtitulo', 'cnpj', 'registro_profissional', 'telefone', 'email', 'endereco', 'horario_funcionamento', 'unidade_padrao', 'tipo_logo', 'logo_url', 'monograma_iniciais', 'estetica_config (JSONB)', 'ativa', 'created_at', 'updated_at', 'deleted_at', 'version'],
     },
     {
+      nome: 'empresa_membros',
+      titulo: 'Vínculos de Usuários por Empresa',
+      descricao: 'Tabela de associação multi-clínica para papéis e permissões.',
+      colunas: ['id (UUID)', 'user_id (UUID)', 'empresa_id (FK)', 'papel', 'ativo', 'usuario_nome', 'usuario_email', 'usuario_cargo', 'ultimo_acesso', 'created_at', 'updated_at', 'deleted_at', 'version'],
+    },
+    {
       nome: 'historico_atendimentos',
       titulo: 'Histórico Imutável de Eventos & Timeline',
       descricao: 'Registro cronológico e imutável de interações, mensagens e alterações de status.',
@@ -781,7 +789,7 @@ ON CONFLICT (id) DO NOTHING;
                 Integração & Arquitetura Supabase
               </h3>
               <span
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-bold uppercase tracking-wider border ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-sm text-[11px] font-bold uppercase tracking-wider border ${
                   statusConexao?.conectado
                     ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                     : 'bg-amber-50 text-amber-800 border-amber-300'
@@ -794,9 +802,23 @@ ON CONFLICT (id) DO NOTHING;
                 />
                 {statusConexao?.conectado ? 'Supabase Conectado' : 'Aguardando Conexão'}
               </span>
+
+              {/* Status do WebSocket Realtime */}
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-sm text-[11px] font-bold uppercase tracking-wider border ${
+                  realtimeStatus === 'CONECTADO'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                    : realtimeStatus === 'CONECTANDO'
+                    ? 'bg-blue-50 text-blue-800 border-blue-300'
+                    : 'bg-stone-100 text-stone-700 border-stone-300'
+                }`}
+              >
+                <Radio className={`w-3 h-3 ${realtimeStatus === 'CONECTADO' ? 'text-emerald-600 animate-pulse' : ''}`} />
+                Realtime: {realtimeStatus}
+              </span>
             </div>
             <p className="text-xs text-[#6E6E6E] mt-1 max-w-2xl">
-              Arquitetura relacional PostgreSQL de alto desempenho com UUIDs, versionamento otimista, soft delete obrigatório, triggers e alocação estruturada de todos os dados do CRM.
+              Arquitetura relacional PostgreSQL de alto desempenho com sincronização bidirecional em tempo real (WebSockets). Suas ações no sistema gravam imediatamente no banco, e alterações no Supabase refletem instantaneamente no CRM.
             </p>
           </div>
         </div>
@@ -880,6 +902,28 @@ ON CONFLICT (id) DO NOTHING;
         </button>
 
         <button
+          id="tab-sub-supabase-realtime"
+          type="button"
+          onClick={() => {
+            setAbaInterna('realtime');
+            if (linhasInspecionadas.length === 0) {
+              carregarLinhasTabela(tabelaInspecionada);
+            }
+          }}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            abaInterna === 'realtime'
+              ? 'border-[#5C3A22] text-[#5C3A22] bg-[#FAF9F5]'
+              : 'border-transparent text-[#6E6E6E] hover:text-[#1A1A1A]'
+          }`}
+        >
+          <Activity className="w-4 h-4" />
+          <span>Monitor Tempo Real & Dados ao Vivo</span>
+          {realtimeStatus === 'CONECTADO' && (
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          )}
+        </button>
+
+        <button
           id="tab-sub-supabase-migracao"
           type="button"
           onClick={() => setAbaInterna('migracao')}
@@ -918,7 +962,7 @@ ON CONFLICT (id) DO NOTHING;
           }`}
         >
           <Table className="w-4 h-4" />
-          <span>Dicionário das 10 Tabelas</span>
+          <span>Dicionário das Tabelas</span>
         </button>
       </div>
 
@@ -982,7 +1026,7 @@ ON CONFLICT (id) DO NOTHING;
                   />
                 </div>
                 <span className="text-[11px] text-[#6E6E6E] mt-1 block">
-                  Chave segura para uso no frontend com Row Level Security (RLS) ativo.
+                  Chave segura para uso com Row Level Security (RLS) e WebSockets em tempo real.
                 </span>
               </div>
 
@@ -1102,18 +1146,253 @@ ON CONFLICT (id) DO NOTHING;
                 Copie a <strong>Project URL</strong> e a <strong>anon / public key</strong> e cole nos campos ao lado.
               </li>
               <li>
-                Na aba <strong>Script SQL de Criação</strong>, copie o script e rode no <strong>SQL Editor</strong> do Supabase.
+                Na aba <strong>Script SQL de Criação</strong>, copie o script e rode no <strong>SQL Editor</strong> do Supabase para criar as tabelas.
               </li>
             </ol>
 
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-sm text-[11px] text-amber-900 leading-relaxed">
-              <strong>Regra de Governança:</strong> Todo acesso no banco respeita a coluna <code>empresa_id</code> para isolamento multi-clínica e <code>deleted_at IS NULL</code> para soft delete.
+              <strong>Sincronização em Tempo Real:</strong> Todos os leads, procedimentos, fichas e compras criados ou alterados no CRM são transmitidos imediatamente para o seu Supabase.
             </div>
           </div>
         </div>
       )}
 
-      {/* 2. ABA MIGRAÇÃO & ALOCAÇÃO DE DADOS */}
+      {/* 2. ABA MONITOR TEMPO REAL & DADOS AO VIVO */}
+      {abaInterna === 'realtime' && (
+        <div className="space-y-6">
+          {/* Cartão de Teste de Gravação Imediata */}
+          <div className="bg-[#FAF9F5] p-5 sm:p-6 rounded-sm border border-[#D9D6D0] space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h4 className="text-sm font-bold text-[#1A1A1A] uppercase tracking-wide flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-600" />
+                  Teste de Gravação Direta no Supabase em Tempo Real
+                </h4>
+                <p className="text-xs text-[#6E6E6E] mt-0.5">
+                  Dispara uma inserção autêntica de verificação na tabela <code>leads</code> do seu Supabase, mede a latência da rede e atualiza a lista ao vivo.
+                </p>
+              </div>
+
+              <button
+                id="btn-testar-gravacao-realtime"
+                type="button"
+                onClick={executarTesteGravacaoRealtime}
+                disabled={isTestandoRealtime || !isSupabaseConfigured()}
+                style={{ backgroundColor: corPrimaria }}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-sm text-xs font-bold uppercase tracking-wider text-white hover:opacity-95 transition-opacity cursor-pointer shadow-xs disabled:opacity-50 shrink-0"
+              >
+                <Play className={`w-3.5 h-3.5 ${isTestandoRealtime ? 'animate-spin' : ''}`} />
+                <span>{isTestandoRealtime ? 'Testando Gravação...' : 'Testar Gravação em Tempo Real'}</span>
+              </button>
+            </div>
+
+            {/* Resultado do Teste de Gravação Realtime */}
+            {resultadoTesteRealtime && (
+              <div
+                className={`p-4 rounded-sm border ${
+                  resultadoTesteRealtime.sucesso
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                    : 'bg-rose-50 border-rose-300 text-rose-950'
+                }`}
+              >
+                <div className="flex items-start gap-2.5">
+                  {resultadoTesteRealtime.sucesso ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertTriangle className="w-5 h-5 text-rose-700 shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1 text-xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold uppercase tracking-wider">
+                        {resultadoTesteRealtime.sucesso ? 'Gravação em Tempo Real Concluída!' : 'Falha na Gravação'}
+                      </span>
+                      {resultadoTesteRealtime.latenciaMs && (
+                        <span className="font-mono text-[11px] font-bold px-2 py-0.5 bg-emerald-200/60 rounded-xs">
+                          {resultadoTesteRealtime.latenciaMs} ms
+                        </span>
+                      )}
+                    </div>
+                    <p>{resultadoTesteRealtime.mensagem}</p>
+                    {resultadoTesteRealtime.registroCriado && (
+                      <div className="mt-2 p-2.5 bg-white/90 border border-emerald-300 rounded-xs font-mono text-[11px]">
+                        <span className="font-bold text-emerald-900 block mb-1">Registro Gravado no Supabase:</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 text-stone-700">
+                          <div><strong>ID:</strong> {resultadoTesteRealtime.registroCriado.id}</div>
+                          <div><strong>Nome:</strong> {resultadoTesteRealtime.registroCriado.nome}</div>
+                          <div><strong>Situação:</strong> {resultadoTesteRealtime.registroCriado.situacao}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Visualizador de Dados ao Vivo das Tabelas */}
+          <div className="bg-[#FAF9F5] p-5 sm:p-6 rounded-sm border border-[#D9D6D0] space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h4 className="text-sm font-bold text-[#1A1A1A] uppercase tracking-wide flex items-center gap-2">
+                  <Database className="w-4 h-4" style={{ color: corPrimaria }} />
+                  Inspetor de Registros Armazenados no Supabase (Ao Vivo)
+                </h4>
+                <p className="text-xs text-[#6E6E6E] mt-0.5">
+                  Consulte os registros que estão atualmente salvos nas tabelas do seu banco de dados PostgreSQL no Supabase.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select
+                  id="select-tabela-inspecionada"
+                  value={tabelaInspecionada}
+                  onChange={(e) => {
+                    setTabelaInspecionada(e.target.value);
+                    carregarLinhasTabela(e.target.value);
+                  }}
+                  className="px-3 py-2 text-xs bg-white border border-[#D9D6D0] rounded-sm font-mono font-semibold text-[#1A1A1A] focus:outline-hidden"
+                >
+                  <option value="leads">leads (Pacientes & Leads)</option>
+                  <option value="fichas_leads">fichas_leads (Fichas 1:1)</option>
+                  <option value="compras">compras (Histórico de Vendas)</option>
+                  <option value="procedimentos">procedimentos (Catálogo Clínico)</option>
+                  <option value="usuarios">usuarios (Equipe & Médicos)</option>
+                  <option value="empresas">empresas (Clínica / Multi-inquilino)</option>
+                  <option value="empresa_membros">empresa_membros (Vínculos)</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => carregarLinhasTabela(tabelaInspecionada)}
+                  disabled={isInspecionando}
+                  className="px-3 py-2 bg-white hover:bg-[#F2EFEA] border border-[#D9D6D0] rounded-sm text-xs font-bold uppercase tracking-wider text-[#1A1A1A] transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isInspecionando ? 'animate-spin' : ''}`} />
+                  <span>{isInspecionando ? 'Lendo...' : 'Atualizar'}</span>
+                </button>
+              </div>
+            </div>
+
+            {erroInspecao && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-sm text-xs text-rose-900">
+                <strong>Aviso:</strong> {erroInspecao}
+              </div>
+            )}
+
+            {/* Tabela de Resultados */}
+            <div className="border border-[#D9D6D0] rounded-sm overflow-hidden bg-white">
+              {linhasInspecionadas.length === 0 ? (
+                <div className="p-8 text-center text-xs text-[#6E6E6E]">
+                  {isInspecionando ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <RefreshCw className="w-4 h-4 animate-spin text-[#5C3A22]" />
+                      <span>Consultando dados no Supabase...</span>
+                    </div>
+                  ) : (
+                    <span>Nenhum registro encontrado na tabela <code>{tabelaInspecionada}</code> ou banco aguardando primeira sincronização.</span>
+                  )}
+                </div>
+              ) : (
+                <div className="overflow-x-auto max-h-96">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-[#FAF9F5] border-b border-[#D9D6D0] text-[#1A1A1A] font-bold uppercase text-[10px] tracking-wider sticky top-0">
+                      <tr>
+                        <th className="p-2.5">ID</th>
+                        <th className="p-2.5">Identificador / Nome</th>
+                        <th className="p-2.5">Detalhes / Dados</th>
+                        <th className="p-2.5">Criado Em</th>
+                        <th className="p-2.5">Atualizado Em</th>
+                        <th className="p-2.5 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E5E5E5] font-mono text-[11px]">
+                      {linhasInspecionadas.map((row, idx) => (
+                        <tr key={row.id || idx} className="hover:bg-[#FAF9F5]/70 transition-colors">
+                          <td className="p-2.5 text-[#6E6E6E] font-semibold max-w-[140px] truncate" title={row.id}>
+                            {row.id}
+                          </td>
+                          <td className="p-2.5 font-bold text-[#1A1A1A] font-sans">
+                            {row.nome || row.procedimento || row.usuario_nome || row.titulo || row.email || '-'}
+                          </td>
+                          <td className="p-2.5 text-[#4A4A4A] font-sans text-xs">
+                            {row.situacao && <span className="mr-2 px-1.5 py-0.5 bg-stone-100 rounded-xs border text-[10px] font-semibold">{row.situacao}</span>}
+                            {row.valor !== undefined && <span className="mr-2 font-bold text-emerald-800">R$ {Number(row.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>}
+                            {row.cargo && <span className="text-[11px] text-[#6E6E6E]">{row.cargo}</span>}
+                            {row.telefone && <span className="text-[11px] text-[#6E6E6E]">{row.telefone}</span>}
+                          </td>
+                          <td className="p-2.5 text-[#6E6E6E]">
+                            {row.created_at ? new Date(row.created_at).toLocaleString('pt-BR') : '-'}
+                          </td>
+                          <td className="p-2.5 text-[#6E6E6E]">
+                            {row.updated_at ? new Date(row.updated_at).toLocaleString('pt-BR') : '-'}
+                          </td>
+                          <td className="p-2.5 text-center">
+                            {row.deleted_at ? (
+                              <span className="px-1.5 py-0.5 bg-rose-100 text-rose-800 text-[10px] rounded-xs font-bold">
+                                Deletado
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] rounded-xs font-bold">
+                                Ativo (v{row.version || 1})
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Console de Eventos em Tempo Real (WebSockets Stream) */}
+          <div className="bg-[#1A1A1A] text-[#F2EFEA] p-4 sm:p-5 rounded-sm border border-[#1A1A1A] space-y-3">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+              <div className="flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-bold uppercase tracking-wider font-mono">
+                  Console de Eventos Supabase Realtime (Ao Vivo)
+                </span>
+              </div>
+              <span className="text-[10px] font-mono text-stone-400">
+                {realtimeLogs.length} evento(s) capturado(s)
+              </span>
+            </div>
+
+            <div className="font-mono text-xs max-h-56 overflow-y-auto space-y-1.5 leading-relaxed">
+              {realtimeLogs.length === 0 ? (
+                <p className="text-stone-500 text-[11px] py-3">
+                  Nenhum evento registrado ainda. As modificações feitas nos leads, fichas ou procedimentos aparecerão aqui em tempo real.
+                </p>
+              ) : (
+                realtimeLogs.map((log) => (
+                  <div key={log.id} className="flex items-start gap-2 text-[11px]">
+                    <span className="text-stone-500 shrink-0">[{log.timestamp}]</span>
+                    <span
+                      className={`px-1 rounded-xs uppercase font-bold text-[9px] shrink-0 ${
+                        log.tipo === 'INSERT'
+                          ? 'bg-emerald-900/80 text-emerald-200'
+                          : log.tipo === 'UPDATE'
+                          ? 'bg-blue-900/80 text-blue-200'
+                          : log.tipo === 'DELETE'
+                          ? 'bg-rose-900/80 text-rose-200'
+                          : 'bg-amber-900/80 text-amber-200'
+                      }`}
+                    >
+                      {log.tipo}
+                    </span>
+                    <span className="text-emerald-400 shrink-0 font-semibold">{log.tabela}:</span>
+                    <span className="text-stone-300">{log.detalhe}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. ABA MIGRAÇÃO & ALOCAÇÃO DE DADOS */}
       {abaInterna === 'migracao' && (
         <div className="space-y-6">
           <div className="bg-[#FAF9F5] p-5 sm:p-6 rounded-sm border border-[#D9D6D0] space-y-5">
@@ -1273,17 +1552,17 @@ ON CONFLICT (id) DO NOTHING;
         </div>
       )}
 
-      {/* 3. ABA SCRIPT SQL SCHEMA.SQL */}
+      {/* 4. ABA SCRIPT SQL SCHEMA.SQL */}
       {abaInterna === 'schema_sql' && (
         <div className="bg-[#FAF9F5] p-5 sm:p-6 rounded-sm border border-[#D9D6D0] space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h4 className="text-sm font-bold text-[#1A1A1A] uppercase tracking-wide flex items-center gap-2">
                 <FileCode className="w-4 h-4" style={{ color: corPrimaria }} />
-                Script SQL Oficial (DDL & Migrations)
+                Script SQL Oficial (DDL, Triggers & Realtime)
               </h4>
               <p className="text-xs text-[#6E6E6E] mt-0.5">
-                Copie e execute este script no <strong>SQL Editor</strong> do Supabase para criar as 10 tabelas, relacionamentos, triggers e índices.
+                Execute este script no <strong>SQL Editor</strong> do Supabase para criar a estrutura completa das tabelas e habilitar WebSockets em tempo real.
               </p>
             </div>
 
@@ -1310,10 +1589,17 @@ ON CONFLICT (id) DO NOTHING;
             </div>
           </div>
 
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-sm text-xs text-blue-950 flex items-start gap-2.5">
+            <Info className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+            <div>
+              <strong>Estrutura DDL 100% Pura:</strong> Este script cria exclusivamente tabelas, índices, triggers e permissões. Nenhum dado pré-fabricado (fake seed) é inserido — o Supabase receberá os dados reais diretamente da aplicação em tempo real.
+            </div>
+          </div>
+
           <div className="relative rounded-sm overflow-hidden border border-[#1A1A1A]/20 bg-[#1A1A1A] text-[#F2EFEA]">
             <div className="flex items-center justify-between px-4 py-2 bg-black/40 border-b border-white/10 text-[11px] font-mono text-[#A8A29E]">
               <span>supabase/schema.sql (PostgreSQL 15+)</span>
-              <span>10 Tabelas • Triggers • RLS • Soft Delete</span>
+              <span>12 Tabelas • Triggers • RLS • Realtime Ativo</span>
             </div>
             <pre className="p-4 text-xs font-mono overflow-x-auto max-h-[500px] leading-relaxed text-[#E5E5E5]">
               <code>{sqlSchemaCode}</code>
@@ -1322,12 +1608,12 @@ ON CONFLICT (id) DO NOTHING;
         </div>
       )}
 
-      {/* 4. ABA DICIONÁRIO DAS 10 TABELAS */}
+      {/* 5. ABA DICIONÁRIO DAS TABELAS */}
       {abaInterna === 'arquitetura' && (
         <div className="space-y-6">
           <div className="bg-[#FAF9F5] p-5 rounded-sm border border-[#D9D6D0]">
             <h4 className="text-sm font-bold text-[#1A1A1A] uppercase tracking-wide mb-1">
-              Governança & Estrutura das 10 Tabelas
+              Governança & Estrutura das Tabelas
             </h4>
             <p className="text-xs text-[#6E6E6E]">
               Todas as entidades seguem rigorosamente o padrão de UUID, soft delete (<code className="font-mono text-emerald-700">deleted_at</code>), versionamento otimista (<code className="font-mono text-blue-700">version</code>) e isolamento multi-clínica (<code className="font-mono text-amber-700">empresa_id</code>).

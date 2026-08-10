@@ -19,6 +19,8 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { auth, db, sanitizeForFirestore } from '../lib/firebase';
+import { supabaseService } from '../services/supabaseService';
+import { isSupabaseConfigured } from '../lib/supabase';
 import {
   UsuarioColaborador,
   CriarUsuarioPayload,
@@ -477,66 +479,45 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Login com e-mail/login e senha digitados
+  // Login com e-mail/login e senha digitados - Rigoroso e Seguro
   const loginComEmailSenha = async (loginOuEmail: string, senha: string) => {
     setIsLoading(true);
     setErroAuth(null);
-    const termoLimpo = loginOuEmail.trim().toLowerCase();
 
-    // Localiza colaborador correspondente por e-mail ou prefixo de usuário
+    const termoLimpo = (loginOuEmail || '').trim().toLowerCase();
+    const senhaLimpa = (senha || '').trim();
+
+    if (!termoLimpo || !senhaLimpa) {
+      setIsLoading(false);
+      setErroAuth('Por favor, informe seu login/e-mail e sua senha de acesso.');
+      throw new Error('Credenciais não preenchidas.');
+    }
+
+    // Localiza colaborador correspondente por e-mail exato ou prefixo de login (antes do @)
     const colaborador = usuarios.find((u) => {
-      const emailLower = u.email.toLowerCase();
+      const emailLower = (u.email || '').toLowerCase().trim();
       const prefixo = emailLower.split('@')[0];
       return emailLower === termoLimpo || prefixo === termoLimpo;
     });
 
     if (colaborador && !colaborador.ativo) {
       setIsLoading(false);
-      setErroAuth('Este usuário foi desativado pela administração. Entre em contato com a coordenação da clínica.');
-      return;
+      const msg = 'Este usuário foi desativado pela administração. Entre em contato com a coordenação da clínica.';
+      setErroAuth(msg);
+      throw new Error(msg);
     }
 
-    const emailEfetivo = colaborador ? colaborador.email.toLowerCase() : termoLimpo;
+    const emailEfetivo = colaborador ? colaborador.email.toLowerCase().trim() : termoLimpo;
 
     try {
-      if (colaborador && colaborador.senhaPadrao === senha) {
-        // Senha confere com o cadastro corporativo do colaborador
+      if (colaborador && colaborador.senhaPadrao === senhaLimpa) {
+        // Senha corporativa confere com o cadastro do colaborador
         setUser({
           uid: colaborador.id,
           email: colaborador.email,
           displayName: colaborador.nome,
         });
-      } else {
-        // Tentativa de autenticação via Firebase Auth
-        try {
-          const cred = await signInWithEmailAndPassword(auth, emailEfetivo, senha);
-          setUser(cred.user);
-        } catch (err: any) {
-          if (err.code === 'auth/operation-not-allowed') {
-            try {
-              const anonCred = await signInAnonymously(auth);
-              setUser(anonCred.user);
-            } catch (e) {
-              setUser({
-                uid: colaborador ? colaborador.id : 'user-' + Date.now(),
-                email: emailEfetivo,
-                displayName: colaborador ? colaborador.nome : emailEfetivo.split('@')[0],
-              });
-            }
-          } else {
-            let msg = 'Login ou senha incorretos.';
-            if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-              msg = 'Credenciais não encontradas. Verifique seu login/e-mail e senha.';
-            } else if (err.code === 'auth/wrong-password') {
-              msg = 'Senha incorreta para este usuário.';
-            }
-            setErroAuth(msg);
-            throw err;
-          }
-        }
-      }
 
-      if (colaborador) {
         const perfil: ResponsavelPerfil = {
           id: colaborador.id,
           nome: colaborador.nome,
@@ -551,26 +532,74 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           ativo: colaborador.ativo,
         };
         setSessionPerfil(perfil);
-        localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(perfil));
+        try {
+          localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(perfil));
+        } catch (e) {}
 
+        const timestamp = new Date().toISOString();
         try {
           await updateDoc(doc(db, 'usuarios', colaborador.id), {
-            ultimoAcesso: new Date().toISOString(),
+            ultimoAcesso: timestamp,
+            updated_at: timestamp,
           });
         } catch (e) {}
+      } else {
+        // Se a senha não bateu com a do colaborador ou não está na lista de colaboradores,
+        // tenta autenticação estrita no Firebase Auth
+        try {
+          const cred = await signInWithEmailAndPassword(auth, emailEfetivo, senhaLimpa);
+          setUser(cred.user);
+
+          if (colaborador) {
+            const perfil: ResponsavelPerfil = {
+              id: colaborador.id,
+              nome: colaborador.nome,
+              cargo: colaborador.cargo,
+              email: colaborador.email,
+              senhaPadrao: colaborador.senhaPadrao,
+              iniciais: colaborador.iniciais,
+              corBadge: colaborador.corBadge,
+              descricao: colaborador.observacoes || '',
+              role: colaborador.role,
+              permissoes: colaborador.permissoes,
+              ativo: colaborador.ativo,
+            };
+            setSessionPerfil(perfil);
+            try {
+              localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(perfil));
+            } catch (e) {}
+          }
+        } catch (err: any) {
+          let msg = 'Login ou senha incorretos.';
+          if (colaborador) {
+            msg = 'Senha incorreta para este usuário. Verifique suas credenciais.';
+          } else if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials') {
+            msg = 'Usuário ou senha incorretos. Verifique suas credenciais.';
+          } else if (err.code === 'auth/wrong-password') {
+            msg = 'Senha incorreta para este usuário.';
+          } else if (err.code === 'auth/too-many-requests') {
+            msg = 'Muitas tentativas sem sucesso. Aguarde alguns instantes antes de tentar novamente.';
+          }
+          setErroAuth(msg);
+          throw new Error(msg);
+        }
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Cadastro de novo usuário
+  // Cadastro de novo usuário com validação estrita
   const cadastrarComEmailSenha = async (email: string, senha: string, nome: string) => {
     setIsLoading(true);
     setErroAuth(null);
     try {
       const emailLimpo = email.trim().toLowerCase();
       const nomeLimpo = nome.trim();
+
+      if (!emailLimpo || !senha || !nomeLimpo) {
+        throw new Error('Todos os campos são obrigatórios para cadastro.');
+      }
 
       try {
         const cred = await createUserWithEmailAndPassword(auth, emailLimpo, senha);
@@ -579,27 +608,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } catch (e) {}
         setUser(cred.user);
       } catch (err: any) {
-        if (err.code === 'auth/operation-not-allowed') {
-          try {
-            const anonCred = await signInAnonymously(auth);
-            setUser(anonCred.user);
-          } catch (e) {
-            setUser({
-              uid: 'user-' + Date.now(),
-              email: emailLimpo,
-              displayName: nomeLimpo,
-            });
-          }
-        } else {
-          let msg = 'Não foi possível cadastrar.';
-          if (err.code === 'auth/email-already-in-use') {
-            msg = 'Este e-mail já está em uso.';
-          } else if (err.code === 'auth/weak-password') {
-            msg = 'A senha deve conter ao menos 6 caracteres.';
-          }
-          setErroAuth(msg);
-          throw err;
+        let msg = 'Não foi possível cadastrar o usuário.';
+        if (err.code === 'auth/email-already-in-use') {
+          msg = 'Este e-mail já está cadastrado no sistema.';
+        } else if (err.code === 'auth/weak-password') {
+          msg = 'A senha deve conter ao menos 6 caracteres.';
+        } else if (err.code === 'auth/invalid-email') {
+          msg = 'Formato de e-mail inválido.';
         }
+        setErroAuth(msg);
+        throw new Error(msg);
       }
 
       // Adiciona o novo colaborador na lista
@@ -685,6 +703,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.error('Erro ao salvar colaborador no Firestore:', err);
     }
 
+    // 3. Gravação no Supabase (se configurado)
+    if (isSupabaseConfigured()) {
+      try {
+        await supabaseService.salvarUsuario(novoUsuario);
+      } catch (errSupabase) {
+        console.warn('Aviso: falha ao espelhar colaborador no Supabase:', errSupabase);
+      }
+    }
+
     return novoUsuario;
   };
 
@@ -757,6 +784,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       if (usuarioAtualizado) {
         await setDoc(doc(db, 'usuarios', usuarioId), sanitizeForFirestore(usuarioAtualizado), { merge: true });
+        if (isSupabaseConfigured()) {
+          try {
+            await supabaseService.salvarUsuario(usuarioAtualizado);
+          } catch (eSupabase) {
+            console.warn('Aviso: falha ao atualizar colaborador no Supabase:', eSupabase);
+          }
+        }
       }
     } catch (err) {
       console.error('Erro ao atualizar colaborador no Firestore:', err);
@@ -775,6 +809,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const excluirColaborador = async (usuarioId: string, hardDelete = false): Promise<boolean> => {
     const timestamp = new Date().toISOString();
+    const usuarioAlvo = usuarios.find((u) => u.id === usuarioId);
 
     if (hardDelete) {
       setUsuarios((prev) => prev.filter((u) => u.id !== usuarioId));
@@ -782,6 +817,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await deleteDoc(doc(db, 'usuarios', usuarioId));
       } catch (err) {
         console.error('Erro ao excluir usuário no Firestore:', err);
+      }
+      if (isSupabaseConfigured() && usuarioAlvo) {
+        try {
+          await supabaseService.salvarUsuario({
+            ...usuarioAlvo,
+            deleted_at: timestamp,
+            updated_at: timestamp,
+            ativo: false,
+          });
+        } catch (eSupabase) {
+          console.warn('Aviso ao excluir colaborador no Supabase:', eSupabase);
+        }
       }
     } else {
       // Soft Delete
@@ -796,6 +843,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
       } catch (err) {
         console.error('Erro ao soft-deletar usuário no Firestore:', err);
+      }
+      if (isSupabaseConfigured() && usuarioAlvo) {
+        try {
+          await supabaseService.salvarUsuario({
+            ...usuarioAlvo,
+            deleted_at: timestamp,
+            updated_at: timestamp,
+            ativo: false,
+          });
+        } catch (eSupabase) {
+          console.warn('Aviso ao registrar soft-delete de colaborador no Supabase:', eSupabase);
+        }
       }
     }
     return true;

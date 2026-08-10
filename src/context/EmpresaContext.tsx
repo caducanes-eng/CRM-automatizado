@@ -39,6 +39,8 @@ import {
   SEED_PLATAFORMA_ADMINS,
 } from '../data/seedData';
 import { obterCoresSidebarCompletas, aplicarVariaveisCss } from '../utils/estetica';
+import { supabaseService } from '../services/supabaseService';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 const STORAGE_KEYS = {
   EMPRESAS: 'crm_multiempresa_empresas_v1',
@@ -530,6 +532,15 @@ export const EmpresaProvider: React.FC<{
         console.error('Erro ao salvar nova empresa no Firestore:', e);
       }
 
+      // 3. Salvar no Supabase (se configurado)
+      if (isSupabaseConfigured()) {
+        try {
+          await supabaseService.salvarEmpresa(novaEmpresa);
+        } catch (eSupabase) {
+          console.warn('Aviso ao sincronizar nova empresa no Supabase:', eSupabase);
+        }
+      }
+
       // Se passou dados do administrador inicial da empresa, cria o membro e usuário
       if (payload.adminEmail && payload.adminNome) {
         const userId = generateId('user');
@@ -556,6 +567,14 @@ export const EmpresaProvider: React.FC<{
         try {
           await setDoc(doc(db, 'empresa_membros', membroId), sanitizeForFirestore(novoMembro));
         } catch (e) {}
+
+        if (isSupabaseConfigured()) {
+          try {
+            await supabaseService.salvarMembroEmpresa(novoMembro);
+          } catch (eSupabase) {
+            console.warn('Aviso ao sincronizar membro inicial no Supabase:', eSupabase);
+          }
+        }
       }
 
       return novaEmpresa;
@@ -595,6 +614,14 @@ export const EmpresaProvider: React.FC<{
         } catch (e) {
           console.error('Erro ao atualizar empresa no Firestore:', e);
         }
+
+        if (isSupabaseConfigured()) {
+          try {
+            await supabaseService.salvarEmpresa(atualizada);
+          } catch (eSupabase) {
+            console.warn('Aviso ao atualizar empresa no Supabase:', eSupabase);
+          }
+        }
       }
 
       return atualizada;
@@ -624,6 +651,9 @@ export const EmpresaProvider: React.FC<{
         throw new Error('A empresa padrão inicial não pode ser excluída.');
       }
 
+      const timestamp = new Date().toISOString();
+      const empresaParaExcluir = empresas.find((e) => e.id === empresaId);
+
       setEmpresas((prev) => prev.filter((e) => e.id !== empresaId));
       setEmpresaMembros((prev) => prev.filter((m) => m.empresaId !== empresaId));
 
@@ -633,13 +663,25 @@ export const EmpresaProvider: React.FC<{
         console.error('Erro ao excluir empresa no Firestore:', e);
       }
 
+      if (isSupabaseConfigured() && empresaParaExcluir) {
+        try {
+          await supabaseService.salvarEmpresa({
+            ...empresaParaExcluir,
+            deleted_at: timestamp,
+            updated_at: timestamp,
+          });
+        } catch (eSupabase) {
+          console.warn('Aviso ao excluir empresa no Supabase:', eSupabase);
+        }
+      }
+
       if (empresaAtivaId === empresaId) {
         setEmpresaAtivaId(ID_EMPRESA_PADRAO);
       }
 
       return true;
     },
-    [empresaAtivaId]
+    [empresaAtivaId, empresas]
   );
 
   // ----------------------------------------------------
@@ -678,6 +720,14 @@ export const EmpresaProvider: React.FC<{
         await setDoc(doc(db, 'empresa_membros', id), sanitizeForFirestore(novoMembro));
       } catch (e) {
         console.error('Erro ao vincular membro no Firestore:', e);
+      }
+
+      if (isSupabaseConfigured()) {
+        try {
+          await supabaseService.salvarMembroEmpresa(novoMembro);
+        } catch (eSupabase) {
+          console.warn('Aviso ao salvar membro no Supabase:', eSupabase);
+        }
       }
 
       return novoMembro;
@@ -793,7 +843,15 @@ export const EmpresaProvider: React.FC<{
       try {
         await setDoc(doc(db, 'plataforma_admins', id), sanitizeForFirestore(novoAdmin));
       } catch (e) {
-        console.error('Erro ao salvar admin da plataforma:', e);
+        console.error('Erro ao salvar admin da plataforma no Firestore:', e);
+      }
+
+      if (isSupabaseConfigured()) {
+        try {
+          await supabaseService.salvarAdminPlataforma(novoAdmin);
+        } catch (eSupabase) {
+          console.warn('Aviso ao sincronizar admin da plataforma no Supabase:', eSupabase);
+        }
       }
 
       return true;
