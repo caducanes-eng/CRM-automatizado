@@ -1,6 +1,9 @@
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
+import { doc, setDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { db, sanitizeForFirestore } from './firebase';
 
 const STORAGE_KEY_SUPABASE = 'crm_supabase_config_v1';
+const FIRESTORE_DOC_PATH = { collection: 'configuracoes_sistema', doc: 'supabase' };
 
 export interface SupabaseConfig {
   url: string;
@@ -130,7 +133,7 @@ export function getSupabaseConfig(): SupabaseConfig {
 }
 
 /**
- * Salva credenciais do Supabase no armazenamento local
+ * Salva credenciais do Supabase no armazenamento local e sincroniza no Firestore para todos os acessos
  */
 export function saveSupabaseConfig(url: string, anonKey: string): void {
   const limpoUrl = url.trim();
@@ -151,14 +154,91 @@ export function saveSupabaseConfig(url: string, anonKey: string): void {
   cachedClient = null;
   lastClientKey = '';
 
-  logRealtimeEvent('SISTEMA', 'SYSTEM', 'Novas credenciais do Supabase salvas no navegador.');
+  logRealtimeEvent('SISTEMA', 'SYSTEM', 'Novas credenciais do Supabase salvas localmente.');
+
+  // Sincroniza em tempo real no Firestore para distribuição automática a todas as secretárias e acessos
+  try {
+    const docRef = doc(db, FIRESTORE_DOC_PATH.collection, FIRESTORE_DOC_PATH.doc);
+    setDoc(
+      docRef,
+      sanitizeForFirestore({
+        url: limpoUrl,
+        anonKey: limpoKey,
+        updated_at: new Date().toISOString(),
+      }),
+      { merge: true }
+    ).catch((err) => {
+      console.warn('Nota de salvamento Supabase no Firestore:', err);
+    });
+  } catch (e) {
+    console.warn('Erro ao salvar credenciais Supabase no Firestore:', e);
+  }
+
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('supabase-config-changed'));
   }
 }
 
 /**
- * Remove credenciais do Supabase salvas no navegador
+ * Listener em tempo real do Firestore que recebe atualizações das credenciais do Supabase
+ * feitas pelo Gestor Master e aplica automaticamente na máquina da secretária e outros acessos.
+ */
+let unsubFirestoreSupabase: (() => void) | null = null;
+
+export function iniciarEscutaSupabaseConfigFirestore(): () => void {
+  if (unsubFirestoreSupabase) return unsubFirestoreSupabase;
+
+  try {
+    const docRef = doc(db, FIRESTORE_DOC_PATH.collection, FIRESTORE_DOC_PATH.doc);
+    unsubFirestoreSupabase = onSnapshot(
+      docRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (data && data.url && data.anonKey) {
+            const current = getSupabaseConfig();
+            if (current.url !== data.url.trim() || current.anonKey !== data.anonKey.trim()) {
+              console.info('⚡ Supabase Config atualizado via Firestore pelo Gestor Master!');
+              localStorage.setItem(
+                STORAGE_KEY_SUPABASE,
+                JSON.stringify({ url: data.url.trim(), anonKey: data.anonKey.trim() })
+              );
+
+              if (globalRealtimeChannel) {
+                try {
+                  globalRealtimeChannel.unsubscribe();
+                } catch (e) {}
+                globalRealtimeChannel = null;
+              }
+              cachedClient = null;
+              lastClientKey = '';
+
+              logRealtimeEvent('SISTEMA', 'SYSTEM', 'Credenciais do Supabase sincronizadas do Gestor Master.');
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('supabase-config-changed'));
+              }
+            }
+          }
+        }
+      },
+      (err) => {
+        console.warn('Firestore Supabase config listener notice:', err);
+      }
+    );
+  } catch (e) {
+    console.warn('Erro ao iniciar escuta Firestore Supabase config:', e);
+  }
+
+  return () => {
+    if (unsubFirestoreSupabase) {
+      unsubFirestoreSupabase();
+      unsubFirestoreSupabase = null;
+    }
+  };
+}
+
+/**
+ * Remove credenciais do Supabase salvas no navegador e no Firestore
  */
 export function clearSupabaseConfig(): void {
   localStorage.removeItem(STORAGE_KEY_SUPABASE);
@@ -171,6 +251,12 @@ export function clearSupabaseConfig(): void {
   cachedClient = null;
   lastClientKey = '';
   setRealtimeStatus('DESCONECTADO');
+
+  try {
+    const docRef = doc(db, FIRESTORE_DOC_PATH.collection, FIRESTORE_DOC_PATH.doc);
+    deleteDoc(docRef).catch(() => {});
+  } catch (e) {}
+
   logRealtimeEvent('SISTEMA', 'SYSTEM', 'Credenciais do Supabase removidas.');
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('supabase-config-changed'));

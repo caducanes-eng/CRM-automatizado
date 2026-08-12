@@ -3,10 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SectionId } from './types';
 import { useAuth } from './context/AuthContext';
 import { useEmpresa } from './context/EmpresaContext';
+import { iniciarEscutaSupabaseConfigFirestore } from './lib/supabase';
 import { LoginView } from './components/LoginView';
 import { Sidebar, navigationItems } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -43,6 +44,12 @@ export default function App() {
   const { config } = useEmpresa();
   const [activeSection, setActiveSection] = useState<SectionId>('cadastro_rapido');
   const [isOpenMobile, setIsOpenMobile] = useState<boolean>(false);
+
+  // Inicia a escuta global em tempo real para sincronizar credenciais do Supabase alteradas pelo Gestor Master
+  useEffect(() => {
+    const unsub = iniciarEscutaSupabaseConfigFirestore();
+    return () => unsub();
+  }, []);
 
   const corPrimaria = config.estetica?.corPrimaria || '#5C3A22';
   const corSecundaria = config.estetica?.corSecundaria || '#8A6142';

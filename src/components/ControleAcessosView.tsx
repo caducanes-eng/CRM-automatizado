@@ -77,6 +77,7 @@ export const ControleAcessosView: React.FC = () => {
   const [formData, setFormData] = useState<{
     nome: string;
     email: string;
+    login: string;
     senhaPadrao: string;
     cargo: string;
     role: NivelAcesso;
@@ -86,6 +87,7 @@ export const ControleAcessosView: React.FC = () => {
   }>({
     nome: '',
     email: '',
+    login: '',
     senhaPadrao: 'Agda@2026',
     cargo: '',
     role: 'RECEPCAO_COMERCIAL',
@@ -118,6 +120,7 @@ export const ControleAcessosView: React.FC = () => {
     setFormData({
       nome: '',
       email: '',
+      login: '',
       senhaPadrao: 'Agda@2026',
       cargo: '',
       role: 'RECEPCAO_COMERCIAL',
@@ -135,6 +138,7 @@ export const ControleAcessosView: React.FC = () => {
     setFormData({
       nome: user.nome,
       email: user.email,
+      login: user.login || user.email.split('@')[0],
       senhaPadrao: user.senhaPadrao,
       cargo: user.cargo,
       role: user.role,
@@ -201,11 +205,14 @@ export const ControleAcessosView: React.FC = () => {
 
     setFormSalvando(true);
     try {
+      const loginFinal = formData.login.trim() || formData.email.trim().split('@')[0];
+
       if (usuarioEmEdicao) {
         // Atualização
         await atualizarColaborador(usuarioEmEdicao.id, {
           nome: formData.nome,
           email: formData.email,
+          login: loginFinal,
           senhaPadrao: formData.senhaPadrao,
           cargo: formData.cargo,
           role: formData.role,
@@ -219,6 +226,7 @@ export const ControleAcessosView: React.FC = () => {
         await criarColaborador({
           nome: formData.nome,
           email: formData.email,
+          login: loginFinal,
           senhaPadrao: formData.senhaPadrao,
           cargo: formData.cargo,
           role: formData.role,
@@ -496,14 +504,16 @@ export const ControleAcessosView: React.FC = () => {
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-slate-500 truncate">
                     <span className="font-semibold text-slate-700">Login:</span>
-                    <span className="truncate text-slate-600 font-mono">{user.email}</span>
+                    <span className="truncate text-slate-600 font-mono">
+                      {user.login ? `${user.login} (${user.email})` : user.email}
+                    </span>
                   </div>
                   <button
                     id={`btn-copiar-email-${user.id}`}
                     type="button"
-                    onClick={() => copiarTexto(user.email, `email-${user.id}`)}
+                    onClick={() => copiarTexto(user.login || user.email, `email-${user.id}`)}
                     className="p-1 text-slate-400 hover:text-slate-700 rounded transition-colors cursor-pointer"
-                    title="Copiar email de login"
+                    title="Copiar login"
                   >
                     {copiadoId === `email-${user.id}` ? (
                       <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -788,6 +798,20 @@ export const ControleAcessosView: React.FC = () => {
                       value={formData.cargo}
                       onChange={(e) => setFormData({ ...formData, cargo: e.target.value })}
                       className="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#0B1F3A] focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Login / Usuário (Apelido)
+                    </label>
+                    <input
+                      id="input-login-colaborador"
+                      type="text"
+                      placeholder="Ex: cadu, gestao, mariana"
+                      value={formData.login}
+                      onChange={(e) => setFormData({ ...formData, login: e.target.value })}
+                      className="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#0B1F3A] focus:outline-hidden font-mono"
                     />
                   </div>
 

@@ -142,7 +142,10 @@ export const LoginView: React.FC = () => {
                   htmlFor="input-login"
                   className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wider flex items-center justify-between"
                 >
-                  <span>Login / E-mail:</span>
+                  <span>Login / E-mail / Usuário:</span>
+                  <span className="text-[10px] text-[#8F887E] normal-case font-normal">
+                    (ex: cadu, gestao, agda, camila)
+                  </span>
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-[#8F887E] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -156,7 +159,7 @@ export const LoginView: React.FC = () => {
                       setLoginInput(e.target.value);
                       if (erroAuth) limparErro();
                     }}
-                    placeholder="ex: caducanes@gmail.com ou gestao"
+                    placeholder="ex: cadu, gestao, dra.agda ou caducanes@gmail.com"
                     className="w-full h-11 pl-10 pr-3.5 text-xs sm:text-sm rounded-sm border border-[#D9D6D0] bg-[#F2EFEA]/40 text-[#1A1A1A] focus:bg-white focus:outline-hidden transition-all placeholder:text-[#8F887E]"
                   />
                 </div>

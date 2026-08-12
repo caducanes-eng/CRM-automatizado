@@ -421,6 +421,7 @@ export interface UsuarioColaborador extends BaseEntity {
   empresa_id?: string;
   nome: string;
   email: string;
+  login?: string;
   senhaPadrao: string;
   cargo: string;
   role: NivelAcesso;
@@ -438,6 +439,7 @@ export interface CriarUsuarioPayload {
   empresaId?: string;
   nome: string;
   email: string;
+  login?: string;
   senhaPadrao: string;
   cargo: string;
   role: NivelAcesso;
@@ -450,6 +452,7 @@ export interface CriarUsuarioPayload {
 export interface AtualizarUsuarioPayload {
   nome?: string;
   email?: string;
+  login?: string;
   senhaPadrao?: string;
   cargo?: string;
   role?: NivelAcesso;

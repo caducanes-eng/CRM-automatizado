@@ -238,6 +238,16 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (user) {
       carregarDadosCompletos();
     }
+
+    const handleConfigChange = () => {
+      console.log('🔄 Evento supabase-config-changed recebido. Recarregando dados...');
+      carregarDadosCompletos();
+    };
+
+    window.addEventListener('supabase-config-changed', handleConfigChange);
+    return () => {
+      window.removeEventListener('supabase-config-changed', handleConfigChange);
+    };
   }, [user, carregarDadosCompletos]);
 
   // Supabase Realtime WebSocket Listener

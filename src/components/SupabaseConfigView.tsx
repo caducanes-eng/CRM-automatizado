@@ -820,6 +820,10 @@ ALTER TABLE logs_auditoria REPLICA IDENTITY FULL;
             <p className="text-xs text-[#6E6E6E] mt-1 max-w-2xl">
               Arquitetura relacional PostgreSQL de alto desempenho com sincronização bidirecional em tempo real (WebSockets). Suas ações no sistema gravam imediatamente no banco, e alterações no Supabase refletem instantaneamente no CRM.
             </p>
+            <div className="mt-2.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-sm bg-amber-50/80 border border-amber-200/80 text-[11px] font-semibold text-amber-900">
+              <Zap className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+              <span>Sincronização Ativa: Qualquer alteração de banco de dados ou acessos feita pelo Gestor Master é propagada em tempo real para todas as secretárias e colaboradores.</span>
+            </div>
           </div>
         </div>
 
