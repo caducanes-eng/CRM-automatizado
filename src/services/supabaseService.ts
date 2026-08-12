@@ -298,7 +298,7 @@ export const supabaseMapper = {
     version: row.version || 1,
   }),
 
-  // COMPRA
+  // COMPRA (CORRIGIDO: adicionado o campo formaPagamento)
   compraToDb: (compra: Compra, empresaId: string = ID_EMPRESA_PADRAO) => {
     const eId = compra.empresaId || (compra as any).empresa_id || empresaId;
     return {
@@ -324,6 +324,7 @@ export const supabaseMapper = {
     data: row.data,
     procedimento: row.procedimento,
     valor: Number(row.valor || 0),
+    formaPagamento: row.forma_pagamento || 'Pix / Cartão',
     created_at: row.created_at,
     updated_at: row.updated_at,
     deleted_at: row.deleted_at,
@@ -653,6 +654,9 @@ export const supabaseService = {
 
       if (errLeads) throw errLeads;
 
+      // INSPEÇÃO NO CONSOLE: Exibe no navegador o que o Supabase entregou
+      console.log('🔍 DADOS BRUTOS DOS LEADS VINDOS DO SUPABASE:', rowsLeads);
+
       // 3. Fichas ativas
       const { data: rowsFichas, error: errFichas } = await client
         .from('fichas_leads')
@@ -669,6 +673,9 @@ export const supabaseService = {
         .order('data', { ascending: false });
 
       if (errCompras) throw errCompras;
+
+      // INSPEÇÃO NO CONSOLE: Exibe as compras brutas no navegador
+      console.log('🔍 DADOS BRUTOS DAS COMPRAS VINDAS DO SUPABASE:', rowsCompras);
 
       // 5. Procedimentos ativos
       const { data: rowsProcedimentos, error: errProc } = await client
@@ -1015,4 +1022,3 @@ export const supabaseService = {
     }
   },
 };
-
