@@ -185,6 +185,15 @@ export function saveSupabaseConfig(url: string, anonKey: string): void {
  */
 let unsubFirestoreSupabase: (() => void) | null = null;
 
+// Inicia a escuta do Firestore automaticamente no navegador para que qualquer usuário/aba receba as credenciais do Supabase na inicialização
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    iniciarEscutaSupabaseConfigFirestore();
+  }, 0);
+}
+
+
+
 export function iniciarEscutaSupabaseConfigFirestore(): () => void {
   if (unsubFirestoreSupabase) return unsubFirestoreSupabase;
 
