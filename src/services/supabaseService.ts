@@ -592,6 +592,25 @@ export const supabaseService = {
   },
 
   /**
+   * Soft Delete em Compra
+   */
+  async softDeleteCompra(compraId: string): Promise<boolean> {
+    const client = getSupabaseClient();
+    if (!client) return false;
+
+    const { error } = await client
+      .from('compras')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', normalizarUuid(compraId));
+
+    if (error) {
+      console.error('Erro ao efetuar soft delete na Compra:', error);
+      throw error;
+    }
+    return true;
+  },
+
+  /**
    * Salva ou atualiza um Procedimento no Supabase
    */
   async salvarProcedimento(proc: ProcedimentoClinica, empresaId: string = ID_EMPRESA_PADRAO): Promise<boolean> {
@@ -602,6 +621,25 @@ export const supabaseService = {
     const { error } = await client.from('procedimentos').upsert(row, { onConflict: 'id' });
     if (error) {
       console.error('Erro ao salvar Procedimento no Supabase:', error);
+      throw error;
+    }
+    return true;
+  },
+
+  /**
+   * Soft Delete em Procedimento
+   */
+  async softDeleteProcedimento(procId: string): Promise<boolean> {
+    const client = getSupabaseClient();
+    if (!client) return false;
+
+    const { error } = await client
+      .from('procedimentos')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', normalizarUuid(procId));
+
+    if (error) {
+      console.error('Erro ao efetuar soft delete no Procedimento:', error);
       throw error;
     }
     return true;

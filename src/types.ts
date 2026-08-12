@@ -625,6 +625,7 @@ export interface Compra extends BaseEntity {
   data: string; // Data da compra (YYYY-MM-DD)
   procedimento: string; // Descrição do procedimento realizado
   valor: number; // Valor pago em R$
+  formaPagamento?: string; // Forma de pagamento (ex: Pix, Cartão, Dinheiro)
 }
 
 // ----------------------------------------------------
