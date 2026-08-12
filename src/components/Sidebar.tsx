@@ -123,14 +123,6 @@ export const navigationItems: {
         restritoGestor: true,
         badge: 'Gestor',
       },
-      {
-        id: 'painel_plataforma',
-        label: 'Gestão da Plataforma',
-        description: 'Multi-clínicas, empresas e super administradores',
-        icon: Crown,
-        exclusivoPlataforma: true,
-        badge: 'Master',
-      },
     ],
   },
 ];

@@ -20,7 +20,6 @@ import { HistoricoComprasView } from './components/HistoricoComprasView';
 import { FunilConversaoView } from './components/FunilConversaoView';
 import { ControleAcessosView } from './components/ControleAcessosView';
 import { ConfiguracoesEmpresaView } from './components/ConfiguracoesEmpresaView';
-import { PainelPlataformaView } from './components/PainelPlataformaView';
 import { FichaLeadModal } from './components/FichaLeadModal';
 
 // Helper to look up active item meta
@@ -87,9 +86,6 @@ export default function App() {
 
   const renderSectionContent = () => {
     switch (activeSection) {
-      case 'painel_plataforma':
-        return <PainelPlataformaView />;
-
       case 'cadastro_rapido':
         return <CadastroRapidoView />;
 

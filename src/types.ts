@@ -1,5 +1,4 @@
 export type SectionId =
-  | 'painel_plataforma'
   | 'cadastro_rapido'
   | 'em_captacao'
   | 'consulta_agendada'
