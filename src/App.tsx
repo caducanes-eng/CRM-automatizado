@@ -54,31 +54,18 @@ export default function App() {
   const corPrimaria = config.estetica?.corPrimaria || '#5C3A22';
   const corSecundaria = config.estetica?.corSecundaria || '#8A6142';
 
-  // 1. Tela de Carregamento Inicial do Firebase Auth
+  // 1. Tela de Carregamento Inicial
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center text-[#1A1A1A] space-y-4">
-        {config.tipoLogo === 'imagem' && config.logoUrl ? (
-          <img
-            src={config.logoUrl}
-            alt={config.nomeEmpresa}
-            className="max-h-24 max-w-[400px] object-contain border-none rounded-none shadow-none animate-pulse"
-          />
-        ) : (
-          <div
-            className="w-20 h-20 bg-[#1A1A1A] text-white flex items-center justify-center font-bold text-2xl tracking-wider border-none rounded-none shadow-none animate-pulse"
-          >
-            {config.monogramaIniciais || 'AR'}
-          </div>
-        )}
+      <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center text-[#0F172A] space-y-3 font-sans">
+        <div className="w-12 h-12 rounded-xl bg-[#0F172A] text-white flex items-center justify-center font-bold text-xl shadow-md animate-pulse">
+          CRM
+        </div>
         <div className="text-center space-y-1">
-          <p className="text-sm font-bold text-[#1A1A1A] uppercase tracking-wider">
-            {config.nomeEmpresa || 'DRA. AGDA RODRIGUES'}
+          <p className="text-xs font-bold text-[#0F172A] uppercase tracking-wider">
+            SISTEMA CRM DE GESTÃO
           </p>
-          <p style={{ color: corSecundaria }} className="text-xs uppercase font-semibold tracking-wide">
-            {config.subtitulo || 'Harmonização Facial • CRM'}
-          </p>
-          <p className="text-[11px] text-[#6E6E6E]">Carregando ambiente seguro...</p>
+          <p className="text-[11px] text-[#64748B]">Carregando ambiente seguro...</p>
         </div>
       </div>
     );

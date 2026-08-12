@@ -303,6 +303,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
+      } else {
+        const savedSession = localStorage.getItem(STORAGE_SESSION_KEY);
+        if (!savedSession) {
+          setUser(null);
+          setSessionPerfil(null);
+        }
       }
       setIsLoading(false);
     });
@@ -805,10 +811,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Deslogar
+  // Deslogar: limpa completamente todos os logins e dados de sessão salvos
   const deslogar = async () => {
     setIsLoading(true);
     try {
+      localStorage.removeItem(STORAGE_SESSION_KEY);
+      localStorage.removeItem('crm_agda_rodrigues_auth_sessao_v1');
+      localStorage.removeItem('crm_sessao_responsavel_v2');
+      sessionStorage.clear();
+      setUser(null);
+      setSessionPerfil(null);
+      setErroAuth(null);
       await signOut(auth);
     } catch (e) {
       console.warn('signOut notice:', e);
@@ -817,6 +830,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setSessionPerfil(null);
       try {
         localStorage.removeItem(STORAGE_SESSION_KEY);
+        localStorage.removeItem('crm_agda_rodrigues_auth_sessao_v1');
+        localStorage.removeItem('crm_sessao_responsavel_v2');
+        sessionStorage.clear();
       } catch (e) {}
       setIsLoading(false);
     }
