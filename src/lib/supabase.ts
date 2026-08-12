@@ -292,7 +292,7 @@ export function isSupabaseConfigured(): boolean {
 }
 
 /**
- * Inicializa ou retorna a instância singleton do SupabaseClient
+ * Retorna a instância singleton do SupabaseClient sem recriar conexões
  */
 export function getSupabaseClient(): SupabaseClient | null {
   const config = getSupabaseConfig();
@@ -310,6 +310,7 @@ export function getSupabaseClient(): SupabaseClient | null {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
+        detectSessionInUrl: false, // Evita disparar reinicializações paralelas do GoTrueClient
       },
       realtime: {
         params: {

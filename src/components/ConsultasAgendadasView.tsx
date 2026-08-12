@@ -33,6 +33,7 @@ import {
   Lead,
   StatusConfirmacaoAgendamento,
   TODOS_STATUS_CONFIRMACAO_AGENDAMENTO,
+  StatusVenda,
 } from '../types';
 import { SEED_USUARIOS } from '../data/seedData';
 import {
@@ -58,6 +59,7 @@ export const ConsultasAgendadasView: React.FC = () => {
     obterFichaPorLead,
     abrirFichaLead,
     atualizarLead,
+    atualizarFichaLead,
     procedimentos,
     responsaveis,
   } = useCrm();
@@ -80,6 +82,8 @@ export const ConsultasAgendadasView: React.FC = () => {
 
   // Estados do formulário de agendamento no modal
   const [formLeadId, setFormLeadId] = useState('');
+  const [formNome, setFormNome] = useState('');
+  const [formTelefone, setFormTelefone] = useState('');
   const [formDataAgendamento, setFormDataAgendamento] = useState('');
   const [formHorarioAgendamento, setFormHorarioAgendamento] = useState('14:00');
   const [formProfissional, setFormProfissional] = useState('');
@@ -90,6 +94,8 @@ export const ConsultasAgendadasView: React.FC = () => {
   );
   const [formStatusConfirmacao, setFormStatusConfirmacao] =
     useState<StatusConfirmacaoAgendamento>('Agendada');
+  const [formPossivelValor, setFormPossivelValor] = useState<number | string>(0);
+  const [formLembrete24hEnviado, setFormLembrete24hEnviado] = useState(false);
 
   // Disparo de feedback
   const dispararFeedback = (msg: string) => {
@@ -330,6 +336,9 @@ export const ConsultasAgendadasView: React.FC = () => {
   const handleAbrirEditarAgendamento = (leadItem: Lead) => {
     setLeadEditando(leadItem);
     setFormLeadId(leadItem.id);
+    setFormNome(leadItem.nome || '');
+    const ficha = obterFichaPorLead(leadItem.id);
+    setFormTelefone(ficha?.telefone || '');
     setFormDataAgendamento(leadItem.dataAgendamento || obterDataHoje());
     setFormHorarioAgendamento(leadItem.horarioAgendamento || '14:00');
     setFormProfissional(
@@ -344,13 +353,28 @@ export const ConsultasAgendadasView: React.FC = () => {
         'Chegar 15 minutos antes. Vir sem maquiagem facial ou protetor solar com cor.'
     );
     setFormStatusConfirmacao(leadItem.statusConfirmacaoAgendamento || 'Agendada');
+    setFormPossivelValor(leadItem.possivelValor || 0);
+    setFormLembrete24hEnviado(Boolean(leadItem.lembrete24hEnviado));
   };
 
   // Abrir modal de novo agendamento
   const handleAbrirNovoAgendamento = () => {
     setLeadEditando(null);
     const primeiroLead = leadsDisponiveis[0];
-    setFormLeadId(primeiroLead ? primeiroLead.id : '');
+    const idSel = primeiroLead ? primeiroLead.id : '';
+    setFormLeadId(idSel);
+    if (primeiroLead) {
+      setFormNome(primeiroLead.nome || '');
+      const ficha = obterFichaPorLead(primeiroLead.id);
+      setFormTelefone(ficha?.telefone || '');
+      setFormTipoConsulta(primeiroLead.interesse || 'Avaliação de Harmonização Facial');
+      setFormPossivelValor(primeiroLead.possivelValor || 0);
+    } else {
+      setFormNome('');
+      setFormTelefone('');
+      setFormTipoConsulta('Avaliação de Harmonização Facial');
+      setFormPossivelValor(0);
+    }
     setFormDataAgendamento(amanhaStr);
     setFormHorarioAgendamento('14:00');
     const especialistaPadrao =
@@ -360,42 +384,77 @@ export const ConsultasAgendadasView: React.FC = () => {
       SEED_USUARIOS[0]?.nome ||
       '';
     setFormProfissional(especialistaPadrao);
-    setFormTipoConsulta(primeiroLead?.interesse || 'Avaliação de Harmonização Facial');
     setFormUnidade('Consultório Principal');
     setFormObservacoes(
       'Chegar 15 minutos antes. Vir sem maquiagem facial ou protetor solar com cor.'
     );
     setFormStatusConfirmacao('Agendada');
+    setFormLembrete24hEnviado(false);
     setModalNovoAgendamento(true);
   };
 
-  // Salvar agendamento no modal
+  const handleSelecionarLeadNovoAgendamento = (idSel: string) => {
+    setFormLeadId(idSel);
+    const l = leads.find((x) => x.id === idSel);
+    if (l) {
+      setFormNome(l.nome || '');
+      const ficha = obterFichaPorLead(l.id);
+      setFormTelefone(ficha?.telefone || '');
+      if (l.interesse) setFormTipoConsulta(l.interesse);
+      if (l.possivelValor) setFormPossivelValor(l.possivelValor);
+    }
+  };
+
+  // Salvar agendamento no modal (Persiste todas as edições no banco de dados e estado)
   const handleSalvarAgendamento = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetLeadId = leadEditando ? leadEditando.id : formLeadId;
     if (!targetLeadId) {
-      alert('Selecione um paciente para agendar.');
+      alert('Selecione ou identifique um paciente para agendar.');
       return;
     }
 
     const leadAlvo = leads.find((l) => l.id === targetLeadId);
 
+    // Preserva o status da venda (ex: Venda feita) ou mantém Em processo
+    const novoStatusVenda: StatusVenda = leadAlvo?.statusVenda || 'Em processo';
+
+    const lembreteRecemAtivado = formLembrete24hEnviado && !leadAlvo?.lembrete24hEnviado;
+
+    // 1. Salvar no banco de dados todas as informações do Lead da área de agendamento
     await atualizarLead(targetLeadId, {
+      nome: formNome.trim() || leadAlvo?.nome || 'Paciente',
       dataAgendamento: formDataAgendamento,
       horarioAgendamento: formHorarioAgendamento,
       profissionalAgendamento: formProfissional,
       tipoConsulta: formTipoConsulta,
+      interesse: formTipoConsulta,
       unidadeAgendamento: formUnidade,
       observacoesAgendamento: formObservacoes,
       statusConfirmacaoAgendamento: formStatusConfirmacao,
       situacao: 'Consulta agendada',
-      statusVenda: 'Em processo',
+      statusVenda: novoStatusVenda,
+      possivelValor: Number(formPossivelValor) || 0,
+      lembrete24hEnviado: formLembrete24hEnviado,
+      ...(lembreteRecemAtivado
+        ? {
+            dataEnvioLembrete24h: new Date().toLocaleString('pt-BR'),
+            mensagemLembrete24hEnviadaPor: responsavelNome || 'Secretária',
+          }
+        : {}),
     });
+
+    // 2. Salvar dados cadastrais na Ficha do Paciente (Telefone)
+    if (formTelefone.trim()) {
+      await atualizarFichaLead(targetLeadId, {
+        telefone: formTelefone.trim(),
+      });
+    }
 
     setLeadEditando(null);
     setModalNovoAgendamento(false);
     dispararFeedback(
-      `Consulta de ${leadAlvo?.nome || 'paciente'} agendada para ${formatarDataBR(formDataAgendamento)} às ${formHorarioAgendamento}!`
+      `Edições e agendamento de ${formNome.trim() || leadAlvo?.nome || 'paciente'} salvos com sucesso!`
     );
   };
 
@@ -942,14 +1001,7 @@ export const ConsultasAgendadasView: React.FC = () => {
                     id="select-novo-agendamento-lead"
                     required
                     value={formLeadId}
-                    onChange={(e) => {
-                      const idSel = e.target.value;
-                      setFormLeadId(idSel);
-                      const l = leads.find((x) => x.id === idSel);
-                      if (l && l.interesse) {
-                        setFormTipoConsulta(l.interesse);
-                      }
-                    }}
+                    onChange={(e) => handleSelecionarLeadNovoAgendamento(e.target.value)}
                     className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer"
                   >
                     <option value="">Selecione o paciente...</option>
@@ -961,6 +1013,46 @@ export const ConsultasAgendadasView: React.FC = () => {
                   </select>
                 </div>
               )}
+
+              {/* Dados Cadastrais Básicos do Paciente na Consulta */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 p-3 bg-[#F8F7F4] rounded-sm border border-[#D9D6D0]">
+                {/* Nome do Paciente */}
+                <div className="space-y-1">
+                  <label
+                    htmlFor="modal-input-nome-paciente"
+                    className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                  >
+                    Nome do Paciente <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    id="modal-input-nome-paciente"
+                    type="text"
+                    required
+                    value={formNome}
+                    onChange={(e) => setFormNome(e.target.value)}
+                    placeholder="Ex: Maria Clara Silva"
+                    className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-bold focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
+                  />
+                </div>
+
+                {/* Telefone / WhatsApp */}
+                <div className="space-y-1">
+                  <label
+                    htmlFor="modal-input-telefone-paciente"
+                    className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                  >
+                    Telefone / WhatsApp
+                  </label>
+                  <input
+                    id="modal-input-telefone-paciente"
+                    type="text"
+                    value={formTelefone}
+                    onChange={(e) => setFormTelefone(e.target.value)}
+                    placeholder="(11) 98765-4321"
+                    className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
+                  />
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 {/* Data do Agendamento */}
@@ -976,7 +1068,7 @@ export const ConsultasAgendadasView: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setFormDataAgendamento(hojeStr)}
-                        className="text-[10px] text-[#5C3A22] hover:underline font-bold uppercase"
+                        className="text-[10px] text-[#5C3A22] hover:underline font-bold uppercase cursor-pointer"
                       >
                         Hoje
                       </button>
@@ -984,7 +1076,7 @@ export const ConsultasAgendadasView: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setFormDataAgendamento(amanhaStr)}
-                        className="text-[10px] text-[#5C3A22] hover:underline font-bold uppercase"
+                        className="text-[10px] text-[#5C3A22] hover:underline font-bold uppercase cursor-pointer"
                       >
                         Amanhã
                       </button>
@@ -1068,46 +1160,96 @@ export const ConsultasAgendadasView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Tipo de Consulta / Procedimento */}
-              <div className="space-y-1">
-                <label
-                  htmlFor="modal-input-tipo-consulta"
-                  className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
-                >
-                  Tipo de Consulta / Procedimento
-                </label>
-                <input
-                  id="modal-input-tipo-consulta"
-                  type="text"
-                  value={formTipoConsulta}
-                  onChange={(e) => setFormTipoConsulta(e.target.value)}
-                  placeholder="Ex: Avaliação Facial, Botox, Preenchimento..."
-                  className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                {/* Tipo de Consulta / Procedimento */}
+                <div className="space-y-1">
+                  <label
+                    htmlFor="modal-input-tipo-consulta"
+                    className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                  >
+                    Tipo de Consulta / Procedimento
+                  </label>
+                  <input
+                    id="modal-input-tipo-consulta"
+                    type="text"
+                    value={formTipoConsulta}
+                    onChange={(e) => setFormTipoConsulta(e.target.value)}
+                    placeholder="Ex: Avaliação Facial, Botox, Preenchimento..."
+                    className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
+                  />
+                </div>
+
+                {/* Possível Valor / Valor Estimado */}
+                <div className="space-y-1">
+                  <label
+                    htmlFor="modal-input-possivel-valor"
+                    className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                  >
+                    Possível Valor da Consulta / Procedimento (R$)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#8F887E]">
+                      R$
+                    </span>
+                    <input
+                      id="modal-input-possivel-valor"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formPossivelValor}
+                      onChange={(e) => setFormPossivelValor(e.target.value)}
+                      placeholder="0,00"
+                      className="w-full h-9 pl-9 pr-3 text-xs rounded-sm border border-[#D9D6D0] bg-white font-bold text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
+                    />
+                  </div>
+                </div>
               </div>
 
-              {/* Status de Confirmação */}
-              <div className="space-y-1">
-                <label
-                  htmlFor="modal-select-status-confirmacao"
-                  className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
-                >
-                  Status da Confirmação
-                </label>
-                <select
-                  id="modal-select-status-confirmacao"
-                  value={formStatusConfirmacao}
-                  onChange={(e) =>
-                    setFormStatusConfirmacao(e.target.value as StatusConfirmacaoAgendamento)
-                  }
-                  className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white font-bold text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer"
-                >
-                  {TODOS_STATUS_CONFIRMACAO_AGENDAMENTO.map((st) => (
-                    <option key={st} value={st}>
-                      {st}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                {/* Status de Confirmação */}
+                <div className="space-y-1">
+                  <label
+                    htmlFor="modal-select-status-confirmacao"
+                    className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                  >
+                    Status da Confirmação
+                  </label>
+                  <select
+                    id="modal-select-status-confirmacao"
+                    value={formStatusConfirmacao}
+                    onChange={(e) =>
+                      setFormStatusConfirmacao(e.target.value as StatusConfirmacaoAgendamento)
+                    }
+                    className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white font-bold text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer"
+                  >
+                    {TODOS_STATUS_CONFIRMACAO_AGENDAMENTO.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Status Lembrete 24h Enviado */}
+                <div className="space-y-1 flex flex-col justify-end">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A] mb-1">
+                    Lembrete de 24h Antes
+                  </label>
+                  <label
+                    id="modal-toggle-lembrete-24h"
+                    className="flex items-center justify-between h-9 px-3 rounded-sm border border-[#D9D6D0] bg-white cursor-pointer select-none"
+                  >
+                    <span className="text-xs font-semibold text-[#1A1A1A]">
+                      {formLembrete24hEnviado ? '✓ Mensagem 24h Enviada' : '⏰ Mensagem Pendente'}
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={formLembrete24hEnviado}
+                      onChange={(e) => setFormLembrete24hEnviado(e.target.checked)}
+                      className="w-4 h-4 rounded-xs text-[#5C3A22] focus:ring-[#5C3A22] cursor-pointer"
+                    />
+                  </label>
+                </div>
               </div>
 
               {/* Orientações Prévias ao Paciente */}
