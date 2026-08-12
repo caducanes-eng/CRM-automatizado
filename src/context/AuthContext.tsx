@@ -19,8 +19,8 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { auth, db, sanitizeForFirestore } from '../lib/firebase';
-import { supabaseService } from '../services/supabaseService';
-import { isSupabaseConfigured } from '../lib/supabase';
+import { supabaseService, supabaseMapper } from '../services/supabaseService';
+import { isSupabaseConfigured, getSupabaseClient } from '../lib/supabase';
 import {
   UsuarioColaborador,
   CriarUsuarioPayload,
@@ -232,6 +232,71 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (unsubscribeFirestore) unsubscribeFirestore();
     };
   }, []);
+
+  // Sincronização e escuta em tempo real de Usuários no Supabase
+  const carregarUsuariosSupabase = useCallback(async () => {
+    if (!isSupabaseConfigured()) return;
+    try {
+      const client = getSupabaseClient();
+      if (!client) return;
+      const { data, error } = await client
+        .from('usuarios')
+        .select('*')
+        .is('deleted_at', null);
+
+      if (!error && data && data.length > 0) {
+        const list = data.map(supabaseMapper.dbToUsuario);
+        list.sort((a, b) => {
+          if (a.role === 'GESTOR' && b.role !== 'GESTOR') return -1;
+          if (a.role !== 'GESTOR' && b.role === 'GESTOR') return 1;
+          return a.nome.localeCompare(b.nome);
+        });
+        setUsuarios(list);
+      }
+    } catch (e) {
+      console.warn('Aviso sobre carregamento de usuários do Supabase:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isSupabaseConfigured()) {
+      carregarUsuariosSupabase();
+    }
+
+    const handleConfigChange = () => {
+      if (isSupabaseConfigured()) {
+        carregarUsuariosSupabase();
+      }
+    };
+
+    window.addEventListener('supabase-config-changed', handleConfigChange);
+
+    let channel: any = null;
+    if (isSupabaseConfigured()) {
+      const client = getSupabaseClient();
+      if (client) {
+        channel = client
+          .channel('auth_usuarios_realtime_channel')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'usuarios' },
+            () => {
+              carregarUsuariosSupabase();
+            }
+          )
+          .subscribe();
+      }
+    }
+
+    return () => {
+      window.removeEventListener('supabase-config-changed', handleConfigChange);
+      if (channel) {
+        try {
+          channel.unsubscribe();
+        } catch (e) {}
+      }
+    };
+  }, [carregarUsuariosSupabase]);
 
   // Carregar sessão salva e escutar Firebase Auth
   useEffect(() => {

@@ -39,8 +39,8 @@ import {
   SEED_PLATAFORMA_ADMINS,
 } from '../data/seedData';
 import { obterCoresSidebarCompletas, aplicarVariaveisCss } from '../utils/estetica';
-import { supabaseService } from '../services/supabaseService';
-import { isSupabaseConfigured } from '../lib/supabase';
+import { supabaseService, supabaseMapper } from '../services/supabaseService';
+import { isSupabaseConfigured, getSupabaseClient } from '../lib/supabase';
 
 const STORAGE_KEYS = {
   EMPRESAS: 'crm_multiempresa_empresas_v1',
@@ -355,6 +355,67 @@ export const EmpresaProvider: React.FC<{
       unsubs.forEach((fn) => fn());
     };
   }, []);
+
+  // Sincronização em tempo real de Empresas via Supabase
+  const carregarEmpresasSupabase = useCallback(async () => {
+    if (!isSupabaseConfigured()) return;
+    try {
+      const client = getSupabaseClient();
+      if (!client) return;
+      const { data, error } = await client
+        .from('empresas')
+        .select('*')
+        .is('deleted_at', null)
+        .order('nome', { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        const list = data.map(supabaseMapper.dbToEmpresa);
+        setEmpresas(list);
+      }
+    } catch (e) {
+      console.warn('Aviso sobre carregamento de empresas do Supabase:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isSupabaseConfigured()) {
+      carregarEmpresasSupabase();
+    }
+
+    const handleConfigChange = () => {
+      if (isSupabaseConfigured()) {
+        carregarEmpresasSupabase();
+      }
+    };
+
+    window.addEventListener('supabase-config-changed', handleConfigChange);
+
+    let channel: any = null;
+    if (isSupabaseConfigured()) {
+      const client = getSupabaseClient();
+      if (client) {
+        channel = client
+          .channel('empresa_realtime_channel')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'empresas' },
+            () => {
+              carregarEmpresasSupabase();
+            }
+          )
+          .subscribe();
+      }
+    }
+
+    return () => {
+      window.removeEventListener('supabase-config-changed', handleConfigChange);
+      if (channel) {
+        try {
+          channel.unsubscribe();
+        } catch (e) {}
+      }
+    };
+  }, [carregarEmpresasSupabase]);
 
   // Verificar se o usuário autenticado é Gestor Geral da Plataforma
   const isPlataformaAdmin = useMemo<boolean>(() => {
