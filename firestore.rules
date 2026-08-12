@@ -29,6 +29,9 @@ service cloud.firestore {
     match /configuracoes/{configId} {
       allow read, write: if true;
     }
+    match /configuracoes_sistema/{docId} {
+      allow read, write: if true;
+    }
   }
 }
 

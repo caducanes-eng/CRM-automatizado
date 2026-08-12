@@ -196,14 +196,19 @@ export function iniciarEscutaSupabaseConfigFirestore(): () => void {
         if (snapshot.exists()) {
           const data = snapshot.data();
           if (data && data.url && data.anonKey) {
+            const newUrl = data.url.trim();
+            const newKey = data.anonKey.trim();
             const current = getSupabaseConfig();
-            if (current.url !== data.url.trim() || current.anonKey !== data.anonKey.trim()) {
-              console.info('⚡ Supabase Config atualizado via Firestore pelo Gestor Master!');
-              localStorage.setItem(
-                STORAGE_KEY_SUPABASE,
-                JSON.stringify({ url: data.url.trim(), anonKey: data.anonKey.trim() })
-              );
 
+            const alterado = current.url !== newUrl || current.anonKey !== newKey;
+
+            localStorage.setItem(
+              STORAGE_KEY_SUPABASE,
+              JSON.stringify({ url: newUrl, anonKey: newKey })
+            );
+
+            if (alterado) {
+              console.info('⚡ Supabase Config atualizado via Firestore pelo Gestor Master!');
               if (globalRealtimeChannel) {
                 try {
                   globalRealtimeChannel.unsubscribe();
@@ -212,11 +217,11 @@ export function iniciarEscutaSupabaseConfigFirestore(): () => void {
               }
               cachedClient = null;
               lastClientKey = '';
+            }
 
-              logRealtimeEvent('SISTEMA', 'SYSTEM', 'Credenciais do Supabase sincronizadas do Gestor Master.');
-              if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('supabase-config-changed'));
-              }
+            logRealtimeEvent('SISTEMA', 'SYSTEM', 'Credenciais do Supabase sincronizadas do Gestor Master.');
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('supabase-config-changed'));
             }
           }
         }
@@ -264,11 +269,17 @@ export function clearSupabaseConfig(): void {
 }
 
 /**
- * Verifica se o Supabase possui URL e chave configuradas
+ * Verifica se o Supabase possui URL e chave configuradas e válidas
  */
 export function isSupabaseConfigured(): boolean {
   const config = getSupabaseConfig();
-  return Boolean(config.url && config.anonKey);
+  if (!config.url || !config.anonKey) return false;
+  try {
+    const parsed = new URL(config.url);
+    return Boolean(parsed.protocol && (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.hostname);
+  } catch (e) {
+    return false;
+  }
 }
 
 /**
@@ -403,9 +414,12 @@ export async function testSupabaseConnection(
       detalhes: { empresasEncontradas: empresas?.length || 0 },
     };
   } catch (error: any) {
+    const isFetchError = error?.message?.includes('Failed to fetch') || error?.name === 'TypeError';
     return {
       sucesso: false,
-      mensagem: `Falha de rede ou configuração ao comunicar com Supabase: ${error?.message || 'Erro desconhecido'}`,
+      mensagem: isFetchError
+        ? 'Falha ao conectar no Supabase. Verifique se a URL e a Chave Anon estão corretas e se o projeto Supabase está ativo.'
+        : `Falha de rede ou configuração ao comunicar com Supabase: ${error?.message || 'Erro desconhecido'}`,
       detalhes: error,
     };
   }

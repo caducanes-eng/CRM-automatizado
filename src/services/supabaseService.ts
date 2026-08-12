@@ -676,73 +676,33 @@ export const supabaseService = {
     if (!client) return null;
 
     try {
-      // 1. Empresas ativas
-      const { data: rowsEmpresas } = await client
-        .from('empresas')
-        .select('*')
-        .is('deleted_at', null)
-        .order('nome', { ascending: true });
+      const [resEmpresas, resLeads, resFichas, resCompras, resProc, resUsers] = await Promise.all([
+        client.from('empresas').select('*').is('deleted_at', null).order('nome', { ascending: true }),
+        client.from('leads').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
+        client.from('fichas_leads').select('*').is('deleted_at', null),
+        client.from('compras').select('*').is('deleted_at', null).order('data', { ascending: false }),
+        client.from('procedimentos').select('*').is('deleted_at', null).order('nome', { ascending: true }),
+        client.from('usuarios').select('*').is('deleted_at', null),
+      ]);
 
-      // 2. Leads ativos
-      const { data: rowsLeads, error: errLeads } = await client
-        .from('leads')
-        .select('*')
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false });
-
-      if (errLeads) throw errLeads;
-
-      // INSPEÇÃO NO CONSOLE: Exibe no navegador o que o Supabase entregou
-      console.log('🔍 DADOS BRUTOS DOS LEADS VINDOS DO SUPABASE:', rowsLeads);
-
-      // 3. Fichas ativas
-      const { data: rowsFichas, error: errFichas } = await client
-        .from('fichas_leads')
-        .select('*')
-        .is('deleted_at', null);
-
-      if (errFichas) throw errFichas;
-
-      // 4. Compras ativas
-      const { data: rowsCompras, error: errCompras } = await client
-        .from('compras')
-        .select('*')
-        .is('deleted_at', null)
-        .order('data', { ascending: false });
-
-      if (errCompras) throw errCompras;
-
-      // INSPEÇÃO NO CONSOLE: Exibe as compras brutas no navegador
-      console.log('🔍 DADOS BRUTOS DAS COMPRAS VINDAS DO SUPABASE:', rowsCompras);
-
-      // 5. Procedimentos ativos
-      const { data: rowsProcedimentos, error: errProc } = await client
-        .from('procedimentos')
-        .select('*')
-        .is('deleted_at', null)
-        .order('nome', { ascending: true });
-
-      if (errProc) throw errProc;
-
-      // 6. Usuários ativos
-      const { data: rowsUsuarios, error: errUsers } = await client
-        .from('usuarios')
-        .select('*')
-        .is('deleted_at', null);
-
-      if (errUsers) throw errUsers;
+      const rowsEmpresas = resEmpresas.data || [];
+      const rowsLeads = resLeads.data || [];
+      const rowsFichas = resFichas.data || [];
+      const rowsCompras = resCompras.data || [];
+      const rowsProcedimentos = resProc.data || [];
+      const rowsUsuarios = resUsers.data || [];
 
       return {
-        empresas: (rowsEmpresas || []).map(supabaseMapper.dbToEmpresa),
-        leads: (rowsLeads || []).map(supabaseMapper.dbToLead),
-        fichas: (rowsFichas || []).map(supabaseMapper.dbToFicha),
-        compras: (rowsCompras || []).map(supabaseMapper.dbToCompra),
-        procedimentos: (rowsProcedimentos || []).map(supabaseMapper.dbToProcedimento),
-        usuarios: (rowsUsuarios || []).map(supabaseMapper.dbToUsuario),
+        empresas: rowsEmpresas.map(supabaseMapper.dbToEmpresa),
+        leads: rowsLeads.map(supabaseMapper.dbToLead),
+        fichas: rowsFichas.map(supabaseMapper.dbToFicha),
+        compras: rowsCompras.map(supabaseMapper.dbToCompra),
+        procedimentos: rowsProcedimentos.map(supabaseMapper.dbToProcedimento),
+        usuarios: rowsUsuarios.map(supabaseMapper.dbToUsuario),
       };
-    } catch (error) {
-      console.error('Erro ao carregar dados do Supabase:', error);
-      throw error;
+    } catch (error: any) {
+      console.warn('Aviso ao carregar dados do Supabase:', error?.message || error);
+      return null;
     }
   },
 

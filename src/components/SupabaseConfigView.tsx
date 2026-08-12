@@ -45,6 +45,7 @@ import {
   getRealtimeStatus,
   subscribeRealtimeStatus,
   subscribeRealtimeLogs,
+  iniciarEscutaSupabaseConfigFirestore,
   RealtimeLogEntry,
   RealtimeStatusType,
 } from '../lib/supabase';
@@ -133,9 +134,25 @@ export const SupabaseConfigView: React.FC = () => {
       setRealtimeLogs(logs);
     });
 
+    const unsubFirestore = iniciarEscutaSupabaseConfigFirestore();
+
+    const handleConfigChanged = () => {
+      const newCfg = getSupabaseConfig();
+      setUrl(newCfg.url);
+      setAnonKey(newCfg.anonKey);
+      setOrigemConfig(newCfg.origem);
+      if (newCfg.url && newCfg.anonKey) {
+        executarTesteConexao(newCfg.url, newCfg.anonKey);
+      }
+    };
+
+    window.addEventListener('supabase-config-changed', handleConfigChanged);
+
     return () => {
       unsubStatus();
       unsubLogs();
+      unsubFirestore();
+      window.removeEventListener('supabase-config-changed', handleConfigChanged);
     };
   }, []);
 

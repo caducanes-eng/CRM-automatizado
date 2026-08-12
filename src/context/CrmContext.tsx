@@ -210,7 +210,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       setIsLoading(true);
       if (!isSupabaseConfigured()) {
-        console.warn('⚠️ Supabase não configurado.');
+        setIsLoading(false);
         return;
       }
 
@@ -225,10 +225,13 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const nomes = dados.usuarios.filter((u) => !u.deleted_at && u.ativo !== false).map((u) => u.nome);
           if (nomes.length > 0) setResponsaveis(nomes);
         }
-        console.log('✅ CrmContext carregado do Supabase com sucesso.');
+        setRealtimeStatus('CONECTADO');
+      } else {
+        setRealtimeStatus('ERRO');
       }
-    } catch (error) {
-      console.error('❌ Erro ao carregar dados do Supabase:', error);
+    } catch (error: any) {
+      setRealtimeStatus('ERRO');
+      console.warn('Aviso ao carregar dados do Supabase:', error?.message || error);
     } finally {
       setIsLoading(false);
     }
