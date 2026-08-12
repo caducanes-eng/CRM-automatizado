@@ -86,7 +86,7 @@ export const ControleAcessosView: React.FC = () => {
   }>({
     nome: '',
     email: '',
-    senhaPadrao: 'Lumina@2026',
+    senhaPadrao: 'Agda@2026',
     cargo: '',
     role: 'RECEPCAO_COMERCIAL',
     telefone: '',
@@ -98,7 +98,7 @@ export const ControleAcessosView: React.FC = () => {
   const [formSalvando, setFormSalvando] = useState(false);
 
   // Nova senha temporária para modal de redefinição
-  const [novaSenhaTemp, setNovaSenhaTemp] = useState('Lumina@2026');
+  const [novaSenhaTemp, setNovaSenhaTemp] = useState('Agda@2026');
 
   // Helper para copiar texto
   const copiarTexto = (texto: string, id: string) => {
@@ -118,7 +118,7 @@ export const ControleAcessosView: React.FC = () => {
     setFormData({
       nome: '',
       email: '',
-      senhaPadrao: `Lumina@${new Date().getFullYear()}`,
+      senhaPadrao: 'Agda@2026',
       cargo: '',
       role: 'RECEPCAO_COMERCIAL',
       telefone: '',

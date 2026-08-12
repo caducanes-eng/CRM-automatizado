@@ -21,6 +21,21 @@ import {
 export const ID_EMPRESA_PADRAO = '00000000-0000-0000-0000-000000000001';
 
 /**
+ * Sanitiza datas para o PostgreSQL (aceita apenas YYYY-MM-DD ou retorna null).
+ * Evita erros de sintaxe ao gravar strings vazias "" em colunas do tipo DATE.
+ */
+export function sanitizeDate(val?: string | null): string | null {
+  if (!val || typeof val !== 'string') return null;
+  const limpo = val.trim();
+  if (!limpo || limpo === 'null' || limpo === 'undefined') return null;
+  const part = limpo.split('T')[0];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(part)) {
+    return part;
+  }
+  return null;
+}
+
+/**
  * Garante que o identificador seja um UUID v4 válido e consistente para o PostgreSQL.
  * Se for um ID textual legado (ex: 'empresa-dra-agda-01', 'lead-1'), gera um UUID determinístico.
  */
@@ -196,30 +211,35 @@ export const supabaseMapper = {
   }),
 
   // LEAD
-  leadToDb: (lead: Lead, empresaId: string = ID_EMPRESA_PADRAO) => ({
-    id: normalizarUuid(lead.id),
-    empresa_id: normalizarUuid(empresaId),
-    nome: lead.nome,
-    situacao: lead.situacao,
-    etapa_por_situacao: lead.etapaPorSituacao || {},
-    interesse: lead.interesse || '',
-    possivel_valor: Number(lead.possivelValor || 0),
-    status_venda: lead.statusVenda || 'Em processo',
-    data_entrada: lead.dataEntrada || new Date().toISOString().split('T')[0],
-    responsavel: lead.responsavel || 'Secretária 1',
-    data_entrada_nutricao: lead.dataEntradaNutricao || null,
-    status_grupo_nutricao: lead.statusGrupoNutricao || 'Ativo',
-    motivo_perda: lead.motivoPerda || null,
-    data_perda: lead.dataPerda || null,
-    situacao_perda: lead.situacaoPerda || null,
-    created_at: lead.created_at || new Date().toISOString(),
-    updated_at: lead.updated_at || new Date().toISOString(),
-    deleted_at: lead.deleted_at || null,
-    version: Number(lead.version || 1),
-  }),
+  leadToDb: (lead: Lead, empresaId: string = ID_EMPRESA_PADRAO) => {
+    const eId = lead.empresaId || (lead as any).empresa_id || empresaId;
+    return {
+      id: normalizarUuid(lead.id),
+      empresa_id: normalizarUuid(eId),
+      nome: lead.nome ? String(lead.nome).trim() : 'Sem Nome',
+      situacao: lead.situacao || 'Em captação',
+      etapa_por_situacao: lead.etapaPorSituacao || {},
+      interesse: lead.interesse ? String(lead.interesse).trim() : '',
+      possivel_valor: Number(lead.possivelValor || 0),
+      status_venda: lead.statusVenda || 'Em processo',
+      data_entrada: sanitizeDate(lead.dataEntrada) || new Date().toISOString().split('T')[0],
+      responsavel: lead.responsavel ? String(lead.responsavel).trim() : 'Secretária 1',
+      data_entrada_nutricao: sanitizeDate(lead.dataEntradaNutricao),
+      status_grupo_nutricao: lead.statusGrupoNutricao || 'Ativo',
+      motivo_perda: lead.motivoPerda ? String(lead.motivoPerda).trim() : null,
+      data_perda: sanitizeDate(lead.dataPerda),
+      situacao_perda: lead.situacaoPerda || null,
+      created_at: lead.created_at || new Date().toISOString(),
+      updated_at: lead.updated_at || new Date().toISOString(),
+      deleted_at: lead.deleted_at || null,
+      version: Number(lead.version || 1),
+    };
+  },
 
   dbToLead: (row: any): Lead => ({
     id: row.id,
+    empresaId: row.empresa_id,
+    empresa_id: row.empresa_id,
     nome: row.nome,
     situacao: row.situacao as SituacaoLead,
     etapaPorSituacao: row.etapa_por_situacao || {},
@@ -240,25 +260,30 @@ export const supabaseMapper = {
   }),
 
   // FICHA DO LEAD
-  fichaToDb: (ficha: FichaLead, empresaId: string = ID_EMPRESA_PADRAO) => ({
-    id: normalizarUuid(ficha.id),
-    empresa_id: normalizarUuid(empresaId),
-    lead_id: normalizarUuid(ficha.leadId),
-    telefone: ficha.telefone || '',
-    origem_lead: ficha.origemLead || 'WhatsApp',
-    data_nascimento: ficha.dataNascimento || null,
-    endereco: ficha.endereco || '',
-    observacoes: ficha.observacoes || '',
-    motivo_perda: ficha.motivoPerda || null,
-    data_perda: ficha.dataPerda || null,
-    created_at: ficha.created_at || new Date().toISOString(),
-    updated_at: ficha.updated_at || new Date().toISOString(),
-    deleted_at: ficha.deleted_at || null,
-    version: Number(ficha.version || 1),
-  }),
+  fichaToDb: (ficha: FichaLead, empresaId: string = ID_EMPRESA_PADRAO) => {
+    const eId = ficha.empresaId || (ficha as any).empresa_id || empresaId;
+    return {
+      id: normalizarUuid(ficha.id),
+      empresa_id: normalizarUuid(eId),
+      lead_id: normalizarUuid(ficha.leadId),
+      telefone: ficha.telefone ? String(ficha.telefone).trim() : '',
+      origem_lead: ficha.origemLead || 'WhatsApp',
+      data_nascimento: sanitizeDate(ficha.dataNascimento),
+      endereco: ficha.endereco ? String(ficha.endereco).trim() : '',
+      observacoes: ficha.observacoes ? String(ficha.observacoes).trim() : '',
+      motivo_perda: ficha.motivoPerda ? String(ficha.motivoPerda).trim() : null,
+      data_perda: sanitizeDate(ficha.dataPerda),
+      created_at: ficha.created_at || new Date().toISOString(),
+      updated_at: ficha.updated_at || new Date().toISOString(),
+      deleted_at: ficha.deleted_at || null,
+      version: Number(ficha.version || 1),
+    };
+  },
 
   dbToFicha: (row: any): FichaLead => ({
     id: row.id,
+    empresaId: row.empresa_id,
+    empresa_id: row.empresa_id,
     leadId: row.lead_id,
     telefone: row.telefone || '',
     origemLead: (row.origem_lead as OrigemLead) || 'WhatsApp',
@@ -274,22 +299,27 @@ export const supabaseMapper = {
   }),
 
   // COMPRA
-  compraToDb: (compra: Compra, empresaId: string = ID_EMPRESA_PADRAO) => ({
-    id: normalizarUuid(compra.id),
-    empresa_id: normalizarUuid(empresaId),
-    lead_id: normalizarUuid(compra.leadId),
-    data: compra.data || new Date().toISOString().split('T')[0],
-    procedimento: compra.procedimento || '',
-    valor: Number(compra.valor || 0),
-    forma_pagamento: 'Pix / Cartão',
-    created_at: compra.created_at || new Date().toISOString(),
-    updated_at: compra.updated_at || new Date().toISOString(),
-    deleted_at: compra.deleted_at || null,
-    version: Number(compra.version || 1),
-  }),
+  compraToDb: (compra: Compra, empresaId: string = ID_EMPRESA_PADRAO) => {
+    const eId = compra.empresaId || (compra as any).empresa_id || empresaId;
+    return {
+      id: normalizarUuid(compra.id),
+      empresa_id: normalizarUuid(eId),
+      lead_id: normalizarUuid(compra.leadId),
+      data: sanitizeDate(compra.data) || new Date().toISOString().split('T')[0],
+      procedimento: compra.procedimento || '',
+      valor: Number(compra.valor || 0),
+      forma_pagamento: (compra as any).forma_pagamento || (compra as any).formaPagamento || 'Pix / Cartão',
+      created_at: compra.created_at || new Date().toISOString(),
+      updated_at: compra.updated_at || new Date().toISOString(),
+      deleted_at: compra.deleted_at || null,
+      version: Number(compra.version || 1),
+    };
+  },
 
   dbToCompra: (row: any): Compra => ({
     id: row.id,
+    empresaId: row.empresa_id,
+    empresa_id: row.empresa_id,
     leadId: row.lead_id,
     data: row.data,
     procedimento: row.procedimento,
@@ -301,25 +331,30 @@ export const supabaseMapper = {
   }),
 
   // PROCEDIMENTO
-  procedimentoToDb: (proc: ProcedimentoClinica, empresaId: string = ID_EMPRESA_PADRAO) => ({
-    id: normalizarUuid(proc.id),
-    empresa_id: normalizarUuid(empresaId),
-    nome: proc.nome,
-    categoria: proc.categoria || 'Injetáveis',
-    valor: Number(proc.valor || 0),
-    formatos_pagamento: proc.formatosPagamento || '',
-    duracao_dias: Number(proc.duracaoDias || 180),
-    descricao: proc.descricao || '',
-    orientacoes: proc.orientacoes || '',
-    ativo: proc.ativo !== false,
-    created_at: proc.created_at || new Date().toISOString(),
-    updated_at: proc.updated_at || new Date().toISOString(),
-    deleted_at: proc.deleted_at || null,
-    version: Number(proc.version || 1),
-  }),
+  procedimentoToDb: (proc: ProcedimentoClinica, empresaId: string = ID_EMPRESA_PADRAO) => {
+    const eId = proc.empresaId || (proc as any).empresa_id || empresaId;
+    return {
+      id: normalizarUuid(proc.id),
+      empresa_id: normalizarUuid(eId),
+      nome: proc.nome,
+      categoria: proc.categoria || 'Injetáveis',
+      valor: Number(proc.valor || 0),
+      formatos_pagamento: proc.formatosPagamento || '',
+      duracao_dias: Number(proc.duracaoDias || 180),
+      descricao: proc.descricao || '',
+      orientacoes: proc.orientacoes || '',
+      ativo: proc.ativo !== false,
+      created_at: proc.created_at || new Date().toISOString(),
+      updated_at: proc.updated_at || new Date().toISOString(),
+      deleted_at: proc.deleted_at || null,
+      version: Number(proc.version || 1),
+    };
+  },
 
   dbToProcedimento: (row: any): ProcedimentoClinica => ({
     id: row.id,
+    empresaId: row.empresa_id,
+    empresa_id: row.empresa_id,
     nome: row.nome,
     categoria: row.categoria,
     valor: Number(row.valor || 0),
@@ -335,29 +370,34 @@ export const supabaseMapper = {
   }),
 
   // USUARIO
-  usuarioToDb: (usuario: UsuarioColaborador, empresaId: string = ID_EMPRESA_PADRAO) => ({
-    id: normalizarUuid(usuario.id),
-    empresa_id: normalizarUuid(empresaId),
-    nome: usuario.nome,
-    email: usuario.email,
-    cargo: usuario.cargo || 'Colaborador',
-    role: usuario.role || 'RECEPCAO_COMERCIAL',
-    permissoes: usuario.permissoes || {},
-    iniciais: usuario.iniciais || '',
-    cor_badge: usuario.corBadge || '#5C3A22',
-    telefone: usuario.telefone || '',
-    ativo: usuario.ativo !== false,
-    ultimo_acesso: usuario.ultimoAcesso || null,
-    criado_por: usuario.criadoPor || 'Sistema',
-    observacoes: usuario.observacoes || '',
-    created_at: usuario.created_at || new Date().toISOString(),
-    updated_at: usuario.updated_at || new Date().toISOString(),
-    deleted_at: usuario.deleted_at || null,
-    version: Number(usuario.version || 1),
-  }),
+  usuarioToDb: (usuario: UsuarioColaborador, empresaId: string = ID_EMPRESA_PADRAO) => {
+    const eId = usuario.empresaId || (usuario as any).empresa_id || empresaId;
+    return {
+      id: normalizarUuid(usuario.id),
+      empresa_id: normalizarUuid(eId),
+      nome: usuario.nome,
+      email: usuario.email,
+      cargo: usuario.cargo || 'Colaborador',
+      role: usuario.role || 'RECEPCAO_COMERCIAL',
+      permissoes: usuario.permissoes || {},
+      iniciais: usuario.iniciais || '',
+      cor_badge: usuario.corBadge || '#5C3A22',
+      telefone: usuario.telefone || '',
+      ativo: usuario.ativo !== false,
+      ultimo_acesso: usuario.ultimoAcesso || null,
+      criado_por: usuario.criadoPor || 'Sistema',
+      observacoes: usuario.observacoes || '',
+      created_at: usuario.created_at || new Date().toISOString(),
+      updated_at: usuario.updated_at || new Date().toISOString(),
+      deleted_at: usuario.deleted_at || null,
+      version: Number(usuario.version || 1),
+    };
+  },
 
   dbToUsuario: (row: any): UsuarioColaborador => ({
     id: row.id,
+    empresaId: row.empresa_id,
+    empresa_id: row.empresa_id,
     nome: row.nome,
     email: row.email,
     senhaPadrao: '******',

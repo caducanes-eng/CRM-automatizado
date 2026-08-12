@@ -81,6 +81,21 @@ export const SEED_EMPRESAS: Empresa[] = [
 // =========================================================================
 export const SEED_EMPRESA_MEMBROS: EmpresaMembro[] = [
   {
+    id: 'membro-00',
+    userId: 'user-cadu',
+    empresaId: ID_EMPRESA_PADRAO,
+    papel: 'admin',
+    ativo: true,
+    usuarioNome: 'Cadu Canes (Gestor Geral)',
+    usuarioEmail: 'caducanes@gmail.com',
+    usuarioCargo: 'Gestor Geral / Administrador Master',
+    ultimoAcesso: new Date().toISOString(),
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 365).toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    version: 1,
+  },
+  {
     id: 'membro-01',
     userId: 'user-gestao',
     empresaId: ID_EMPRESA_PADRAO,
@@ -158,6 +173,27 @@ export const SEED_EMPRESA_MEMBROS: EmpresaMembro[] = [
 ];
 
 export const SEED_USUARIOS: UsuarioColaborador[] = [
+  {
+    id: 'user-cadu',
+    empresaId: ID_EMPRESA_PADRAO,
+    nome: 'Cadu Canes (Gestor Geral)',
+    email: 'caducanes@gmail.com',
+    senhaPadrao: 'Agda@2026',
+    cargo: 'Gestor Geral / Administrador Master',
+    role: 'GESTOR',
+    permissoes: PERMISSOES_PRESET_GESTOR,
+    iniciais: 'CC',
+    corBadge: 'bg-[#1A1A1A] text-white border border-[#5C3A22]',
+    telefone: '(11) 99999-8888',
+    ativo: true,
+    ultimoAcesso: new Date().toISOString(),
+    criadoPor: 'Sistema / Administrador Master',
+    observacoes: 'Super Administrador com acesso global e controle irrestrito a todas as clínicas',
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 365).toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    version: 1,
+  },
   {
     id: 'user-gestao',
     empresaId: ID_EMPRESA_PADRAO,
