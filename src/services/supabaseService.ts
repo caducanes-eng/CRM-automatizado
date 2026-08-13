@@ -16,6 +16,8 @@ import {
   StatusEmpresa,
   PapelEmpresa,
   EsteticaPlataforma,
+  CriarLeadPayload,
+  AtualizarLeadPayload,
 } from '../types';
 
 export const ID_EMPRESA_PADRAO = '00000000-0000-0000-0000-000000000001';
@@ -213,8 +215,8 @@ export const supabaseMapper = {
   // LEAD
   leadToDb: (lead: Lead, empresaId: string = ID_EMPRESA_PADRAO) => {
     const eId = lead.empresaId || (lead as any).empresa_id || empresaId;
-    
-    // Objeto de agendamento preservado dentro do JSONB de etapa_por_situacao para resiliência total
+
+    // Objeto de agendamento preservado dentro do JSONB de etapa_por_situacao sob a chave _agendamento
     const agendamentoMeta = {
       dataAgendamento: lead.dataAgendamento || null,
       horarioAgendamento: lead.horarioAgendamento || null,
@@ -249,11 +251,10 @@ export const supabaseMapper = {
       motivo_perda: lead.motivoPerda ? String(lead.motivoPerda).trim() : null,
       data_perda: sanitizeDate(lead.dataPerda),
       situacao_perda: lead.situacaoPerda || null,
-
+      version: Number(lead.version || 1),
       created_at: lead.created_at || new Date().toISOString(),
       updated_at: lead.updated_at || new Date().toISOString(),
       deleted_at: lead.deleted_at || null,
-      version: Number(lead.version || 1),
     };
   },
 
@@ -300,24 +301,25 @@ export const supabaseMapper = {
   },
 
   // FICHA DO LEAD
-  fichaToDb: (ficha: FichaLead, empresaId: string = ID_EMPRESA_PADRAO) => {
+  fichaToDb: (ficha: Partial<FichaLead> & { leadId?: string; id?: string }, empresaId: string = ID_EMPRESA_PADRAO) => {
     const eId = ficha.empresaId || (ficha as any).empresa_id || empresaId;
     return {
       id: normalizarUuid(ficha.id),
       empresa_id: normalizarUuid(eId),
       lead_id: normalizarUuid(ficha.leadId),
       telefone: ficha.telefone ? String(ficha.telefone).trim() : '',
-      origem_lead: ficha.origemLead || 'WhatsApp',
+      email: (ficha as any).email ? String((ficha as any).email).trim() : null,
+      idade: (ficha as any).idade ? Number((ficha as any).idade) : null,
       data_nascimento: sanitizeDate(ficha.dataNascimento),
-      endereco: ficha.endereco ? String(ficha.endereco).trim() : '',
+      como_conheceu: (ficha as any).comoConheceu || ficha.origemLead || 'WhatsApp',
+      gasto_estimado: Number((ficha as any).gastoEstimado || 0),
       observacoes: ficha.observacoes ? String(ficha.observacoes).trim() : '',
       motivo_perda: ficha.motivoPerda ? String(ficha.motivoPerda).trim() : null,
       data_perda: sanitizeDate(ficha.dataPerda),
-
+      version: Number(ficha.version || 1),
       created_at: ficha.created_at || new Date().toISOString(),
       updated_at: ficha.updated_at || new Date().toISOString(),
       deleted_at: ficha.deleted_at || null,
-      version: Number(ficha.version || 1),
     };
   },
 
@@ -327,7 +329,9 @@ export const supabaseMapper = {
     empresa_id: row.empresa_id,
     leadId: row.lead_id,
     telefone: row.telefone || '',
-    origemLead: (row.origem_lead as OrigemLead) || 'WhatsApp',
+    email: row.email || '',
+    idade: row.idade ? Number(row.idade) : undefined,
+    origemLead: (row.como_conheceu as OrigemLead) || (row.origem_lead as OrigemLead) || 'WhatsApp',
     dataNascimento: row.data_nascimento || '',
     endereco: row.endereco || '',
     observacoes: row.observacoes || '',
@@ -339,7 +343,7 @@ export const supabaseMapper = {
     version: row.version || 1,
   }),
 
-  // COMPRA (CORRIGIDO: adicionado o campo formaPagamento)
+  // COMPRA
   compraToDb: (compra: Compra, empresaId: string = ID_EMPRESA_PADRAO) => {
     const eId = compra.empresaId || (compra as any).empresa_id || empresaId;
     return {
@@ -350,10 +354,10 @@ export const supabaseMapper = {
       procedimento: compra.procedimento || '',
       valor: Number(compra.valor || 0),
       forma_pagamento: (compra as any).forma_pagamento || (compra as any).formaPagamento || 'Pix / Cartão',
+      version: Number(compra.version || 1),
       created_at: compra.created_at || new Date().toISOString(),
       updated_at: compra.updated_at || new Date().toISOString(),
       deleted_at: compra.deleted_at || null,
-      version: Number(compra.version || 1),
     };
   },
 
@@ -386,10 +390,10 @@ export const supabaseMapper = {
       descricao: proc.descricao || '',
       orientacoes: proc.orientacoes || '',
       ativo: proc.ativo !== false,
+      version: Number(proc.version || 1),
       created_at: proc.created_at || new Date().toISOString(),
       updated_at: proc.updated_at || new Date().toISOString(),
       deleted_at: proc.deleted_at || null,
-      version: Number(proc.version || 1),
     };
   },
 
@@ -429,10 +433,10 @@ export const supabaseMapper = {
       ultimo_acesso: usuario.ultimoAcesso || null,
       criado_por: usuario.criadoPor || 'Sistema',
       observacoes: usuario.observacoes || '',
+      version: Number(usuario.version || 1),
       created_at: usuario.created_at || new Date().toISOString(),
       updated_at: usuario.updated_at || new Date().toISOString(),
       deleted_at: usuario.deleted_at || null,
-      version: Number(usuario.version || 1),
     };
   },
 
@@ -477,10 +481,437 @@ export interface RelatorioSincronizacao {
 }
 
 export const supabaseService = {
+  // --------------------------------------------------------------------------
+  // 1. OPERAÇÕES DE LEADS (leads)
+  // --------------------------------------------------------------------------
+
   /**
-   * Salva ou atualiza a empresa/clínica no Supabase (incluindo características visuais completas)
+   * Buscar todos os leads da empresa do usuário autenticado (filtrando deleted_at IS NULL).
    */
-  async salvarEmpresa(empresa: Partial<Empresa> | Partial<ConfiguracoesEmpresa>, idCustom?: string): Promise<boolean> {
+  async fetchLeads(empresaId?: string): Promise<Lead[]> {
+    const client = getSupabaseClient();
+    if (!client) return [];
+
+    try {
+      let query = client
+        .from('leads')
+        .select('*')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+
+      if (empresaId) {
+        query = query.eq('empresa_id', normalizarUuid(empresaId));
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        console.error('Erro ao buscar leads no Supabase:', error);
+        throw error;
+      }
+      return (data || []).map(supabaseMapper.dbToLead);
+    } catch (error) {
+      console.error('Falha em fetchLeads:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Inserir um novo lead na tabela leads.
+   */
+  async criarLead(
+    dados: CriarLeadPayload | Partial<Lead>,
+    empresaId: string = ID_EMPRESA_PADRAO
+  ): Promise<Lead | null> {
+    const client = getSupabaseClient();
+    if (!client) return null;
+
+    try {
+      const idNovo = normalizarUuid((dados as any).id);
+      const eId = normalizarUuid((dados as any).empresaId || (dados as any).empresa_id || empresaId);
+
+      const leadCompleto: Lead = {
+        id: idNovo,
+        empresaId: eId,
+        nome: dados.nome ? String(dados.nome).trim() : 'Novo Paciente',
+        situacao: (dados.situacao as SituacaoLead) || 'Em captação',
+        etapaPorSituacao: (dados as any).etapaPorSituacao || {},
+        interesse: dados.interesse ? String(dados.interesse).trim() : '',
+        possivelValor: Number(dados.possivelValor || 0),
+        statusVenda: (dados.statusVenda as StatusVenda) || 'Em processo',
+        dataEntrada: sanitizeDate(dados.dataEntrada) || new Date().toISOString().split('T')[0],
+        responsavel: dados.responsavel ? String(dados.responsavel).trim() : 'Secretária 1',
+        dataAgendamento: dados.dataAgendamento,
+        horarioAgendamento: dados.horarioAgendamento,
+        profissionalAgendamento: dados.profissionalAgendamento,
+        tipoConsulta: dados.tipoConsulta,
+        unidadeAgendamento: dados.unidadeAgendamento,
+        observacoesAgendamento: dados.observacoesAgendamento,
+        statusConfirmacaoAgendamento: dados.statusConfirmacaoAgendamento,
+        lembrete24hEnviado: dados.lembrete24hEnviado,
+        dataEnvioLembrete24h: dados.dataEnvioLembrete24h,
+        mensagemLembrete24hEnviadaPor: dados.mensagemLembrete24hEnviadaPor,
+        dataEntradaNutricao: sanitizeDate(dados.dataEntradaNutricao) || undefined,
+        statusGrupoNutricao: dados.statusGrupoNutricao || 'Ativo',
+        motivoPerda: dados.motivoPerda,
+        dataPerda: sanitizeDate(dados.dataPerda) || undefined,
+        situacaoPerda: dados.situacaoPerda,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        version: 1,
+      };
+
+      const row = supabaseMapper.leadToDb(leadCompleto, eId);
+      const { data, error } = await client
+        .from('leads')
+        .upsert(row, { onConflict: 'id' })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Erro ao criar lead no Supabase:', error);
+        throw error;
+      }
+
+      const leadCriado = supabaseMapper.dbToLead(data);
+
+      // Se houver dados de ficha no payload de criação, persiste no banco
+      if ((dados as CriarLeadPayload).ficha) {
+        const fichaPayload = (dados as CriarLeadPayload).ficha;
+        await this.salvarFichaLead(
+          {
+            leadId: leadCriado.id,
+            empresaId: leadCriado.empresaId,
+            telefone: fichaPayload?.telefone || '',
+            email: (fichaPayload as any)?.email || '',
+            origemLead: fichaPayload?.origemLead || 'WhatsApp',
+            dataNascimento: fichaPayload?.dataNascimento || '',
+            endereco: fichaPayload?.endereco || '',
+            observacoes: fichaPayload?.observacoes || '',
+          },
+          eId
+        );
+      }
+
+      return leadCriado;
+    } catch (error) {
+      console.error('Falha em criarLead:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Atualizar registro na tabela leads.
+   */
+  async atualizarLead(
+    id: string,
+    dados: Partial<Lead> | AtualizarLeadPayload,
+    empresaId: string = ID_EMPRESA_PADRAO
+  ): Promise<Lead | null> {
+    const client = getSupabaseClient();
+    if (!client) return null;
+
+    try {
+      const uuid = normalizarUuid(id);
+
+      // Busca dados atuais do lead para preservar campos não alterados
+      const { data: leadExistenteRow, error: fetchErr } = await client
+        .from('leads')
+        .select('*')
+        .eq('id', uuid)
+        .maybeSingle();
+
+      if (fetchErr) {
+        console.error('Aviso ao buscar lead para atualização:', fetchErr);
+      }
+
+      const leadExistente = leadExistenteRow ? supabaseMapper.dbToLead(leadExistenteRow) : null;
+
+      const leadMesclado: Lead = {
+        id: uuid,
+        empresaId: normalizarUuid(
+          (dados as any).empresaId || (dados as any).empresa_id || leadExistente?.empresaId || empresaId
+        ),
+        nome: dados.nome !== undefined ? String(dados.nome).trim() : (leadExistente?.nome || 'Paciente'),
+        situacao: dados.situacao || leadExistente?.situacao || 'Em captação',
+        etapaPorSituacao: {
+          ...(leadExistente?.etapaPorSituacao || {}),
+          ...((dados as any).etapaPorSituacao || {}),
+        },
+        interesse: dados.interesse !== undefined ? String(dados.interesse).trim() : (leadExistente?.interesse || ''),
+        possivelValor:
+          dados.possivelValor !== undefined ? Number(dados.possivelValor) : (leadExistente?.possivelValor || 0),
+        statusVenda: dados.statusVenda || leadExistente?.statusVenda || 'Em processo',
+        dataEntrada:
+          sanitizeDate(dados.dataEntrada) || leadExistente?.dataEntrada || new Date().toISOString().split('T')[0],
+        responsavel:
+          dados.responsavel !== undefined ? String(dados.responsavel).trim() : (leadExistente?.responsavel || 'Secretária 1'),
+
+        // Agendamento
+        dataAgendamento: dados.dataAgendamento !== undefined ? dados.dataAgendamento : leadExistente?.dataAgendamento,
+        horarioAgendamento:
+          dados.horarioAgendamento !== undefined ? dados.horarioAgendamento : leadExistente?.horarioAgendamento,
+        profissionalAgendamento:
+          dados.profissionalAgendamento !== undefined
+            ? dados.profissionalAgendamento
+            : leadExistente?.profissionalAgendamento,
+        tipoConsulta: dados.tipoConsulta !== undefined ? dados.tipoConsulta : leadExistente?.tipoConsulta,
+        unidadeAgendamento:
+          dados.unidadeAgendamento !== undefined ? dados.unidadeAgendamento : leadExistente?.unidadeAgendamento,
+        observacoesAgendamento:
+          dados.observacoesAgendamento !== undefined
+            ? dados.observacoesAgendamento
+            : leadExistente?.observacoesAgendamento,
+        statusConfirmacaoAgendamento:
+          dados.statusConfirmacaoAgendamento !== undefined
+            ? dados.statusConfirmacaoAgendamento
+            : leadExistente?.statusConfirmacaoAgendamento,
+        lembrete24hEnviado:
+          dados.lembrete24hEnviado !== undefined ? dados.lembrete24hEnviado : leadExistente?.lembrete24hEnviado,
+        dataEnvioLembrete24h:
+          dados.dataEnvioLembrete24h !== undefined ? dados.dataEnvioLembrete24h : leadExistente?.dataEnvioLembrete24h,
+        mensagemLembrete24hEnviadaPor:
+          dados.mensagemLembrete24hEnviadaPor !== undefined
+            ? dados.mensagemLembrete24hEnviadaPor
+            : leadExistente?.mensagemLembrete24hEnviadaPor,
+
+        dataEntradaNutricao: sanitizeDate(dados.dataEntradaNutricao) || leadExistente?.dataEntradaNutricao,
+        statusGrupoNutricao: dados.statusGrupoNutricao || leadExistente?.statusGrupoNutricao || 'Ativo',
+        motivoPerda: dados.motivoPerda !== undefined ? dados.motivoPerda : leadExistente?.motivoPerda,
+        dataPerda: sanitizeDate(dados.dataPerda) || leadExistente?.dataPerda,
+        situacaoPerda: dados.situacaoPerda || leadExistente?.situacaoPerda,
+
+        created_at: leadExistente?.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted_at: leadExistente?.deleted_at || null,
+        version: (leadExistente?.version || 1) + 1,
+      };
+
+      const row = supabaseMapper.leadToDb(leadMesclado, empresaId);
+      const { data, error } = await client
+        .from('leads')
+        .upsert(row, { onConflict: 'id' })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Erro ao atualizar lead no Supabase:', error);
+        throw error;
+      }
+
+      return supabaseMapper.dbToLead(data);
+    } catch (error) {
+      console.error('Falha em atualizarLead:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Aplicar exclusão lógica preenchendo deleted_at = new Date().toISOString().
+   */
+  async excluirLead(id: string): Promise<boolean> {
+    return this.softDeleteLead(id);
+  },
+
+  /**
+   * Alias de compatibilidade para salvar/upsert de lead
+   */
+  async salvarLead(lead: Lead, empresaId: string = ID_EMPRESA_PADRAO): Promise<boolean> {
+    const client = getSupabaseClient();
+    if (!client) return false;
+
+    const row = supabaseMapper.leadToDb(lead, empresaId);
+    const { error } = await client.from('leads').upsert(row, { onConflict: 'id' });
+    if (error) {
+      console.error('Erro ao salvar Lead no Supabase:', error);
+      throw error;
+    }
+    return true;
+  },
+
+  /**
+   * Alias de compatibilidade para soft delete de lead
+   */
+  async softDeleteLead(leadId: string): Promise<boolean> {
+    const client = getSupabaseClient();
+    if (!client) return false;
+
+    const { error } = await client
+      .from('leads')
+      .update({
+        deleted_at: new Date().toISOString(),
+      })
+      .eq('id', normalizarUuid(leadId));
+
+    if (error) {
+      console.error('Erro ao efetuar soft delete no Lead:', error);
+      throw error;
+    }
+    return true;
+  },
+
+  // --------------------------------------------------------------------------
+  // 2. OPERAÇÕES DE AGENDAMENTOS
+  // --------------------------------------------------------------------------
+
+  /**
+   * Chamar EXCLUSIVAMENTE a função RPC `supabase.rpc('atualizar_agendamento_lead', ...)`
+   * para não sobrescrever nem apagar as etapas do funil registradas no JSONB.
+   */
+  async salvarAgendamentoLead(leadId: string, dadosAgendamento: Record<string, any>): Promise<boolean> {
+    const client = getSupabaseClient();
+    if (!client) return false;
+
+    try {
+      const uuid = normalizarUuid(leadId);
+      const { error } = await client.rpc('atualizar_agendamento_lead', {
+        p_lead_id: uuid,
+        p_agendamento_json: dadosAgendamento,
+      });
+
+      if (error) {
+        console.error('Erro RPC ao salvar agendamento do lead:', error);
+        throw error;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Falha em salvarAgendamentoLead:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Buscar registros diretamente da view vw_agendamentos.
+   */
+  async fetchAgendamentos(empresaId?: string): Promise<any[]> {
+    const client = getSupabaseClient();
+    if (!client) return [];
+
+    try {
+      let query = client.from('vw_agendamentos').select('*');
+      if (empresaId) {
+        query = query.eq('empresa_id', normalizarUuid(empresaId));
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        console.error('Erro ao buscar agendamentos da view vw_agendamentos:', error);
+        throw error;
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Falha em fetchAgendamentos:', error);
+      return [];
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // 3. OPERAÇÕES DE FICHAS DE LEAD (fichas_lead)
+  // --------------------------------------------------------------------------
+
+  /**
+   * Buscar ficha cadastral/anamnese vinculada ao lead.
+   */
+  async fetchFichaByLeadId(leadId: string): Promise<FichaLead | null> {
+    const client = getSupabaseClient();
+    if (!client) return null;
+
+    try {
+      const { data, error } = await client
+        .from('fichas_leads')
+        .select('*')
+        .eq('lead_id', normalizarUuid(leadId))
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Erro ao buscar ficha do lead:', error);
+        throw error;
+      }
+
+      return data ? supabaseMapper.dbToFicha(data) : null;
+    } catch (error) {
+      console.error('Falha em fetchFichaByLeadId:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Executar upsert tratando devidamente os tipos de dados (converter números e formatar datas YYYY-MM-DD).
+   */
+  async salvarFichaLead(
+    dadosFicha: Partial<FichaLead> & { leadId?: string; id?: string },
+    empresaId: string = ID_EMPRESA_PADRAO
+  ): Promise<FichaLead | null> {
+    const client = getSupabaseClient();
+    if (!client) return null;
+
+    try {
+      const leadUuid = normalizarUuid(dadosFicha.leadId);
+
+      let idFicha = dadosFicha.id ? normalizarUuid(dadosFicha.id) : null;
+      if (!idFicha) {
+        const fichaExistente = await this.fetchFichaByLeadId(leadUuid);
+        idFicha = fichaExistente?.id ? normalizarUuid(fichaExistente.id) : normalizarUuid();
+      }
+
+      const fichaCompleta: FichaLead = {
+        id: idFicha,
+        empresaId: normalizarUuid(dadosFicha.empresaId || (dadosFicha as any).empresa_id || empresaId),
+        leadId: leadUuid,
+        telefone: dadosFicha.telefone ? String(dadosFicha.telefone).trim() : '',
+        email: (dadosFicha as any).email ? String((dadosFicha as any).email).trim() : '',
+        idade: (dadosFicha as any).idade ? Number((dadosFicha as any).idade) : undefined,
+        origemLead: dadosFicha.origemLead || 'WhatsApp',
+        dataNascimento: sanitizeDate(dadosFicha.dataNascimento) || '',
+        endereco: dadosFicha.endereco ? String(dadosFicha.endereco).trim() : '',
+        observacoes: dadosFicha.observacoes ? String(dadosFicha.observacoes).trim() : '',
+        motivoPerda: dadosFicha.motivoPerda,
+        dataPerda: sanitizeDate(dadosFicha.dataPerda) || undefined,
+        created_at: dadosFicha.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        version: Number(dadosFicha.version || 1),
+      };
+
+      const row = supabaseMapper.fichaToDb(fichaCompleta, empresaId);
+      const { data, error } = await client
+        .from('fichas_leads')
+        .upsert(row, { onConflict: 'id' })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Erro ao salvar ficha do lead no Supabase:', error);
+        throw error;
+      }
+
+      return supabaseMapper.dbToFicha(data);
+    } catch (error) {
+      console.error('Falha em salvarFichaLead:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Alias de compatibilidade para salvar ficha
+   */
+  async salvarFicha(ficha: FichaLead, empresaId: string = ID_EMPRESA_PADRAO): Promise<boolean> {
+    const res = await this.salvarFichaLead(ficha, empresaId);
+    return Boolean(res);
+  },
+
+  // --------------------------------------------------------------------------
+  // 4. OUTRAS ENTIDADES & MÉTODOS DE SUPORTE
+  // --------------------------------------------------------------------------
+
+  /**
+   * Salva ou atualiza a empresa/clínica no Supabase
+   */
+  async salvarEmpresa(
+    empresa: Partial<Empresa> | Partial<ConfiguracoesEmpresa>,
+    idCustom?: string
+  ): Promise<boolean> {
     const client = getSupabaseClient();
     if (!client) return false;
 
@@ -558,59 +989,6 @@ export const supabaseService = {
     const { error } = await client.from('plataforma_admins').upsert(row, { onConflict: 'id' });
     if (error) {
       console.error('Erro ao salvar admin de plataforma no Supabase:', error);
-      throw error;
-    }
-    return true;
-  },
-
-  /**
-   * Salva ou atualiza um Lead no Supabase com soft-delete e versionamento
-   */
-  async salvarLead(lead: Lead, empresaId: string = ID_EMPRESA_PADRAO): Promise<boolean> {
-    const client = getSupabaseClient();
-    if (!client) return false;
-
-    const row = supabaseMapper.leadToDb(lead, empresaId);
-    const { error } = await client.from('leads').upsert(row, { onConflict: 'id' });
-    if (error) {
-      console.error('Erro ao salvar Lead no Supabase:', error);
-      throw error;
-    }
-    return true;
-  },
-
-  /**
-   * Executa Soft Delete em um Lead no Supabase
-   */
-  async softDeleteLead(leadId: string): Promise<boolean> {
-    const client = getSupabaseClient();
-    if (!client) return false;
-
-    const { error } = await client
-      .from('leads')
-      .update({
-        deleted_at: new Date().toISOString(),
-      })
-      .eq('id', normalizarUuid(leadId));
-
-    if (error) {
-      console.error('Erro ao efetuar soft delete no Lead:', error);
-      throw error;
-    }
-    return true;
-  },
-
-  /**
-   * Salva ou atualiza uma Ficha no Supabase
-   */
-  async salvarFicha(ficha: FichaLead, empresaId: string = ID_EMPRESA_PADRAO): Promise<boolean> {
-    const client = getSupabaseClient();
-    if (!client) return false;
-
-    const row = supabaseMapper.fichaToDb(ficha, empresaId);
-    const { error } = await client.from('fichas_leads').upsert(row, { onConflict: 'id' });
-    if (error) {
-      console.error('Erro ao salvar Ficha no Supabase:', error);
       throw error;
     }
     return true;
@@ -912,9 +1290,10 @@ export const supabaseService = {
 
   /**
    * Apaga permanentemente todos os registros de pacientes (leads, fichas e compras) no Supabase.
-   * Exclusivo para operações autorizadas pelo Gestor Master.
    */
-  async apagarDadosPacientesSupabase(empresaId: string = ID_EMPRESA_PADRAO): Promise<{
+  async apagarDadosPacientesSupabase(
+    _empresaId: string = ID_EMPRESA_PADRAO
+  ): Promise<{
     sucesso: boolean;
     mensagem: string;
     erros: string[];
@@ -925,27 +1304,24 @@ export const supabaseService = {
     if (!client) {
       return {
         sucesso: true,
-        mensagem: 'Supabase não conectado. Limpeza realizada localmente e no Firestore.',
+        mensagem: 'Supabase não conectado. Limpeza realizada localmente.',
         erros: [],
       };
     }
 
     try {
-      // 1. Apaga compras
       const { error: errC } = await client
         .from('compras')
         .delete()
         .neq('id', '00000000-0000-0000-0000-000000000000');
       if (errC) erros.push(`Erro ao limpar compras: ${errC.message}`);
 
-      // 2. Apaga fichas cadastrais
       const { error: errF } = await client
         .from('fichas_leads')
         .delete()
         .neq('id', '00000000-0000-0000-0000-000000000000');
       if (errF) erros.push(`Erro ao limpar fichas: ${errF.message}`);
 
-      // 3. Apaga leads
       const { error: errL } = await client
         .from('leads')
         .delete()
@@ -1017,7 +1393,6 @@ export const supabaseService = {
     const nomeTeste = `[TESTE-TEMPO-REAL] ${new Date().toLocaleTimeString('pt-BR')}`;
 
     try {
-      // 1. Grava lead de teste no Supabase
       const payload = {
         id: idTeste,
         empresa_id: ID_EMPRESA_PADRAO,
@@ -1040,7 +1415,6 @@ export const supabaseService = {
         throw new Error(`Falha ao inserir registro de teste: ${insertError.message}`);
       }
 
-      // 2. Imediatamente efetua soft-delete ou limpeza para não poluir
       await client.from('leads').delete().eq('id', idTeste);
 
       const latencia = Math.round(performance.now() - tInicio);

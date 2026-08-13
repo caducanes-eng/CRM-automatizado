@@ -602,7 +602,11 @@ export interface FichaLead extends BaseEntity {
   empresa_id?: string;
   leadId: string; // Referência FK ao Lead
   telefone: string;
+  email?: string;
+  idade?: number;
   origemLead: OrigemLead;
+  comoConheceu?: string;
+  gastoEstimado?: number;
   dataNascimento: string; // YYYY-MM-DD
   endereco: string;
   observacoes: string;
