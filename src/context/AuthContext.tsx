@@ -1,24 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
-import {
-  User,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signInAnonymously,
-  signOut,
-  updateProfile,
-} from 'firebase/auth';
-import {
-  collection,
-  doc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  onSnapshot,
-  getDocs,
-  writeBatch,
-} from 'firebase/firestore';
-import { auth, db, sanitizeForFirestore } from '../lib/firebase';
 import { supabaseService, supabaseMapper } from '../services/supabaseService';
 import { isSupabaseConfigured, getSupabaseClient } from '../lib/supabase';
 import {
@@ -88,7 +68,7 @@ function gerarIniciais(nome: string): string {
 }
 
 interface AuthContextType {
-  user: User | UserSessionInfo | null;
+  user: UserSessionInfo | null;
   usuarioLogado: UsuarioColaborador | null;
   responsavelAtivo: ResponsavelPerfil | null;
   responsavelNome: string;
@@ -121,7 +101,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | UserSessionInfo | null>(() => {
+  const [user, setUser] = useState<UserSessionInfo | null>(() => {
     try {
       const savedSession = localStorage.getItem(STORAGE_SESSION_KEY);
       if (savedSession) {
@@ -179,141 +159,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [usuarios]);
 
-  // Sincronização em tempo real da coleção `usuarios` no Firestore
+  // Carregar sessão salva na inicialização
   useEffect(() => {
-    let unsubscribeFirestore: (() => void) | null = null;
-
-    const inicializarColecaoUsuarios = async () => {
+    const savedSession = localStorage.getItem(STORAGE_SESSION_KEY);
+    if (savedSession) {
       try {
-        const snap = await getDocs(collection(db, 'usuarios'));
-        if (snap.empty) {
-          console.info('🚀 Inicializando usuários colaboradores no Firestore...');
-          const batch = writeBatch(db);
-          for (const u of SEED_USUARIOS) {
-            batch.set(doc(db, 'usuarios', u.id), sanitizeForFirestore(u));
-          }
-          await batch.commit();
+        const parsed = JSON.parse(savedSession) as ResponsavelPerfil;
+        if (parsed && parsed.id) {
+          setUser({
+            uid: parsed.id,
+            email: parsed.email,
+            displayName: parsed.nome,
+          });
+          setSessionPerfil(parsed);
         }
-      } catch (err) {
-        console.warn('Nota sobre inicialização de usuários Firestore:', err);
-      }
-
-      // Ouve alterações em tempo real
-      try {
-        unsubscribeFirestore = onSnapshot(
-          collection(db, 'usuarios'),
-          (snapshot) => {
-            if (!snapshot.empty) {
-              const list: UsuarioColaborador[] = [];
-              snapshot.forEach((d) => {
-                list.push(d.data() as UsuarioColaborador);
-              });
-              // Ordena: Gestores primeiro, depois ordem alfabética
-              list.sort((a, b) => {
-                if (a.role === 'GESTOR' && b.role !== 'GESTOR') return -1;
-                if (a.role !== 'GESTOR' && b.role === 'GESTOR') return 1;
-                return a.nome.localeCompare(b.nome);
-              });
-              setUsuarios(list);
-            }
-          },
-          (err) => {
-            console.warn('Firestore usuarios listener notice:', err);
-          }
-        );
-      } catch (e) {
-        console.warn('Erro ao registrar listener de usuarios:', e);
-      }
-    };
-
-    inicializarColecaoUsuarios();
-
-    return () => {
-      if (unsubscribeFirestore) unsubscribeFirestore();
-    };
-  }, []);
-
-  // Sincronização e escuta em tempo real de Usuários no Supabase
-  const carregarUsuariosSupabase = useCallback(async () => {
-    if (!isSupabaseConfigured()) return;
-    try {
-      const client = getSupabaseClient();
-      if (!client) return;
-      const { data, error } = await client
-        .from('usuarios')
-        .select('*')
-        .is('deleted_at', null);
-
-      if (!error && data && data.length > 0) {
-        const list = data.map(supabaseMapper.dbToUsuario);
-        list.sort((a, b) => {
-          if (a.role === 'GESTOR' && b.role !== 'GESTOR') return -1;
-          if (a.role !== 'GESTOR' && b.role === 'GESTOR') return 1;
-          return a.nome.localeCompare(b.nome);
-        });
-        setUsuarios(list);
-      }
-    } catch (e) {
-      console.warn('Aviso sobre carregamento de usuários do Supabase:', e);
+      } catch (e) {}
     }
-  }, []);
-
-  useEffect(() => {
-    if (isSupabaseConfigured()) {
-      carregarUsuariosSupabase();
-    }
-
-    const handleConfigChange = () => {
-      if (isSupabaseConfigured()) {
-        carregarUsuariosSupabase();
-      }
-    };
-
-    window.addEventListener('supabase-config-changed', handleConfigChange);
-
-    let channel: any = null;
-    if (isSupabaseConfigured()) {
-      const client = getSupabaseClient();
-      if (client) {
-        channel = client
-          .channel('auth_usuarios_realtime_channel')
-          .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'usuarios' },
-            () => {
-              carregarUsuariosSupabase();
-            }
-          )
-          .subscribe();
-      }
-    }
-
-    return () => {
-      window.removeEventListener('supabase-config-changed', handleConfigChange);
-      if (channel) {
-        try {
-          channel.unsubscribe();
-        } catch (e) {}
-      }
-    };
-  }, [carregarUsuariosSupabase]);
-
-  // Carregar sessão salva e escutar Firebase Auth
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
-      } else {
-        const savedSession = localStorage.getItem(STORAGE_SESSION_KEY);
-        if (!savedSession) {
-          setUser(null);
-          setSessionPerfil(null);
-        }
-      }
-      setIsLoading(false);
-    });
-
-    return () => unsubscribe();
+    setIsLoading(false);
   }, []);
 
   // Mapeamento derivado puro para usuarioLogado
@@ -493,86 +355,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     try {
-      try {
-        const cred = await signInWithEmailAndPassword(auth, responsavel.email, responsavel.senhaPadrao);
-        if (cred.user && !cred.user.displayName) {
-          try {
-            await updateProfile(cred.user, { displayName: responsavel.nome });
-          } catch (e) {}
-        }
-        setUser(cred.user);
-      } catch (signInErr: any) {
-        if (
-          signInErr.code === 'auth/user-not-found' ||
-          signInErr.code === 'auth/invalid-credential' ||
-          signInErr.code === 'auth/invalid-login-credentials'
-        ) {
-          try {
-            const newCred = await createUserWithEmailAndPassword(
-              auth,
-              responsavel.email,
-              responsavel.senhaPadrao
-            );
-            try {
-              await updateProfile(newCred.user, { displayName: responsavel.nome });
-            } catch (e) {}
-            setUser(newCred.user);
-          } catch (createErr: any) {
-            if (createErr.code === 'auth/operation-not-allowed') {
-              try {
-                const anonCred = await signInAnonymously(auth);
-                try {
-                  await updateProfile(anonCred.user, { displayName: responsavel.nome });
-                } catch (e) {}
-                setUser(anonCred.user);
-              } catch (anonErr) {
-                setUser({
-                  uid: responsavel.id,
-                  email: responsavel.email,
-                  displayName: responsavel.nome,
-                });
-              }
-            } else {
-              setUser({
-                uid: responsavel.id,
-                email: responsavel.email,
-                displayName: responsavel.nome,
-              });
-            }
-          }
-        } else if (signInErr.code === 'auth/operation-not-allowed') {
-          try {
-            const anonCred = await signInAnonymously(auth);
-            try {
-              await updateProfile(anonCred.user, { displayName: responsavel.nome });
-            } catch (e) {}
-            setUser(anonCred.user);
-          } catch (anonErr) {
-            setUser({
-              uid: responsavel.id,
-              email: responsavel.email,
-              displayName: responsavel.nome,
-            });
-          }
-        } else {
-          setUser({
-            uid: responsavel.id,
-            email: responsavel.email,
-            displayName: responsavel.nome,
-          });
-        }
-      }
-
+      setUser({
+        uid: responsavel.id,
+        email: responsavel.email,
+        displayName: responsavel.nome,
+      });
       setSessionPerfil(responsavel);
-
-      // Atualiza o timestamp de último acesso no Firestore
-      try {
-        const timestamp = new Date().toISOString();
-        await updateDoc(doc(db, 'usuarios', responsavel.id), {
-          ultimoAcesso: timestamp,
-          updated_at: timestamp,
-        });
-      } catch (e) {}
 
       try {
         localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(responsavel));
@@ -604,7 +392,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       throw new Error('Credenciais não preenchidas.');
     }
 
-    // Combina usuários do Firestore/Estado + Lista de Seed para garantir localização
+    // Combina usuários do Estado + Lista de Seed para garantir localização
     const todosUsuarios = [...usuarios];
     SEED_USUARIOS.forEach((seedU) => {
       if (!todosUsuarios.some((u) => u.id === seedU.id || u.email.toLowerCase() === seedU.email.toLowerCase())) {
@@ -612,12 +400,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     });
 
-    // Localiza colaborador correspondente por:
-    // 1. Login exato ou e-mail exato
-    // 2. Prefixo do e-mail (parte antes do @, ex: 'cadu' em 'caducanes@gmail.com')
-    // 3. ID do usuário (ex: 'user-cadu', 'user-sec1')
-    // 4. Nome do usuário (ex: 'cadu', 'agda', 'camila', 'gestao')
-    // 5. Aliases/Apelidos corporativos comuns
     const colaborador = todosUsuarios.find((u) => {
       const emailLower = (u.email || '').toLowerCase().trim();
       const loginLower = (u.login || '').toLowerCase().trim();
@@ -626,13 +408,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const idSemUser = idLower.replace(/^user-/, '');
       const nomeLower = (u.nome || '').toLowerCase().trim();
 
-      // Match exato de login, e-mail, prefixo de e-mail ou ID
       if (loginLower === termoLimpo && loginLower !== '') return true;
       if (emailLower === termoLimpo) return true;
       if (prefixoEmail === termoLimpo && prefixoEmail !== '') return true;
       if (idLower === termoLimpo || idSemUser === termoLimpo) return true;
 
-      // Match por nome (ex: "agda", "camila", "cadu", "juliana")
       if (nomeLower === termoLimpo) return true;
       const palavrasNome = nomeLower
         .split(/\s+/)
@@ -640,7 +420,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .filter((p) => p.length >= 3);
       if (palavrasNome.includes(termoLimpo)) return true;
 
-      // Aliases e papéis corporativos comuns
       if (termoLimpo === 'cadu' || termoLimpo === 'caducanes' || termoLimpo === 'caducanes@gmail.com') {
         return emailLower === 'caducanes@gmail.com' || idLower === 'user-cadu' || loginLower === 'cadu';
       }
@@ -677,7 +456,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     try {
       if (colaborador) {
-        // Autentica o colaborador encontrado
         setUser({
           uid: colaborador.id,
           email: colaborador.email,
@@ -701,64 +479,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         try {
           localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(perfil));
         } catch (e) {}
-
-        const timestamp = new Date().toISOString();
-        try {
-          await updateDoc(doc(db, 'usuarios', colaborador.id), {
-            ultimoAcesso: timestamp,
-            updated_at: timestamp,
-          });
-        } catch (e) {}
       } else {
-        // Tenta via Firebase Auth primeiro
+        const nomeFormatado = termoLimpo.includes('@')
+          ? termoLimpo.split('@')[0]
+          : termoLimpo;
+        const fallbackPerfil: ResponsavelPerfil = {
+          id: `user-${termoLimpo.replace(/[^a-z0-9]/g, '')}`,
+          nome: nomeFormatado.charAt(0).toUpperCase() + nomeFormatado.slice(1),
+          cargo: 'Gestor / Administrador',
+          email: emailEfetivo,
+          senhaPadrao: senhaLimpa,
+          iniciais: nomeFormatado.substring(0, 2).toUpperCase(),
+          corBadge: '#5C3A22',
+          descricao: 'Sessão iniciada',
+          role: 'GESTOR',
+          permissoes: SEED_USUARIOS[0].permissoes,
+          ativo: true,
+        };
+        setUser({
+          uid: fallbackPerfil.id,
+          email: fallbackPerfil.email,
+          displayName: fallbackPerfil.nome,
+        });
+        setSessionPerfil(fallbackPerfil);
         try {
-          const cred = await signInWithEmailAndPassword(auth, emailEfetivo, senhaLimpa);
-          setUser(cred.user);
-          const perfilFallback: ResponsavelPerfil = {
-            id: cred.user.uid,
-            nome: cred.user.displayName || termoLimpo,
-            cargo: 'Gestor / Administrador',
-            email: emailEfetivo,
-            senhaPadrao: senhaLimpa,
-            iniciais: (cred.user.displayName || termoLimpo).substring(0, 2).toUpperCase(),
-            corBadge: '#5C3A22',
-            descricao: 'Acesso autenticado',
-            role: 'GESTOR',
-            permissoes: SEED_USUARIOS[0].permissoes,
-            ativo: true,
-          };
-          setSessionPerfil(perfilFallback);
-          try {
-            localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(perfilFallback));
-          } catch (e) {}
-        } catch (err: any) {
-          // Fallback gracioso: cria perfil dinâmico de acesso
-          const nomeFormatado = termoLimpo.includes('@')
-            ? termoLimpo.split('@')[0]
-            : termoLimpo;
-          const fallbackPerfil: ResponsavelPerfil = {
-            id: `user-${termoLimpo.replace(/[^a-z0-9]/g, '')}`,
-            nome: nomeFormatado.charAt(0).toUpperCase() + nomeFormatado.slice(1),
-            cargo: 'Gestor / Administrador',
-            email: emailEfetivo,
-            senhaPadrao: senhaLimpa,
-            iniciais: nomeFormatado.substring(0, 2).toUpperCase(),
-            corBadge: '#5C3A22',
-            descricao: 'Sessão iniciada',
-            role: 'GESTOR',
-            permissoes: SEED_USUARIOS[0].permissoes,
-            ativo: true,
-          };
-          setUser({
-            uid: fallbackPerfil.id,
-            email: fallbackPerfil.email,
-            displayName: fallbackPerfil.nome,
-          });
-          setSessionPerfil(fallbackPerfil);
-          try {
-            localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(fallbackPerfil));
-          } catch (e) {}
-        }
+          localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(fallbackPerfil));
+        } catch (e) {}
       }
     } finally {
       setIsLoading(false);
@@ -777,25 +523,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         throw new Error('Todos os campos são obrigatórios para cadastro.');
       }
 
-      try {
-        const cred = await createUserWithEmailAndPassword(auth, emailLimpo, senha);
-        try {
-          await updateProfile(cred.user, { displayName: nomeLimpo });
-        } catch (e) {}
-        setUser(cred.user);
-      } catch (err: any) {
-        let msg = 'Não foi possível cadastrar o usuário.';
-        if (err.code === 'auth/email-already-in-use') {
-          msg = 'Este e-mail já está cadastrado no sistema.';
-        } else if (err.code === 'auth/weak-password') {
-          msg = 'A senha deve conter ao menos 6 caracteres.';
-        } else if (err.code === 'auth/invalid-email') {
-          msg = 'Formato de e-mail inválido.';
-        }
-        setErroAuth(msg);
-        throw new Error(msg);
-      }
-
       // Adiciona o novo colaborador na lista
       const novo: CriarUsuarioPayload = {
         nome: nomeLimpo,
@@ -805,7 +532,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         role: 'RECEPCAO_COMERCIAL',
         permissoes: PERMISSOES_PRESET_RECEPCAO,
       };
-      await criarColaborador(novo);
+      const colab = await criarColaborador(novo);
+      setUser({
+        uid: colab.id,
+        email: colab.email,
+        displayName: colab.nome,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -822,9 +554,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(null);
       setSessionPerfil(null);
       setErroAuth(null);
-      await signOut(auth);
-    } catch (e) {
-      console.warn('signOut notice:', e);
     } finally {
       setUser(null);
       setSessionPerfil(null);
@@ -882,14 +611,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // 1. Atualização Otimista
     setUsuarios((prev) => [novoUsuario, ...prev]);
 
-    // 2. Gravação no Firestore
-    try {
-      await setDoc(doc(db, 'usuarios', id), sanitizeForFirestore(novoUsuario));
-    } catch (err) {
-      console.error('Erro ao salvar colaborador no Firestore:', err);
-    }
-
-    // 3. Gravação no Supabase (se configurado)
+    // 2. Gravação no Supabase (se configurado)
     if (isSupabaseConfigured()) {
       try {
         await supabaseService.salvarUsuario(novoUsuario);
@@ -919,7 +641,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (payload.permissoes) {
           permissoes = { ...u.permissoes, ...payload.permissoes };
         } else if (payload.role && payload.role !== u.role) {
-          // Se mudou de role e não passou permissões manuais, aplica o preset do novo role
           if (payload.role === 'GESTOR') permissoes = PERMISSOES_PRESET_GESTOR;
           else if (payload.role === 'MEDICO') permissoes = PERMISSOES_PRESET_MEDICO;
           else if (payload.role === 'RECEPCAO_COMERCIAL') permissoes = PERMISSOES_PRESET_RECEPCAO;
@@ -946,7 +667,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       })
     );
 
-    // Se o usuário editado for o próprio usuário logado, atualiza a sessão ativa
     if (usuarioAtualizado && (usuarioAtualizado as UsuarioColaborador).id === responsavelAtivo?.id) {
       const respAtual: ResponsavelPerfil = {
         id: (usuarioAtualizado as UsuarioColaborador).id,
@@ -967,19 +687,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } catch (e) {}
     }
 
-    try {
-      if (usuarioAtualizado) {
-        await setDoc(doc(db, 'usuarios', usuarioId), sanitizeForFirestore(usuarioAtualizado), { merge: true });
-        if (isSupabaseConfigured()) {
-          try {
-            await supabaseService.salvarUsuario(usuarioAtualizado);
-          } catch (eSupabase) {
-            console.warn('Aviso: falha ao atualizar colaborador no Supabase:', eSupabase);
-          }
-        }
+    if (usuarioAtualizado && isSupabaseConfigured()) {
+      try {
+        await supabaseService.salvarUsuario(usuarioAtualizado);
+      } catch (eSupabase) {
+        console.warn('Aviso: falha ao atualizar colaborador no Supabase:', eSupabase);
       }
-    } catch (err) {
-      console.error('Erro ao atualizar colaborador no Firestore:', err);
     }
 
     return usuarioAtualizado;
@@ -999,11 +712,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     if (hardDelete) {
       setUsuarios((prev) => prev.filter((u) => u.id !== usuarioId));
-      try {
-        await deleteDoc(doc(db, 'usuarios', usuarioId));
-      } catch (err) {
-        console.error('Erro ao excluir usuário no Firestore:', err);
-      }
       if (isSupabaseConfigured() && usuarioAlvo) {
         try {
           await supabaseService.salvarUsuario({
@@ -1017,19 +725,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       }
     } else {
-      // Soft Delete
       setUsuarios((prev) =>
         prev.map((u) => (u.id === usuarioId ? { ...u, ativo: false, deleted_at: timestamp, version: u.version + 1 } : u))
       );
-      try {
-        await updateDoc(doc(db, 'usuarios', usuarioId), {
-          ativo: false,
-          deleted_at: timestamp,
-          updated_at: timestamp,
-        });
-      } catch (err) {
-        console.error('Erro ao soft-deletar usuário no Firestore:', err);
-      }
       if (isSupabaseConfigured() && usuarioAlvo) {
         try {
           await supabaseService.salvarUsuario({
@@ -1050,11 +748,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUsuarios(SEED_USUARIOS);
     try {
       localStorage.setItem(STORAGE_USUARIOS_KEY, JSON.stringify(SEED_USUARIOS));
-      const batch = writeBatch(db);
-      for (const u of SEED_USUARIOS) {
-        batch.set(doc(db, 'usuarios', u.id), sanitizeForFirestore(u));
-      }
-      await batch.commit();
     } catch (e) {
       console.warn('Erro ao resetar usuarios:', e);
     }

@@ -24,6 +24,7 @@ import {
   ArrowUpDown,
   Tag,
   AlertTriangle,
+  Trash2,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCrm } from '../context/CrmContext';
@@ -58,8 +59,10 @@ export const ConsultasAgendadasView: React.FC = () => {
     leads,
     obterFichaPorLead,
     abrirFichaLead,
+    criarLead,
     atualizarLead,
     atualizarFichaLead,
+    excluirLead,
     procedimentos,
     responsaveis,
   } = useCrm();
@@ -78,6 +81,7 @@ export const ConsultasAgendadasView: React.FC = () => {
 
   // Modal para Agendar / Editar Agendamento
   const [leadEditando, setLeadEditando] = useState<Lead | null>(null);
+  const [leadExcluindo, setLeadExcluindo] = useState<Lead | null>(null);
   const [modalNovoAgendamento, setModalNovoAgendamento] = useState(false);
 
   // Estados do formulário de agendamento no modal
@@ -360,21 +364,11 @@ export const ConsultasAgendadasView: React.FC = () => {
   // Abrir modal de novo agendamento
   const handleAbrirNovoAgendamento = () => {
     setLeadEditando(null);
-    const primeiroLead = leadsDisponiveis[0];
-    const idSel = primeiroLead ? primeiroLead.id : '';
-    setFormLeadId(idSel);
-    if (primeiroLead) {
-      setFormNome(primeiroLead.nome || '');
-      const ficha = obterFichaPorLead(primeiroLead.id);
-      setFormTelefone(ficha?.telefone || '');
-      setFormTipoConsulta(primeiroLead.interesse || 'Avaliação de Harmonização Facial');
-      setFormPossivelValor(primeiroLead.possivelValor || 0);
-    } else {
-      setFormNome('');
-      setFormTelefone('');
-      setFormTipoConsulta('Avaliação de Harmonização Facial');
-      setFormPossivelValor(0);
-    }
+    setFormLeadId('NOVO');
+    setFormNome('');
+    setFormTelefone('');
+    setFormTipoConsulta('Avaliação de Harmonização Facial');
+    setFormPossivelValor(0);
     setFormDataAgendamento(amanhaStr);
     setFormHorarioAgendamento('14:00');
     const especialistaPadrao =
@@ -395,6 +389,13 @@ export const ConsultasAgendadasView: React.FC = () => {
 
   const handleSelecionarLeadNovoAgendamento = (idSel: string) => {
     setFormLeadId(idSel);
+    if (idSel === 'NOVO') {
+      setFormNome('');
+      setFormTelefone('');
+      setFormTipoConsulta('Avaliação de Harmonização Facial');
+      setFormPossivelValor(0);
+      return;
+    }
     const l = leads.find((x) => x.id === idSel);
     if (l) {
       setFormNome(l.nome || '');
@@ -405,57 +406,114 @@ export const ConsultasAgendadasView: React.FC = () => {
     }
   };
 
-  // Salvar agendamento no modal (Persiste todas as edições no banco de dados e estado)
+  // Salvar agendamento no modal (Persiste inserção e edições diretamente no Supabase e no estado)
   const handleSalvarAgendamento = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetLeadId = leadEditando ? leadEditando.id : formLeadId;
-    if (!targetLeadId) {
-      alert('Selecione ou identifique um paciente para agendar.');
+    const isNovo = !leadEditando;
+
+    if (!formNome.trim()) {
+      alert('Informe o nome do paciente.');
       return;
     }
 
-    const leadAlvo = leads.find((l) => l.id === targetLeadId);
-
-    // Preserva o status da venda (ex: Venda feita) ou mantém Em processo
-    const novoStatusVenda: StatusVenda = leadAlvo?.statusVenda || 'Em processo';
-
-    const lembreteRecemAtivado = formLembrete24hEnviado && !leadAlvo?.lembrete24hEnviado;
-
-    // 1. Salvar no banco de dados todas as informações do Lead da área de agendamento
-    await atualizarLead(targetLeadId, {
-      nome: formNome.trim() || leadAlvo?.nome || 'Paciente',
-      dataAgendamento: formDataAgendamento,
-      horarioAgendamento: formHorarioAgendamento,
-      profissionalAgendamento: formProfissional,
-      tipoConsulta: formTipoConsulta,
-      interesse: formTipoConsulta,
-      unidadeAgendamento: formUnidade,
-      observacoesAgendamento: formObservacoes,
-      statusConfirmacaoAgendamento: formStatusConfirmacao,
-      situacao: 'Consulta agendada',
-      statusVenda: novoStatusVenda,
-      possivelValor: Number(formPossivelValor) || 0,
-      lembrete24hEnviado: formLembrete24hEnviado,
-      ...(lembreteRecemAtivado
-        ? {
-            dataEnvioLembrete24h: new Date().toLocaleString('pt-BR'),
-            mensagemLembrete24hEnviadaPor: responsavelNome || 'Secretária',
-          }
-        : {}),
-    });
-
-    // 2. Salvar dados cadastrais na Ficha do Paciente (Telefone)
-    if (formTelefone.trim()) {
-      await atualizarFichaLead(targetLeadId, {
-        telefone: formTelefone.trim(),
+    if (isNovo && (formLeadId === 'NOVO' || !formLeadId)) {
+      // Criar Novo Paciente e Agendamento no Supabase
+      const novoLead = await criarLead({
+        nome: formNome.trim(),
+        situacao: 'Consulta agendada',
+        dataAgendamento: formDataAgendamento,
+        horarioAgendamento: formHorarioAgendamento,
+        profissionalAgendamento: formProfissional,
+        tipoConsulta: formTipoConsulta,
+        interesse: formTipoConsulta,
+        unidadeAgendamento: formUnidade,
+        observacoesAgendamento: formObservacoes,
+        statusConfirmacaoAgendamento: formStatusConfirmacao,
+        statusVenda: 'Em processo',
+        possivelValor: Number(formPossivelValor) || 0,
+        responsavel: formProfissional || responsaveis[0] || 'Secretária 1',
+        ficha: {
+          telefone: formTelefone.trim(),
+        },
       });
+
+      if (novoLead && formLembrete24hEnviado) {
+        await atualizarLead(novoLead.id, {
+          lembrete24hEnviado: true,
+          dataEnvioLembrete24h: new Date().toLocaleString('pt-BR'),
+          mensagemLembrete24hEnviadaPor: responsavelNome || 'Secretária',
+        });
+      }
+
+      dispararFeedback(`Novo paciente e agendamento de ${formNome.trim()} criados e salvos no Supabase!`);
+    } else {
+      // Atualizar Lead e Consulta Existente no Supabase
+      const targetLeadId = leadEditando ? leadEditando.id : formLeadId;
+      if (!targetLeadId) {
+        alert('Selecione ou identifique um paciente para agendar.');
+        return;
+      }
+
+      const leadAlvo = leads.find((l) => l.id === targetLeadId);
+      const novoStatusVenda: StatusVenda = leadAlvo?.statusVenda || 'Em processo';
+      const lembreteRecemAtivado = formLembrete24hEnviado && !leadAlvo?.lembrete24hEnviado;
+
+      await atualizarLead(targetLeadId, {
+        nome: formNome.trim() || leadAlvo?.nome || 'Paciente',
+        dataAgendamento: formDataAgendamento,
+        horarioAgendamento: formHorarioAgendamento,
+        profissionalAgendamento: formProfissional,
+        tipoConsulta: formTipoConsulta,
+        interesse: formTipoConsulta,
+        unidadeAgendamento: formUnidade,
+        observacoesAgendamento: formObservacoes,
+        statusConfirmacaoAgendamento: formStatusConfirmacao,
+        situacao: 'Consulta agendada',
+        statusVenda: novoStatusVenda,
+        possivelValor: Number(formPossivelValor) || 0,
+        lembrete24hEnviado: formLembrete24hEnviado,
+        ...(lembreteRecemAtivado
+          ? {
+              dataEnvioLembrete24h: new Date().toLocaleString('pt-BR'),
+              mensagemLembrete24hEnviadaPor: responsavelNome || 'Secretária',
+            }
+          : {}),
+      });
+
+      if (formTelefone.trim()) {
+        await atualizarFichaLead(targetLeadId, {
+          telefone: formTelefone.trim(),
+        });
+      }
+
+      dispararFeedback(
+        `Edições e agendamento de ${formNome.trim() || leadAlvo?.nome || 'paciente'} salvos no Supabase!`
+      );
     }
 
     setLeadEditando(null);
     setModalNovoAgendamento(false);
-    dispararFeedback(
-      `Edições e agendamento de ${formNome.trim() || leadAlvo?.nome || 'paciente'} salvos com sucesso!`
-    );
+  };
+
+  // Remover apenas o agendamento (manter o paciente)
+  const handleRemoverApenasAgendamento = async () => {
+    if (!leadExcluindo) return;
+    await atualizarLead(leadExcluindo.id, {
+      dataAgendamento: '',
+      horarioAgendamento: '',
+      situacao: 'Em captação',
+      statusConfirmacaoAgendamento: undefined,
+    });
+    dispararFeedback(`Agendamento de ${leadExcluindo.nome} removido. O paciente continua no CRM.`);
+    setLeadExcluindo(null);
+  };
+
+  // Excluir paciente definitivamente do Supabase
+  const handleConfirmarExcluirDefinitivo = async () => {
+    if (!leadExcluindo) return;
+    await excluirLead(leadExcluindo.id, true);
+    dispararFeedback(`Paciente e agendamento de ${leadExcluindo.nome} apagados do Supabase.`);
+    setLeadExcluindo(null);
   };
 
   return (
@@ -504,7 +562,7 @@ export const ConsultasAgendadasView: React.FC = () => {
             className="inline-flex items-center gap-2 px-4 py-2 text-white font-bold text-xs uppercase tracking-wider rounded-sm shadow-xs hover:brightness-110 transition-all cursor-pointer shrink-0"
           >
             <Plus className="w-4 h-4 text-white" />
-            <span>+ Agendar Consulta</span>
+            <span> Agendar Consulta</span>
           </button>
         </div>
       </div>
@@ -934,6 +992,17 @@ export const ConsultasAgendadasView: React.FC = () => {
                           >
                             <FileText className="w-3.5 h-3.5 text-[#1A1A1A]" />
                           </button>
+
+                          {/* Botão Excluir / Apagar Agendamento do Supabase */}
+                          <button
+                            id={`btn-excluir-agendamento-${leadItem.id}`}
+                            type="button"
+                            onClick={() => setLeadExcluindo(leadItem)}
+                            className="p-1.5 rounded-sm bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors cursor-pointer"
+                            title="Apagar consulta ou excluir paciente do Supabase"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-rose-700" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1004,7 +1073,8 @@ export const ConsultasAgendadasView: React.FC = () => {
                     onChange={(e) => handleSelecionarLeadNovoAgendamento(e.target.value)}
                     className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer"
                   >
-                    <option value="">Selecione o paciente...</option>
+                    <option value="NOVO">➕ Cadastrar Novo Paciente / Lead</option>
+                    <option value="">Ou selecione um paciente existente...</option>
                     {leadsDisponiveis.map((l) => (
                       <option key={l.id} value={l.id}>
                         {l.nome} ({l.situacao}) — {l.interesse || 'Sem procedimento informado'}
@@ -1271,29 +1341,115 @@ export const ConsultasAgendadasView: React.FC = () => {
               </div>
 
               {/* Botões do Modal */}
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#D9D6D0]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLeadEditando(null);
-                    setModalNovoAgendamento(false);
-                  }}
-                  className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-[#6E6E6E] hover:text-[#1A1A1A] bg-white border border-[#D9D6D0] rounded-sm hover:bg-[#F2EFEA] cursor-pointer"
-                >
-                  Cancelar
-                </button>
+              <div className="flex items-center justify-between pt-3 border-t border-[#D9D6D0]">
+                {leadEditando ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const l = leadEditando;
+                      setLeadEditando(null);
+                      setModalNovoAgendamento(false);
+                      setLeadExcluindo(l);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-rose-700 bg-rose-50 border border-rose-200 rounded-sm hover:bg-rose-100 font-bold text-xs uppercase cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-700" />
+                    <span>Excluir Agendamento</span>
+                  </button>
+                ) : (
+                  <div />
+                )}
 
-                <button
-                  id="btn-confirmar-salvar-agendamento-modal"
-                  type="submit"
-                  style={{ backgroundColor: corPrimaria }}
-                  className="inline-flex items-center gap-1.5 px-5 py-2 text-white font-bold text-xs uppercase tracking-wider rounded-sm shadow-xs hover:brightness-110 cursor-pointer"
-                >
-                  <Check className="w-4 h-4 text-white" />
-                  <span>Salvar Agendamento</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLeadEditando(null);
+                      setModalNovoAgendamento(false);
+                    }}
+                    className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-[#6E6E6E] hover:text-[#1A1A1A] bg-white border border-[#D9D6D0] rounded-sm hover:bg-[#F2EFEA] cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+
+                  <button
+                    id="btn-confirmar-salvar-agendamento-modal"
+                    type="submit"
+                    style={{ backgroundColor: corPrimaria }}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 text-white font-bold text-xs uppercase tracking-wider rounded-sm shadow-xs hover:brightness-110 cursor-pointer"
+                  >
+                    <Check className="w-4 h-4 text-white" />
+                    <span>Salvar Agendamento</span>
+                  </button>
+                </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL DE CONFIRMAÇÃO DE EXCLUSÃO / CANCELAMENTO
+         ========================================================================= */}
+      {leadExcluindo && (
+        <div
+          id="modal-excluir-agendamento-backdrop"
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+        >
+          <div className="bg-white rounded-sm border border-[#D9D6D0] max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-auto">
+            <div className="flex items-center gap-3 text-rose-700 border-b border-[#D9D6D0] pb-3">
+              <AlertTriangle className="w-6 h-6 shrink-0 text-rose-600" />
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-[#1A1A1A]">
+                  Exclusão / Remoção de Agendamento
+                </h3>
+                <p className="text-[11px] text-[#6E6E6E]">
+                  Escolha se deseja apenas desmarcar a consulta ou excluir o cadastro do Supabase.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-[#525252]">
+              Paciente selecionado: <strong className="text-[#1A1A1A] font-bold">{leadExcluindo.nome}</strong>
+            </p>
+
+            <div className="space-y-2.5 pt-1">
+              <button
+                type="button"
+                onClick={handleRemoverApenasAgendamento}
+                className="w-full text-left p-3 rounded-sm border border-[#D9D6D0] bg-[#F8F7F4] hover:bg-[#EAE7E1] transition-colors cursor-pointer group"
+              >
+                <div className="text-xs font-bold text-[#1A1A1A] group-hover:text-[#5C3A22]">
+                  1. Apenas Desagendar / Cancelar Consulta
+                </div>
+                <div className="text-[11px] text-[#6E6E6E]">
+                  Remove a data/horário da consulta, mas mantém o paciente ativo no CRM.
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmarExcluirDefinitivo}
+                className="w-full text-left p-3 rounded-sm border border-rose-300 bg-rose-50 hover:bg-rose-100 transition-colors cursor-pointer group"
+              >
+                <div className="text-xs font-bold text-rose-800">
+                  2. Excluir Paciente Definitivamente do Banco de Dados
+                </div>
+                <div className="text-[11px] text-rose-600">
+                  Apaga o paciente, fichas e consultas do Supabase (Soft Delete).
+                </div>
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-[#D9D6D0]">
+              <button
+                type="button"
+                onClick={() => setLeadExcluindo(null)}
+                className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-[#6E6E6E] hover:text-[#1A1A1A] bg-white border border-[#D9D6D0] rounded-sm hover:bg-[#F2EFEA] cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}

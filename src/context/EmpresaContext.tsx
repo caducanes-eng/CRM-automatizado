@@ -8,18 +8,6 @@ import React, {
   ReactNode,
 } from 'react';
 import {
-  collection,
-  doc,
-  getDocs,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  onSnapshot,
-  writeBatch,
-} from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
-import { db, auth, sanitizeForFirestore } from '../lib/firebase';
-import {
   Empresa,
   EmpresaMembro,
   PlataformaAdmin,
@@ -224,16 +212,6 @@ export const EmpresaProvider: React.FC<{
     if (userAuthId) setDetectedId(userAuthId);
   }, [userAuthEmail, userAuthId]);
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (fbUser) => {
-      if (fbUser) {
-        if (fbUser.email) setDetectedEmail(fbUser.email);
-        if (fbUser.uid) setDetectedId(fbUser.uid);
-      }
-    });
-    return () => unsub();
-  }, []);
-
   // Persistência local imediata
   useEffect(() => {
     try {
@@ -258,103 +236,6 @@ export const EmpresaProvider: React.FC<{
       localStorage.setItem(STORAGE_KEYS.EMPRESA_ATIVA_ID, empresaAtivaId);
     } catch (e) {}
   }, [empresaAtivaId]);
-
-  // Sincronização em tempo real com Firestore para coleções de multiempresa
-  useEffect(() => {
-    let unsubs: Array<() => void> = [];
-
-    const inicializarFirestoreMultiempresa = async () => {
-      try {
-        // Inicializar empresas se vazio
-        const snapEmpresas = await getDocs(collection(db, 'empresas'));
-        if (snapEmpresas.empty) {
-          const batch = writeBatch(db);
-          for (const emp of SEED_EMPRESAS) {
-            batch.set(doc(db, 'empresas', emp.id), sanitizeForFirestore(emp));
-          }
-          await batch.commit();
-        }
-
-        // Inicializar membros se vazio
-        const snapMembros = await getDocs(collection(db, 'empresa_membros'));
-        if (snapMembros.empty) {
-          const batch = writeBatch(db);
-          for (const m of SEED_EMPRESA_MEMBROS) {
-            batch.set(doc(db, 'empresa_membros', m.id), sanitizeForFirestore(m));
-          }
-          await batch.commit();
-        }
-
-        // Inicializar admins da plataforma se vazio
-        const snapPlat = await getDocs(collection(db, 'plataforma_admins'));
-        if (snapPlat.empty) {
-          const batch = writeBatch(db);
-          for (const p of SEED_PLATAFORMA_ADMINS) {
-            batch.set(doc(db, 'plataforma_admins', p.id), sanitizeForFirestore(p));
-          }
-          await batch.commit();
-        }
-      } catch (err) {
-        console.warn('Nota de inicialização Firestore Multiempresa:', err);
-      }
-
-      // Listeners
-      try {
-        const u1 = onSnapshot(
-          collection(db, 'empresas'),
-          (snapshot) => {
-            if (!snapshot.empty) {
-              const list: Empresa[] = [];
-              snapshot.forEach((d) => list.push(d.data() as Empresa));
-              setEmpresas(list);
-            }
-          },
-          (err) => {
-            console.warn('Firestore empresas snapshot listener notice:', err);
-          }
-        );
-        unsubs.push(u1);
-
-        const u2 = onSnapshot(
-          collection(db, 'empresa_membros'),
-          (snapshot) => {
-            if (!snapshot.empty) {
-              const list: EmpresaMembro[] = [];
-              snapshot.forEach((d) => list.push(d.data() as EmpresaMembro));
-              setEmpresaMembros(list);
-            }
-          },
-          (err) => {
-            console.warn('Firestore empresa_membros snapshot listener notice:', err);
-          }
-        );
-        unsubs.push(u2);
-
-        const u3 = onSnapshot(
-          collection(db, 'plataforma_admins'),
-          (snapshot) => {
-            if (!snapshot.empty) {
-              const list: PlataformaAdmin[] = [];
-              snapshot.forEach((d) => list.push(d.data() as PlataformaAdmin));
-              setPlataformaAdmins(list);
-            }
-          },
-          (err) => {
-            console.warn('Firestore plataforma_admins snapshot listener notice:', err);
-          }
-        );
-        unsubs.push(u3);
-      } catch (e) {
-        console.warn('Erro ao escutar Firestore multiempresa:', e);
-      }
-    };
-
-    inicializarFirestoreMultiempresa();
-
-    return () => {
-      unsubs.forEach((fn) => fn());
-    };
-  }, []);
 
   // Sincronização em tempo real de Empresas via Supabase
   const carregarEmpresasSupabase = useCallback(async () => {
@@ -586,14 +467,7 @@ export const EmpresaProvider: React.FC<{
       // 1. Atualizar state
       setEmpresas((prev) => [novaEmpresa, ...prev]);
 
-      // 2. Salvar no Firestore
-      try {
-        await setDoc(doc(db, 'empresas', id), sanitizeForFirestore(novaEmpresa));
-      } catch (e) {
-        console.error('Erro ao salvar nova empresa no Firestore:', e);
-      }
-
-      // 3. Salvar no Supabase (se configurado)
+      // 2. Salvar no Supabase (se configurado)
       if (isSupabaseConfigured()) {
         try {
           await supabaseService.salvarEmpresa(novaEmpresa);
@@ -624,10 +498,6 @@ export const EmpresaProvider: React.FC<{
         };
 
         setEmpresaMembros((prev) => [novoMembro, ...prev]);
-
-        try {
-          await setDoc(doc(db, 'empresa_membros', membroId), sanitizeForFirestore(novoMembro));
-        } catch (e) {}
 
         if (isSupabaseConfigured()) {
           try {
@@ -670,12 +540,6 @@ export const EmpresaProvider: React.FC<{
       );
 
       if (atualizada) {
-        try {
-          await setDoc(doc(db, 'empresas', empresaId), sanitizeForFirestore(atualizada), { merge: true });
-        } catch (e) {
-          console.error('Erro ao atualizar empresa no Firestore:', e);
-        }
-
         if (isSupabaseConfigured()) {
           try {
             await supabaseService.salvarEmpresa(atualizada);
@@ -717,12 +581,6 @@ export const EmpresaProvider: React.FC<{
 
       setEmpresas((prev) => prev.filter((e) => e.id !== empresaId));
       setEmpresaMembros((prev) => prev.filter((m) => m.empresaId !== empresaId));
-
-      try {
-        await deleteDoc(doc(db, 'empresas', empresaId));
-      } catch (e) {
-        console.error('Erro ao excluir empresa no Firestore:', e);
-      }
 
       if (isSupabaseConfigured() && empresaParaExcluir) {
         try {
@@ -777,12 +635,6 @@ export const EmpresaProvider: React.FC<{
 
       setEmpresaMembros((prev) => [novoMembro, ...prev]);
 
-      try {
-        await setDoc(doc(db, 'empresa_membros', id), sanitizeForFirestore(novoMembro));
-      } catch (e) {
-        console.error('Erro ao vincular membro no Firestore:', e);
-      }
-
       if (isSupabaseConfigured()) {
         try {
           await supabaseService.salvarMembroEmpresa(novoMembro);
@@ -817,21 +669,6 @@ export const EmpresaProvider: React.FC<{
         })
       );
 
-      // Sincroniza membros no Firestore
-      try {
-        const snap = await getDocs(collection(db, 'empresa_membros'));
-        snap.forEach(async (docSnap) => {
-          const data = docSnap.data() as EmpresaMembro;
-          if (data.userId === userId || data.id === userId) {
-            await updateDoc(docSnap.ref, {
-              empresaId: novaEmpresaId,
-              papel: novoPapel || data.papel,
-              updated_at: timestamp,
-            });
-          }
-        });
-      } catch (e) {}
-
       return true;
     },
     []
@@ -853,15 +690,6 @@ export const EmpresaProvider: React.FC<{
         })
       );
 
-      try {
-        await updateDoc(doc(db, 'empresa_membros', membroId), {
-          papel: novoPapel,
-          updated_at: timestamp,
-        });
-      } catch (e) {
-        console.error('Erro ao alterar papel do membro:', e);
-      }
-
       return true;
     },
     []
@@ -870,13 +698,6 @@ export const EmpresaProvider: React.FC<{
   const removerAcessoUsuario = useCallback(
     async (membroId: string): Promise<boolean> => {
       setEmpresaMembros((prev) => prev.filter((m) => m.id !== membroId));
-
-      try {
-        await deleteDoc(doc(db, 'empresa_membros', membroId));
-      } catch (e) {
-        console.error('Erro ao remover membro do Firestore:', e);
-      }
-
       return true;
     },
     []
@@ -901,12 +722,6 @@ export const EmpresaProvider: React.FC<{
 
       setPlataformaAdmins((prev) => [novoAdmin, ...prev]);
 
-      try {
-        await setDoc(doc(db, 'plataforma_admins', id), sanitizeForFirestore(novoAdmin));
-      } catch (e) {
-        console.error('Erro ao salvar admin da plataforma no Firestore:', e);
-      }
-
       if (isSupabaseConfigured()) {
         try {
           await supabaseService.salvarAdminPlataforma(novoAdmin);
@@ -923,17 +738,6 @@ export const EmpresaProvider: React.FC<{
   const removerAdminPlataforma = useCallback(
     async (userId: string): Promise<boolean> => {
       setPlataformaAdmins((prev) => prev.filter((p) => p.userId !== userId && p.id !== userId));
-
-      try {
-        const snap = await getDocs(collection(db, 'plataforma_admins'));
-        snap.forEach(async (d) => {
-          const data = d.data() as PlataformaAdmin;
-          if (data.userId === userId || data.id === userId) {
-            await deleteDoc(d.ref);
-          }
-        });
-      } catch (e) {}
-
       return true;
     },
     []

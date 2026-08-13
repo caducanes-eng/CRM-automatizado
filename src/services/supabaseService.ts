@@ -213,12 +213,32 @@ export const supabaseMapper = {
   // LEAD
   leadToDb: (lead: Lead, empresaId: string = ID_EMPRESA_PADRAO) => {
     const eId = lead.empresaId || (lead as any).empresa_id || empresaId;
+    
+    // Objeto de agendamento preservado dentro do JSONB de etapa_por_situacao para resiliência total
+    const agendamentoMeta = {
+      dataAgendamento: lead.dataAgendamento || null,
+      horarioAgendamento: lead.horarioAgendamento || null,
+      profissionalAgendamento: lead.profissionalAgendamento || null,
+      tipoConsulta: lead.tipoConsulta || null,
+      unidadeAgendamento: lead.unidadeAgendamento || null,
+      observacoesAgendamento: lead.observacoesAgendamento || null,
+      statusConfirmacaoAgendamento: lead.statusConfirmacaoAgendamento || null,
+      lembrete24hEnviado: Boolean(lead.lembrete24hEnviado),
+      dataEnvioLembrete24h: lead.dataEnvioLembrete24h || null,
+      mensagemLembrete24hEnviadaPor: lead.mensagemLembrete24hEnviadaPor || null,
+    };
+
+    const etapaMap = {
+      ...(lead.etapaPorSituacao || {}),
+      _agendamento: agendamentoMeta,
+    };
+
     return {
       id: normalizarUuid(lead.id),
       empresa_id: normalizarUuid(eId),
       nome: lead.nome ? String(lead.nome).trim() : 'Sem Nome',
       situacao: lead.situacao || 'Em captação',
-      etapa_por_situacao: lead.etapaPorSituacao || {},
+      etapa_por_situacao: etapaMap,
       interesse: lead.interesse ? String(lead.interesse).trim() : '',
       possivel_valor: Number(lead.possivelValor || 0),
       status_venda: lead.statusVenda || 'Em processo',
@@ -229,6 +249,7 @@ export const supabaseMapper = {
       motivo_perda: lead.motivoPerda ? String(lead.motivoPerda).trim() : null,
       data_perda: sanitizeDate(lead.dataPerda),
       situacao_perda: lead.situacaoPerda || null,
+
       created_at: lead.created_at || new Date().toISOString(),
       updated_at: lead.updated_at || new Date().toISOString(),
       deleted_at: lead.deleted_at || null,
@@ -236,28 +257,47 @@ export const supabaseMapper = {
     };
   },
 
-  dbToLead: (row: any): Lead => ({
-    id: row.id,
-    empresaId: row.empresa_id,
-    empresa_id: row.empresa_id,
-    nome: row.nome,
-    situacao: row.situacao as SituacaoLead,
-    etapaPorSituacao: row.etapa_por_situacao || {},
-    interesse: row.interesse || '',
-    possivelValor: Number(row.possivel_valor || 0),
-    statusVenda: row.status_venda as StatusVenda,
-    dataEntrada: row.data_entrada,
-    responsavel: row.responsavel,
-    dataEntradaNutricao: row.data_entrada_nutricao || undefined,
-    statusGrupoNutricao: (row.status_grupo_nutricao as StatusGrupoNutricao) || 'Ativo',
-    motivoPerda: row.motivo_perda || undefined,
-    dataPerda: row.data_perda || undefined,
-    situacaoPerda: (row.situacao_perda as SituacaoLead) || undefined,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    deleted_at: row.deleted_at,
-    version: row.version || 1,
-  }),
+  dbToLead: (row: any): Lead => {
+    const metaAgendamento = row.etapa_por_situacao?._agendamento || {};
+    const etapaMap = { ...(row.etapa_por_situacao || {}) };
+    delete etapaMap._agendamento;
+
+    return {
+      id: row.id,
+      empresaId: row.empresa_id,
+      empresa_id: row.empresa_id,
+      nome: row.nome,
+      situacao: row.situacao as SituacaoLead,
+      etapaPorSituacao: etapaMap,
+      interesse: row.interesse || '',
+      possivelValor: Number(row.possivel_valor || 0),
+      statusVenda: row.status_venda as StatusVenda,
+      dataEntrada: row.data_entrada,
+      responsavel: row.responsavel,
+      dataEntradaNutricao: row.data_entrada_nutricao || undefined,
+      statusGrupoNutricao: (row.status_grupo_nutricao as StatusGrupoNutricao) || 'Ativo',
+      motivoPerda: row.motivo_perda || undefined,
+      dataPerda: row.data_perda || undefined,
+      situacaoPerda: (row.situacao_perda as SituacaoLead) || undefined,
+
+      // Recuperação dos dados do agendamento a partir do meta JSONB ou coluna legado
+      dataAgendamento: metaAgendamento.dataAgendamento || row.data_agendamento || undefined,
+      horarioAgendamento: metaAgendamento.horarioAgendamento || row.horario_agendamento || undefined,
+      profissionalAgendamento: metaAgendamento.profissionalAgendamento || row.profissional_agendamento || undefined,
+      tipoConsulta: metaAgendamento.tipoConsulta || row.tipo_consulta || undefined,
+      unidadeAgendamento: metaAgendamento.unidadeAgendamento || row.unidade_agendamento || undefined,
+      observacoesAgendamento: metaAgendamento.observacoesAgendamento || row.observacoes_agendamento || undefined,
+      statusConfirmacaoAgendamento: metaAgendamento.statusConfirmacaoAgendamento || row.status_confirmacao_agendamento || undefined,
+      lembrete24hEnviado: metaAgendamento.lembrete24hEnviado !== undefined && metaAgendamento.lembrete24hEnviado !== null ? Boolean(metaAgendamento.lembrete24hEnviado) : Boolean(row.lembrete_24h_enviado),
+      dataEnvioLembrete24h: metaAgendamento.dataEnvioLembrete24h || row.data_envio_lembrete_24h || undefined,
+      mensagemLembrete24hEnviadaPor: metaAgendamento.mensagemLembrete24hEnviadaPor || row.mensagem_lembrete_24h_enviada_por || undefined,
+
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      deleted_at: row.deleted_at,
+      version: row.version || 1,
+    };
+  },
 
   // FICHA DO LEAD
   fichaToDb: (ficha: FichaLead, empresaId: string = ID_EMPRESA_PADRAO) => {
@@ -273,6 +313,7 @@ export const supabaseMapper = {
       observacoes: ficha.observacoes ? String(ficha.observacoes).trim() : '',
       motivo_perda: ficha.motivoPerda ? String(ficha.motivoPerda).trim() : null,
       data_perda: sanitizeDate(ficha.dataPerda),
+
       created_at: ficha.created_at || new Date().toISOString(),
       updated_at: ficha.updated_at || new Date().toISOString(),
       deleted_at: ficha.deleted_at || null,
