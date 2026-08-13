@@ -33,6 +33,7 @@ import {
 import { useCrm } from '../context/CrmContext';
 import { useEmpresa } from '../context/EmpresaContext';
 import { useAuth } from '../context/AuthContext';
+import { supabaseService } from '../services/supabaseService';
 import {
   Lead,
   FichaLead,
@@ -309,6 +310,19 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
       setObservacoes('');
       setMotivoPerda('');
       setDataPerda('');
+
+      // Buscar ficha diretamente do Supabase caso ainda não esteja no estado local
+      supabaseService.fetchFichaByLeadId(currentLead).then((f) => {
+        if (f) {
+          setTelefone(f.telefone || '');
+          setOrigemLead(f.origemLead || 'WhatsApp');
+          setDataNascimento(f.dataNascimento || '');
+          setEndereco(f.endereco || '');
+          setObservacoes(f.observacoes || '');
+          setMotivoPerda(f.motivoPerda || '');
+          setDataPerda(f.dataPerda || '');
+        }
+      });
     }
   }, [activeLeadId, isModalOpen]);
 
@@ -354,11 +368,11 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
   };
 
   // Salvar apenas os dados básicos do lead
-  const handleSalvarDadosBasicos = (e?: React.FormEvent) => {
+  const handleSalvarDadosBasicos = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!activeLeadId || !nome.trim()) return;
 
-    atualizarLead(activeLeadId, {
+    await atualizarLead(activeLeadId, {
       nome: nome.trim(),
       situacao,
       interesse: interesse.trim(),
@@ -386,7 +400,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
 
     // Se mudou para Perdido e já tiver campos preenchidos, sincroniza
     if (statusVenda === 'Perdido') {
-      atualizarFichaLead(activeLeadId, {
+      await atualizarFichaLead(activeLeadId, {
         motivoPerda: motivoPerda.trim(),
         dataPerda: dataPerda || obterDataHoje(),
       });
@@ -397,12 +411,12 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
   };
 
   // Salvar a Ficha completa (dados complementares, agendamento e observações)
-  const handleSalvarFichaCompleta = (e?: React.FormEvent) => {
+  const handleSalvarFichaCompleta = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!activeLeadId || !nome.trim()) return;
 
     // 1. Atualizar Lead
-    atualizarLead(activeLeadId, {
+    await atualizarLead(activeLeadId, {
       nome: nome.trim(),
       situacao,
       interesse: interesse.trim(),
@@ -430,7 +444,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
     }
 
     // 3. Atualizar FichaLead
-    atualizarFichaLead(activeLeadId, {
+    await atualizarFichaLead(activeLeadId, {
       telefone: telefone.trim(),
       origemLead,
       dataNascimento,
@@ -1894,9 +1908,22 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
 
                 {/* Endereço */}
                 <div className="space-y-1">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]">
-                    Endereço Completo
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]">
+                      Endereço Completo
+                    </label>
+                    {endereco && (
+                      <button
+                        type="button"
+                        onClick={() => setEndereco('')}
+                        className="text-[10px] font-semibold text-rose-600 hover:text-rose-800 hover:underline flex items-center gap-1 cursor-pointer"
+                        title="Apagar endereço"
+                      >
+                        <X className="w-3 h-3" />
+                        <span>Apagar</span>
+                      </button>
+                    )}
+                  </div>
                   <div className="relative">
                     <MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#8F887E]" />
                     <input
@@ -1905,16 +1932,39 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                       value={endereco}
                       onChange={(e) => setEndereco(e.target.value)}
                       placeholder="Ex: Av. Paulista, 1000, Apto 52, Bela Vista - São Paulo / SP"
-                      className="w-full h-9 pl-9 pr-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden font-medium"
+                      className="w-full h-9 pl-9 pr-8 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden font-medium"
                     />
+                    {endereco && (
+                      <button
+                        type="button"
+                        onClick={() => setEndereco('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8F887E] hover:text-rose-600 p-0.5 rounded-full cursor-pointer"
+                        title="Limpar campo"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
                 {/* Observações */}
                 <div className="space-y-1">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]">
-                    Observações e Histórico Clínico / Comercial
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]">
+                      Observações e Histórico Clínico / Comercial
+                    </label>
+                    {observacoes && (
+                      <button
+                        type="button"
+                        onClick={() => setObservacoes('')}
+                        className="text-[10px] font-semibold text-rose-600 hover:text-rose-800 hover:underline flex items-center gap-1 cursor-pointer"
+                        title="Apagar observações"
+                      >
+                        <X className="w-3 h-3" />
+                        <span>Apagar</span>
+                      </button>
+                    )}
+                  </div>
                   <textarea
                     id="textarea-ficha-observacoes"
                     rows={4}

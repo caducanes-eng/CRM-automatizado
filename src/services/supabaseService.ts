@@ -79,6 +79,31 @@ export function normalizarUuid(id?: string | null): string {
   return `${hex1}-${cleanStr.slice(0, 4)}-4${cleanStr.slice(4, 7)}-8${cleanStr.slice(7, 10)}-${hex2}${cleanStr.slice(10, 14)}`.toLowerCase();
 }
 
+let cachedFichasTableName: string | null = null;
+
+async function getFichasTableName(): Promise<string> {
+  if (cachedFichasTableName) return cachedFichasTableName;
+  const client = getSupabaseClient();
+  if (!client) return 'fichas_leads';
+
+  const { error: err1 } = await client.from('fichas_leads').select('id').limit(1);
+  if (!err1) {
+    cachedFichasTableName = 'fichas_leads';
+    return cachedFichasTableName;
+  }
+
+  if (err1.code === 'PGRST205' || err1.code === '42P01' || err1.message?.includes('fichas_leads')) {
+    const { error: err2 } = await client.from('fichas_lead').select('id').limit(1);
+    if (!err2 || err2.code !== 'PGRST205') {
+      cachedFichasTableName = 'fichas_lead';
+      return cachedFichasTableName;
+    }
+  }
+
+  cachedFichasTableName = 'fichas_leads';
+  return cachedFichasTableName;
+}
+
 // ============================================================================
 // MAPEADORES: DOMÍNIO TYPESCRIPT <-> POSTGRESQL / SUPABASE
 // ============================================================================
@@ -308,11 +333,9 @@ export const supabaseMapper = {
       empresa_id: normalizarUuid(eId),
       lead_id: normalizarUuid(ficha.leadId),
       telefone: ficha.telefone ? String(ficha.telefone).trim() : '',
-      email: (ficha as any).email ? String((ficha as any).email).trim() : null,
-      idade: (ficha as any).idade ? Number((ficha as any).idade) : null,
+      origem_lead: ficha.origemLead || (ficha as any).comoConheceu || 'WhatsApp',
       data_nascimento: sanitizeDate(ficha.dataNascimento),
-      como_conheceu: (ficha as any).comoConheceu || ficha.origemLead || 'WhatsApp',
-      gasto_estimado: Number((ficha as any).gastoEstimado || 0),
+      endereco: ficha.endereco ? String(ficha.endereco).trim() : '',
       observacoes: ficha.observacoes ? String(ficha.observacoes).trim() : '',
       motivo_perda: ficha.motivoPerda ? String(ficha.motivoPerda).trim() : null,
       data_perda: sanitizeDate(ficha.dataPerda),
@@ -331,7 +354,9 @@ export const supabaseMapper = {
     telefone: row.telefone || '',
     email: row.email || '',
     idade: row.idade ? Number(row.idade) : undefined,
-    origemLead: (row.como_conheceu as OrigemLead) || (row.origem_lead as OrigemLead) || 'WhatsApp',
+    origemLead: (row.origem_lead as OrigemLead) || (row.como_conheceu as OrigemLead) || 'WhatsApp',
+    comoConheceu: row.como_conheceu || row.origem_lead || '',
+    gastoEstimado: row.gasto_estimado ? Number(row.gasto_estimado) : 0,
     dataNascimento: row.data_nascimento || '',
     endereco: row.endereco || '',
     observacoes: row.observacoes || '',
@@ -813,24 +838,66 @@ export const supabaseService = {
   /**
    * Buscar ficha cadastral/anamnese vinculada ao lead.
    */
-  async fetchFichaByLeadId(leadId: string): Promise<FichaLead | null> {
+  async fetchFichaByLeadId(leadOrId: string | Lead): Promise<FichaLead | null> {
     const client = getSupabaseClient();
     if (!client) return null;
 
     try {
-      const { data, error } = await client
-        .from('fichas_leads')
+      const leadId = typeof leadOrId === 'string' ? leadOrId : leadOrId.id;
+      const uuid = normalizarUuid(leadId);
+
+      const tableName = await getFichasTableName();
+      let { data, error } = await client
+        .from(tableName)
         .select('*')
-        .eq('lead_id', normalizarUuid(leadId))
+        .eq('lead_id', uuid)
         .is('deleted_at', null)
         .maybeSingle();
+
+      if (error && (error.code === 'PGRST205' || error.message?.includes('fichas_leads'))) {
+        cachedFichasTableName = 'fichas_lead';
+        const resFallback = await client
+          .from('fichas_lead')
+          .select('*')
+          .eq('lead_id', uuid)
+          .is('deleted_at', null)
+          .maybeSingle();
+        data = resFallback.data;
+        error = resFallback.error;
+      }
 
       if (error) {
         console.error('Erro ao buscar ficha do lead:', error);
         throw error;
       }
 
-      return data ? supabaseMapper.dbToFicha(data) : null;
+      if (data) {
+        return supabaseMapper.dbToFicha(data);
+      }
+
+      // FALLBACK: Se o parâmetro for um objeto Lead e ainda não existir registro na 'fichas_leads'/'fichas_lead',
+      // preenche os campos básicos usando o objeto 'lead'
+      if (typeof leadOrId !== 'string') {
+        const lead = leadOrId;
+        return {
+          id: normalizarUuid(),
+          leadId: lead.id,
+          empresaId: lead.empresaId || ID_EMPRESA_PADRAO,
+          telefone: (lead as any).telefone || '',
+          email: (lead as any).email || '',
+          dataNascimento: '',
+          endereco: '',
+          origemLead: 'WhatsApp',
+          comoConheceu: lead.interesse || '',
+          gastoEstimado: 0,
+          observacoes: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          version: 1,
+        };
+      }
+
+      return null;
     } catch (error) {
       console.error('Falha em fetchFichaByLeadId:', error);
       return null;
@@ -850,36 +917,49 @@ export const supabaseService = {
     try {
       const leadUuid = normalizarUuid(dadosFicha.leadId);
 
+      let fichaExistente: FichaLead | null = null;
       let idFicha = dadosFicha.id ? normalizarUuid(dadosFicha.id) : null;
       if (!idFicha) {
-        const fichaExistente = await this.fetchFichaByLeadId(leadUuid);
+        fichaExistente = await this.fetchFichaByLeadId(leadUuid);
         idFicha = fichaExistente?.id ? normalizarUuid(fichaExistente.id) : normalizarUuid();
       }
 
       const fichaCompleta: FichaLead = {
         id: idFicha,
-        empresaId: normalizarUuid(dadosFicha.empresaId || (dadosFicha as any).empresa_id || empresaId),
+        empresaId: normalizarUuid(dadosFicha.empresaId || (dadosFicha as any).empresa_id || fichaExistente?.empresaId || empresaId),
         leadId: leadUuid,
-        telefone: dadosFicha.telefone ? String(dadosFicha.telefone).trim() : '',
-        email: (dadosFicha as any).email ? String((dadosFicha as any).email).trim() : '',
-        idade: (dadosFicha as any).idade ? Number((dadosFicha as any).idade) : undefined,
-        origemLead: dadosFicha.origemLead || 'WhatsApp',
-        dataNascimento: sanitizeDate(dadosFicha.dataNascimento) || '',
-        endereco: dadosFicha.endereco ? String(dadosFicha.endereco).trim() : '',
-        observacoes: dadosFicha.observacoes ? String(dadosFicha.observacoes).trim() : '',
-        motivoPerda: dadosFicha.motivoPerda,
-        dataPerda: sanitizeDate(dadosFicha.dataPerda) || undefined,
-        created_at: dadosFicha.created_at || new Date().toISOString(),
+        telefone: dadosFicha.telefone !== undefined ? String(dadosFicha.telefone).trim() : (fichaExistente?.telefone || ''),
+        email: (dadosFicha as any).email !== undefined ? String((dadosFicha as any).email).trim() : (fichaExistente?.email || ''),
+        idade: (dadosFicha as any).idade !== undefined ? Number((dadosFicha as any).idade) : fichaExistente?.idade,
+        origemLead: dadosFicha.origemLead || fichaExistente?.origemLead || 'WhatsApp',
+        dataNascimento: sanitizeDate(dadosFicha.dataNascimento) || fichaExistente?.dataNascimento || '',
+        endereco: dadosFicha.endereco !== undefined ? String(dadosFicha.endereco).trim() : (fichaExistente?.endereco || ''),
+        observacoes: dadosFicha.observacoes !== undefined ? String(dadosFicha.observacoes).trim() : (fichaExistente?.observacoes || ''),
+        motivoPerda: dadosFicha.motivoPerda !== undefined ? dadosFicha.motivoPerda : fichaExistente?.motivoPerda,
+        dataPerda: sanitizeDate(dadosFicha.dataPerda) || fichaExistente?.dataPerda,
+        created_at: dadosFicha.created_at || fichaExistente?.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        version: Number(dadosFicha.version || 1),
+        version: Number(dadosFicha.version || fichaExistente?.version || 1) + 1,
       };
 
       const row = supabaseMapper.fichaToDb(fichaCompleta, empresaId);
-      const { data, error } = await client
-        .from('fichas_leads')
+      const tableName = await getFichasTableName();
+      let { data, error } = await client
+        .from(tableName)
         .upsert(row, { onConflict: 'id' })
         .select()
         .single();
+
+      if (error && (error.code === 'PGRST205' || error.message?.includes('fichas_leads'))) {
+        cachedFichasTableName = 'fichas_lead';
+        const resFallback = await client
+          .from('fichas_lead')
+          .upsert(row, { onConflict: 'id' })
+          .select()
+          .single();
+        data = resFallback.data;
+        error = resFallback.error;
+      }
 
       if (error) {
         console.error('Erro ao salvar ficha do lead no Supabase:', error);
@@ -1095,14 +1175,21 @@ export const supabaseService = {
     if (!client) return null;
 
     try {
-      const [resEmpresas, resLeads, resFichas, resCompras, resProc, resUsers] = await Promise.all([
+      const tableNameFichas = await getFichasTableName();
+      const [resEmpresas, resLeads, resFichasRaw, resCompras, resProc, resUsers] = await Promise.all([
         client.from('empresas').select('*').is('deleted_at', null).order('nome', { ascending: true }),
         client.from('leads').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
-        client.from('fichas_leads').select('*').is('deleted_at', null),
+        client.from(tableNameFichas).select('*').is('deleted_at', null),
         client.from('compras').select('*').is('deleted_at', null).order('data', { ascending: false }),
         client.from('procedimentos').select('*').is('deleted_at', null).order('nome', { ascending: true }),
         client.from('usuarios').select('*').is('deleted_at', null),
       ]);
+
+      let resFichas = resFichasRaw;
+      if (resFichas.error && (resFichas.error.code === 'PGRST205' || resFichas.error.message?.includes('fichas_leads'))) {
+        cachedFichasTableName = 'fichas_lead';
+        resFichas = await client.from('fichas_lead').select('*').is('deleted_at', null);
+      }
 
       const rowsEmpresas = resEmpresas.data || [];
       const rowsLeads = resLeads.data || [];
@@ -1237,7 +1324,13 @@ export const supabaseService = {
       let totalFichasSalvas = 0;
       if (params.fichas.length > 0) {
         const rowsFichas = params.fichas.map((f) => supabaseMapper.fichaToDb(f));
-        const { error: errF } = await client.from('fichas_leads').upsert(rowsFichas, { onConflict: 'id' });
+        let tableName = await getFichasTableName();
+        let { error: errF } = await client.from(tableName).upsert(rowsFichas, { onConflict: 'id' });
+        if (errF && (errF.code === 'PGRST205' || errF.message?.includes('fichas_leads'))) {
+          cachedFichasTableName = 'fichas_lead';
+          const resF = await client.from('fichas_lead').upsert(rowsFichas, { onConflict: 'id' });
+          errF = resF.error;
+        }
         if (errF) {
           erros.push(`Erro em fichas: ${errF.message}`);
         } else {
@@ -1316,10 +1409,19 @@ export const supabaseService = {
         .neq('id', '00000000-0000-0000-0000-000000000000');
       if (errC) erros.push(`Erro ao limpar compras: ${errC.message}`);
 
-      const { error: errF } = await client
-        .from('fichas_leads')
+      const tableNameFichas = await getFichasTableName();
+      let { error: errF } = await client
+        .from(tableNameFichas)
         .delete()
         .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (errF && (errF.code === 'PGRST205' || errF.message?.includes('fichas_leads'))) {
+        cachedFichasTableName = 'fichas_lead';
+        const resF = await client
+          .from('fichas_lead')
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000');
+        errF = resF.error;
+      }
       if (errF) erros.push(`Erro ao limpar fichas: ${errF.message}`);
 
       const { error: errL } = await client

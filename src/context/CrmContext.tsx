@@ -288,6 +288,11 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       )
       .on(
         'postgres_changes',
+        { event: '*', schema: 'public', table: 'fichas_lead' },
+        () => carregarDadosCompletos()
+      )
+      .on(
+        'postgres_changes',
         { event: '*', schema: 'public', table: 'compras' },
         () => carregarDadosCompletos()
       )
@@ -586,53 +591,52 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const atualizarFichaLead = useCallback(
     async (leadId: string, dados: AtualizarFichaPayload): Promise<FichaLead | null> => {
-      let fichaAtualizada: FichaLead | null = null;
       const timestamp = new Date().toISOString();
+      const fichaExistente = fichas.find((f) => f.leadId === leadId);
+
+      let fichaAtualizada: FichaLead;
+      if (fichaExistente) {
+        fichaAtualizada = {
+          ...fichaExistente,
+          ...dados,
+          updated_at: timestamp,
+          version: (fichaExistente.version || 1) + 1,
+        };
+      } else {
+        fichaAtualizada = {
+          id: generateId('ficha'),
+          empresaId: empresaIdEfetiva,
+          leadId,
+          telefone: dados.telefone || '',
+          origemLead: dados.origemLead || 'WhatsApp',
+          dataNascimento: dados.dataNascimento || '',
+          endereco: dados.endereco || '',
+          observacoes: dados.observacoes || '',
+          motivoPerda: dados.motivoPerda || '',
+          dataPerda: dados.dataPerda || '',
+          created_at: timestamp,
+          updated_at: timestamp,
+          version: 1,
+        };
+      }
 
       setFichas((prev) => {
-        const existe = prev.find((f) => f.leadId === leadId);
+        const existe = prev.some((f) => f.leadId === leadId);
         if (existe) {
-          return prev.map((f) => {
-            if (f.leadId !== leadId) return f;
-            fichaAtualizada = {
-              ...f,
-              ...dados,
-              updated_at: timestamp,
-              version: (f.version || 1) + 1,
-            };
-            return fichaAtualizada;
-          });
-        } else {
-          fichaAtualizada = {
-            id: generateId('ficha'),
-            empresaId: empresaIdEfetiva,
-            leadId,
-            telefone: dados.telefone || '',
-            origemLead: dados.origemLead || 'WhatsApp',
-            dataNascimento: dados.dataNascimento || '',
-            endereco: dados.endereco || '',
-            observacoes: dados.observacoes || '',
-            motivoPerda: dados.motivoPerda || '',
-            dataPerda: dados.dataPerda || '',
-            created_at: timestamp,
-            updated_at: timestamp,
-            version: 1,
-          };
-          return [...prev, fichaAtualizada];
+          return prev.map((f) => (f.leadId === leadId ? fichaAtualizada : f));
         }
+        return [...prev, fichaAtualizada];
       });
 
-      if (fichaAtualizada) {
-        try {
-          await supabaseService.salvarFicha(fichaAtualizada, empresaIdEfetiva);
-        } catch (e) {
-          console.error('Erro ao salvar ficha no Supabase:', e);
-        }
+      try {
+        await supabaseService.salvarFicha(fichaAtualizada, empresaIdEfetiva);
+      } catch (e) {
+        console.error('Erro ao salvar ficha no Supabase:', e);
       }
 
       return fichaAtualizada;
     },
-    [empresaIdEfetiva]
+    [fichas, empresaIdEfetiva]
   );
 
   const salvarFichaExtra = useCallback(

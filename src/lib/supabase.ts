@@ -302,9 +302,14 @@ export async function testSupabaseConnection(
     const { error: errLeads } = await client.from('leads').select('id').limit(1);
     if (!errLeads) tabelasValidadas.push('leads');
 
-    // Testa tabela fichas_leads
-    const { error: errFichas } = await client.from('fichas_leads').select('id').limit(1);
-    if (!errFichas) tabelasValidadas.push('fichas_leads');
+    // Testa tabela fichas_leads ou fichas_lead
+    const { error: errFichas1 } = await client.from('fichas_leads').select('id').limit(1);
+    if (!errFichas1) {
+      tabelasValidadas.push('fichas_leads');
+    } else {
+      const { error: errFichas2 } = await client.from('fichas_lead').select('id').limit(1);
+      if (!errFichas2) tabelasValidadas.push('fichas_lead');
+    }
 
     // Testa tabela procedimentos
     const { error: errProc } = await client.from('procedimentos').select('id').limit(1);
