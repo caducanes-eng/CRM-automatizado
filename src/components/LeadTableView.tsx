@@ -173,15 +173,16 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
   // Concluir etapa da paciente e avançar automaticamente
   const handleConcluirEtapaLead = async () => {
     if (!modalEtapaLead) return;
-    const situacao = modalEtapaLead.situacao;
-    const etapaArmazenada = modalEtapaLead.etapaPorSituacao?.[situacao];
+    const leadAtual = leads.find((l) => l.id === modalEtapaLead.id) || modalEtapaLead;
+    const situacao = leadAtual.situacao;
+    const etapaArmazenada = leadAtual.etapaPorSituacao?.[situacao];
     const res = avancarProximaEtapa(situacao, etapaArmazenada);
-    await definirEtapaPorSituacao(modalEtapaLead.id, situacao, res.proximaEtapa);
+    await definirEtapaPorSituacao(leadAtual.id, situacao, res.proximaEtapa);
     setModalEtapaLead(null);
     setFeedbackToast(
       res.todasConcluidas
-        ? `Todas as etapas da cadência concluídas para ${modalEtapaLead.nome}!`
-        : `Etapa concluída para ${modalEtapaLead.nome}! Próximo passo: ${res.proximaEtapa}`
+        ? `Todas as etapas da cadência concluídas para ${leadAtual.nome}!`
+        : `Etapa concluída para ${leadAtual.nome}! Próximo passo: ${res.proximaEtapa}`
     );
     setTimeout(() => setFeedbackToast(null), 3200);
   };
@@ -189,11 +190,12 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
   // Reiniciar sequência de cadência se necessário
   const handleReiniciarCadenciaLead = async () => {
     if (!modalEtapaLead) return;
-    const situacao = modalEtapaLead.situacao;
+    const leadAtual = leads.find((l) => l.id === modalEtapaLead.id) || modalEtapaLead;
+    const situacao = leadAtual.situacao;
     const primeira = reiniciarCadencia(situacao);
-    await definirEtapaPorSituacao(modalEtapaLead.id, situacao, primeira);
+    await definirEtapaPorSituacao(leadAtual.id, situacao, primeira);
     setModalEtapaLead(null);
-    setFeedbackToast(`Cadência reiniciada para ${modalEtapaLead.nome}.`);
+    setFeedbackToast(`Cadência reiniciada para ${leadAtual.nome}.`);
     setTimeout(() => setFeedbackToast(null), 3200);
   };
 

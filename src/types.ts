@@ -671,6 +671,7 @@ export interface CriarLeadPayload {
 export interface AtualizarLeadPayload {
   nome?: string;
   situacao?: SituacaoLead;
+  etapaPorSituacao?: Record<string, string>;
   interesse?: string;
   possivelValor?: number;
   statusVenda?: StatusVenda;

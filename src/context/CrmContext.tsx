@@ -441,7 +441,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               ? 'Ativo'
               : lead.statusGrupoNutricao;
 
-          const etapaPorSituacao = { ...lead.etapaPorSituacao };
+          const etapaPorSituacao = {
+            ...lead.etapaPorSituacao,
+            ...(dados.etapaPorSituacao || {}),
+          };
           if (statusGrupoNutricao && (dados.situacao === 'Nutrição' || lead.situacao === 'Nutrição')) {
             etapaPorSituacao['Nutrição'] = statusGrupoNutricao;
           }
@@ -555,9 +558,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const definirEtapaPorSituacao = useCallback(
     async (leadId: string, situacao: SituacaoLead, etapa: string): Promise<Lead | null> => {
       const target = leads.find((l) => l.id === leadId);
-      if (!target) return null;
-
-      const mapaAtualizado = { ...(target.etapaPorSituacao || {}), [situacao]: etapa };
+      const mapaAtualizado = { ...(target?.etapaPorSituacao || {}), [situacao]: etapa };
       return atualizarLead(leadId, {
         etapaPorSituacao: mapaAtualizado,
       });
