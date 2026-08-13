@@ -8,14 +8,12 @@ import './index.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <EmpresaProvider>
-      <AuthProvider>
+    <AuthProvider>
+      <EmpresaProvider>
         <CrmProvider>
           <App />
         </CrmProvider>
-      </AuthProvider>
-    </EmpresaProvider>
+      </EmpresaProvider>
+    </AuthProvider>
   </StrictMode>,
 );
-
-

@@ -19,6 +19,7 @@ import { useAuth, PERFIS_RESPONSAVEIS } from '../context/AuthContext';
 
 export const LoginView: React.FC = () => {
   const {
+    login,
     loginComEmailSenha,
     loginComResponsavel,
     usuarios,
@@ -35,14 +36,18 @@ export const LoginView: React.FC = () => {
     e.preventDefault();
     if (!loginInput.trim() || !senhaInput) return;
     limparErro();
+
     try {
-      await loginComEmailSenha(loginInput, senhaInput);
-    } catch (err) {
-      console.error('Erro ao autenticar:', err);
+      // Tenta efetuar o login com Supabase Auth / credenciais
+      const fnLogin = login || loginComEmailSenha;
+      await fnLogin(loginInput, senhaInput);
+    } catch (err: any) {
+      console.error('Falha de autenticação no login:', err);
+      // O erro foi capturado, registrado em erroAuth e a navegação foi impedida
     }
   };
 
-  // Obter perfis para acesso rápido (dos usuários cadastrados ou do seed)
+  // Perfis de acesso rápido (dos usuários cadastrados ou do seed)
   const perfisAcessoRapido = (usuarios && usuarios.length > 0 ? usuarios : PERFIS_RESPONSAVEIS).slice(0, 5);
 
   return (
@@ -85,7 +90,7 @@ export const LoginView: React.FC = () => {
                 <span>Identificação de Usuário</span>
               </h2>
               <p className="text-xs text-[#64748B] leading-relaxed">
-                Informe seu usuário/e-mail e senha cadastrados para acessar seu painel personalizado.
+                Informe seu e-mail e senha cadastrados para acessar seu painel personalizado.
               </p>
             </div>
 
@@ -93,13 +98,13 @@ export const LoginView: React.FC = () => {
             {erroAuth && (
               <div
                 id="alerta-erro-auth"
-                className="p-3 rounded-lg bg-rose-50 border-l-4 border-rose-600 text-rose-900 text-xs font-medium flex items-start gap-2.5"
+                className="p-3.5 rounded-lg bg-rose-50 border-l-4 border-rose-600 text-rose-900 text-xs font-medium flex items-start gap-2.5 shadow-2xs animate-in fade-in"
               >
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                 <div className="space-y-1 leading-snug">
-                  <span>{erroAuth}</span>
+                  <span className="font-semibold text-rose-950">{erroAuth}</span>
                   <div className="text-[11px] text-rose-700 pt-0.5">
-                    Dica: Selecione um dos perfis abaixo para efetuar o login direto.
+                    Verifique os dados informados ou selecione um dos perfis abaixo para login rápido.
                   </div>
                 </div>
               </div>
@@ -112,9 +117,9 @@ export const LoginView: React.FC = () => {
                   htmlFor="input-login"
                   className="text-xs font-bold text-[#0F172A] uppercase tracking-wider flex items-center justify-between"
                 >
-                  <span>Usuário / E-mail:</span>
+                  <span>E-mail / Usuário:</span>
                   <span className="text-[10px] text-[#64748B] normal-case font-normal">
-                    (ex: gestao, medico, recepcao)
+                    (ex: gestao@agdarodrigues.med.br)
                   </span>
                 </label>
                 <div className="relative">
@@ -129,7 +134,7 @@ export const LoginView: React.FC = () => {
                       setLoginInput(e.target.value);
                       if (erroAuth) limparErro();
                     }}
-                    placeholder="Digite seu login ou e-mail..."
+                    placeholder="Digite seu e-mail ou login..."
                     className="w-full h-11 pl-10 pr-3.5 text-xs sm:text-sm rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] text-[#0F172A] focus:bg-white focus:border-[#0F172A] focus:outline-hidden transition-all placeholder:text-[#94A3B8]"
                   />
                 </div>
@@ -187,7 +192,7 @@ export const LoginView: React.FC = () => {
                 {isLoading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Autenticando...</span>
+                    <span>Entrando...</span>
                   </>
                 ) : (
                   <>
@@ -211,7 +216,7 @@ export const LoginView: React.FC = () => {
               </div>
             </div>
 
-            {/* Botões de Acesso Rápido Neutros */}
+            {/* Botões de Acesso Rápido */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {perfisAcessoRapido.map((perfil) => {
                 const isSuperAdmin = perfil.email === 'caducanes@gmail.com' || perfil.id === 'user-cadu';
@@ -250,7 +255,7 @@ export const LoginView: React.FC = () => {
             </div>
           </div>
 
-          {/* Rodapé do Card Neutro */}
+          {/* Rodapé do Card */}
           <div className="bg-[#F8FAFC] border-t border-[#E2E8F0] px-6 py-2.5 flex items-center justify-between text-[11px] text-[#64748B]">
             <span className="font-medium text-[#0F172A]">
               Sistema de Gestão & CRM Integrado
@@ -259,7 +264,7 @@ export const LoginView: React.FC = () => {
           </div>
         </div>
 
-        {/* Rodapé Institucional Neutro */}
+        {/* Rodapé Institucional */}
         <div className="text-center text-[11px] text-[#64748B] leading-relaxed">
           Plataforma de Gestão de Pacientes • Controle de Acessos & Módulos
         </div>

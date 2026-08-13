@@ -13,7 +13,7 @@ import {
   PERMISSOES_PRESET_RECEPCAO,
   PERMISSOES_PRESET_POS_VENDA,
 } from '../types';
-import { SEED_USUARIOS } from '../data/seedData';
+import { SEED_USUARIOS, ID_EMPRESA_PADRAO } from '../data/seedData';
 
 export interface ResponsavelPerfil {
   id: string;
@@ -27,6 +27,7 @@ export interface ResponsavelPerfil {
   role?: NivelAcesso;
   permissoes?: PermissoesUsuario;
   ativo?: boolean;
+  empresa_id?: string;
 }
 
 export const PERFIS_RESPONSAVEIS: ResponsavelPerfil[] = SEED_USUARIOS.map((u) => ({
@@ -41,6 +42,7 @@ export const PERFIS_RESPONSAVEIS: ResponsavelPerfil[] = SEED_USUARIOS.map((u) =>
   role: u.role,
   permissoes: u.permissoes,
   ativo: u.ativo,
+  empresa_id: u.empresa_id || u.empresaId || ID_EMPRESA_PADRAO,
 }));
 
 const STORAGE_SESSION_KEY = 'crm_agda_rodrigues_auth_sessao_v1';
@@ -51,6 +53,7 @@ export interface UserSessionInfo {
   email: string | null;
   displayName: string | null;
   isAnonymous?: boolean;
+  empresa_id?: string;
 }
 
 function generateUserId(): string {
@@ -81,10 +84,12 @@ interface AuthContextType {
   temPermissao: (chave: keyof PermissoesUsuario) => boolean;
   podeAcessarSecao: (secaoId: SectionId) => boolean;
 
-  // Operações de Autenticação
-  loginComResponsavel: (perfil: ResponsavelPerfil | UsuarioColaborador) => Promise<void>;
+  // Operações de Autenticação com Supabase Auth
+  login: (email: string, senha: string) => Promise<void>;
   loginComEmailSenha: (email: string, senha: string) => Promise<void>;
+  loginComResponsavel: (perfil: ResponsavelPerfil | UsuarioColaborador) => Promise<void>;
   cadastrarComEmailSenha: (email: string, senha: string, nome: string) => Promise<void>;
+  logout: () => Promise<void>;
   deslogar: () => Promise<void>;
   limparErro: () => void;
 
@@ -111,11 +116,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             uid: parsed.id,
             email: parsed.email,
             displayName: parsed.nome,
+            empresa_id: parsed.empresa_id || ID_EMPRESA_PADRAO,
           };
         }
       }
     } catch (e) {
-      console.warn('Erro ao inicializar user de session salva:', e);
+      console.warn('Erro ao inicializar user de sessão salva:', e);
     }
     return null;
   });
@@ -128,7 +134,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (parsed && parsed.id) return parsed;
       }
     } catch (e) {
-      console.warn('Erro ao inicializar perfil de session salva:', e);
+      console.warn('Erro ao inicializar perfil de sessão salva:', e);
     }
     return null;
   });
@@ -145,38 +151,161 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch (e) {
-      console.warn('Erro ao carregar usuarios do storage:', e);
+      console.warn('Erro ao carregar usuários do storage:', e);
     }
     return SEED_USUARIOS;
   });
 
-  // Salvar usuarios no cache local
+  // Salvar usuários no cache local
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_USUARIOS_KEY, JSON.stringify(usuarios));
     } catch (e) {
-      console.warn('Erro ao salvar usuarios no cache local:', e);
+      console.warn('Erro ao salvar usuários no cache local:', e);
     }
   }, [usuarios]);
 
-  // Carregar sessão salva na inicialização
-  useEffect(() => {
-    const savedSession = localStorage.getItem(STORAGE_SESSION_KEY);
-    if (savedSession) {
-      try {
-        const parsed = JSON.parse(savedSession) as ResponsavelPerfil;
-        if (parsed && parsed.id) {
-          setUser({
-            uid: parsed.id,
-            email: parsed.email,
-            displayName: parsed.nome,
-          });
-          setSessionPerfil(parsed);
-        }
-      } catch (e) {}
+  // Função auxiliar para carregar perfil do usuário na tabela public.usuarios do Supabase
+  const carregarPerfilUsuarioSupabase = useCallback(async (authUser: any) => {
+    if (!authUser) return;
+    try {
+      const client = getSupabaseClient();
+      if (!client) return;
+
+      const emailSearch = authUser.email ? authUser.email.toLowerCase().trim() : '';
+
+      const { data: dbUsers, error } = await client
+        .from('usuarios')
+        .select('*')
+        .or(`email.eq.${emailSearch},id.eq.${authUser.id}`)
+        .is('deleted_at', null)
+        .limit(1);
+
+      if (!error && dbUsers && dbUsers.length > 0) {
+        const u = supabaseMapper.dbToUsuario(dbUsers[0]);
+        const empresaId = u.empresa_id || u.empresaId || ID_EMPRESA_PADRAO;
+
+        const perfil: ResponsavelPerfil = {
+          id: u.id,
+          nome: u.nome,
+          cargo: u.cargo,
+          email: u.email,
+          senhaPadrao: '******',
+          iniciais: u.iniciais || gerarIniciais(u.nome),
+          corBadge: u.corBadge || '#5C3A22',
+          descricao: u.observacoes || '',
+          role: u.role,
+          permissoes: u.permissoes,
+          ativo: u.ativo,
+          empresa_id: empresaId,
+        };
+
+        setUser({
+          uid: authUser.id || u.id,
+          email: authUser.email || u.email,
+          displayName: u.nome,
+          empresa_id: empresaId,
+        });
+
+        setSessionPerfil(perfil);
+        try {
+          localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(perfil));
+        } catch (e) {}
+
+        // Atualiza a lista de usuarios com o perfil do banco
+        setUsuarios((prev) => {
+          const idx = prev.findIndex((item) => item.id === u.id || item.email.toLowerCase() === u.email.toLowerCase());
+          if (idx >= 0) {
+            const copia = [...prev];
+            copia[idx] = u;
+            return copia;
+          }
+          return [u, ...prev];
+        });
+      } else {
+        // Fallback se o usuário existir no Supabase Auth mas ainda não tiver registro na tabela public.usuarios
+        const email = authUser.email || '';
+        const nome = authUser.user_metadata?.full_name || email.split('@')[0] || 'Usuário';
+        const perfilFallback: ResponsavelPerfil = {
+          id: authUser.id,
+          nome: nome.charAt(0).toUpperCase() + nome.slice(1),
+          cargo: 'Colaborador',
+          email,
+          senhaPadrao: '******',
+          iniciais: gerarIniciais(nome),
+          corBadge: '#5C3A22',
+          descricao: 'Sessão Supabase Auth',
+          role: 'GESTOR',
+          permissoes: PERMISSOES_PRESET_GESTOR,
+          ativo: true,
+          empresa_id: ID_EMPRESA_PADRAO,
+        };
+
+        setUser({
+          uid: authUser.id,
+          email,
+          displayName: perfilFallback.nome,
+          empresa_id: ID_EMPRESA_PADRAO,
+        });
+        setSessionPerfil(perfilFallback);
+        try {
+          localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(perfilFallback));
+        } catch (e) {}
+      }
+    } catch (err) {
+      console.error('Erro ao carregar perfil do usuário no Supabase:', err);
     }
-    setIsLoading(false);
   }, []);
+
+  // Escutar as alterações de sessão em tempo real através do Supabase Auth
+  useEffect(() => {
+    let subscription: any = null;
+
+    if (isSupabaseConfigured()) {
+      const client = getSupabaseClient();
+      if (client) {
+        // Restaurar sessão inicial do Supabase Auth
+        client.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            carregarPerfilUsuarioSupabase(session.user).finally(() => setIsLoading(false));
+          } else {
+            setIsLoading(false);
+          }
+        }).catch(() => {
+          setIsLoading(false);
+        });
+
+        // Escutador em tempo real para mudanças de autenticação (login, logout, refresh token)
+        const { data } = client.auth.onAuthStateChange(async (event, session) => {
+          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+            if (session?.user) {
+              await carregarPerfilUsuarioSupabase(session.user);
+            }
+          } else if (event === 'SIGNED_OUT') {
+            setUser(null);
+            setSessionPerfil(null);
+            try {
+              localStorage.removeItem(STORAGE_SESSION_KEY);
+            } catch (e) {}
+          }
+          setIsLoading(false);
+        });
+        subscription = data.subscription;
+      } else {
+        setIsLoading(false);
+      }
+    } else {
+      setIsLoading(false);
+    }
+
+    return () => {
+      if (subscription) {
+        try {
+          subscription.unsubscribe();
+        } catch (e) {}
+      }
+    };
+  }, [carregarPerfilUsuarioSupabase]);
 
   // Mapeamento derivado puro para usuarioLogado
   const usuarioLogado = useMemo<UsuarioColaborador | null>(() => {
@@ -193,11 +322,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     );
   }, [usuarios, user, sessionPerfil]);
 
-  // Sincroniza em tempo real as permissões/cargo/perfil do usuário logado quando o Gestor Master altera seu cadastro no banco
+  // Sincroniza em tempo real as permissões/cargo/perfil do usuário logado
   useEffect(() => {
     if (usuarioLogado && sessionPerfil) {
       if (usuarioLogado.ativo === false) {
-        console.warn('Acesso deste colaborador foi desativado pelo Gestor Master.');
+        console.warn('Acesso deste colaborador foi desativado.');
         setErroAuth('Seu acesso foi desativado pelo Administrador da plataforma.');
         deslogar();
         return;
@@ -224,6 +353,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           role: usuarioLogado.role,
           permissoes: usuarioLogado.permissoes,
           ativo: usuarioLogado.ativo,
+          empresa_id: usuarioLogado.empresa_id || usuarioLogado.empresaId || ID_EMPRESA_PADRAO,
         };
         setSessionPerfil(atualizado);
         try {
@@ -233,7 +363,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [usuarioLogado]);
 
-  // Mapeamento derivado puro para responsavelAtivo
+  // Mapeamento derivado para responsavelAtivo
   const responsavelAtivo = useMemo<ResponsavelPerfil | null>(() => {
     if (usuarioLogado) {
       return {
@@ -248,6 +378,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         role: usuarioLogado.role,
         permissoes: usuarioLogado.permissoes,
         ativo: usuarioLogado.ativo,
+        empresa_id: usuarioLogado.empresa_id || usuarioLogado.empresaId || ID_EMPRESA_PADRAO,
       };
     }
     if (sessionPerfil) {
@@ -261,11 +392,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         email: user.email || '',
         senhaPadrao: '',
         iniciais: (user.displayName || 'CL').substring(0, 2).toUpperCase(),
-        corBadge: 'bg-slate-700 text-white',
+        corBadge: '#5C3A22',
         descricao: '',
         role: 'GESTOR',
         permissoes: PERMISSOES_PRESET_GESTOR,
         ativo: true,
+        empresa_id: user.empresa_id || ID_EMPRESA_PADRAO,
       };
     }
     return null;
@@ -333,12 +465,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     [isGestor, temPermissao]
   );
 
-  // Login de responsável
+  // Login de responsável (Acesso direto/rápido de perfil)
   const loginComResponsavel = async (perfil: ResponsavelPerfil | UsuarioColaborador) => {
     setIsLoading(true);
     setErroAuth(null);
 
     const descricaoTexto = 'observacoes' in perfil ? (perfil.observacoes || '') : ('descricao' in perfil ? ((perfil as ResponsavelPerfil).descricao || '') : '');
+    const empresaId = perfil.empresa_id || ('empresaId' in perfil ? perfil.empresaId : undefined) || ID_EMPRESA_PADRAO;
 
     const responsavel: ResponsavelPerfil = {
       id: perfil.id,
@@ -352,6 +485,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       role: perfil.role,
       permissoes: perfil.permissoes,
       ativo: perfil.ativo !== undefined ? perfil.ativo : true,
+      empresa_id: empresaId,
     };
 
     try {
@@ -359,6 +493,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         uid: responsavel.id,
         email: responsavel.email,
         displayName: responsavel.nome,
+        empresa_id: empresaId,
       });
       setSessionPerfil(responsavel);
 
@@ -367,32 +502,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } catch (e) {}
     } catch (err) {
       console.error('Erro no login do colaborador:', err);
-      setSessionPerfil(responsavel);
-      setUser({
-        uid: responsavel.id,
-        email: responsavel.email,
-        displayName: responsavel.nome,
-      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Login com e-mail/login e senha digitados - Robusto e Seguro
+  // Login com e-mail/login e senha utilizando Supabase Auth
   const loginComEmailSenha = async (loginOuEmail: string, senha: string) => {
     setIsLoading(true);
     setErroAuth(null);
 
-    const termoLimpo = (loginOuEmail || '').trim().toLowerCase();
+    const termoLimpo = (loginOuEmail || '').trim();
     const senhaLimpa = (senha || '').trim();
 
     if (!termoLimpo || !senhaLimpa) {
       setIsLoading(false);
-      setErroAuth('Por favor, informe seu login/e-mail e sua senha de acesso.');
-      throw new Error('Credenciais não preenchidas.');
+      const msg = 'Por favor, informe seu e-mail e sua senha de acesso.';
+      setErroAuth(msg);
+      throw new Error(msg);
     }
 
-    // Combina usuários do Estado + Lista de Seed para garantir localização
+    // 1. Resolver e-mail se o usuário tiver digitado login, apelido ou nome
     const todosUsuarios = [...usuarios];
     SEED_USUARIOS.forEach((seedU) => {
       if (!todosUsuarios.some((u) => u.id === seedU.id || u.email.toLowerCase() === seedU.email.toLowerCase())) {
@@ -400,118 +530,170 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     });
 
-    const colaborador = todosUsuarios.find((u) => {
+    const colaboradorEncontrado = todosUsuarios.find((u) => {
       const emailLower = (u.email || '').toLowerCase().trim();
       const loginLower = (u.login || '').toLowerCase().trim();
       const prefixoEmail = emailLower.split('@')[0];
       const idLower = (u.id || '').toLowerCase().trim();
-      const idSemUser = idLower.replace(/^user-/, '');
       const nomeLower = (u.nome || '').toLowerCase().trim();
+      const termoLower = termoLimpo.toLowerCase();
 
-      if (loginLower === termoLimpo && loginLower !== '') return true;
-      if (emailLower === termoLimpo) return true;
-      if (prefixoEmail === termoLimpo && prefixoEmail !== '') return true;
-      if (idLower === termoLimpo || idSemUser === termoLimpo) return true;
+      if (loginLower === termoLower && loginLower !== '') return true;
+      if (emailLower === termoLower) return true;
+      if (prefixoEmail === termoLower && prefixoEmail !== '') return true;
+      if (idLower === termoLower || idLower.replace(/^user-/, '') === termoLower) return true;
+      if (nomeLower === termoLower) return true;
 
-      if (nomeLower === termoLimpo) return true;
-      const palavrasNome = nomeLower
-        .split(/\s+/)
-        .map((p) => p.replace(/[^a-z0-9]/g, ''))
-        .filter((p) => p.length >= 3);
-      if (palavrasNome.includes(termoLimpo)) return true;
-
-      if (termoLimpo === 'cadu' || termoLimpo === 'caducanes' || termoLimpo === 'caducanes@gmail.com') {
-        return emailLower === 'caducanes@gmail.com' || idLower === 'user-cadu' || loginLower === 'cadu';
+      if (termoLower === 'cadu' || termoLower === 'caducanes') {
+        return emailLower === 'caducanes@gmail.com' || idLower === 'user-cadu';
       }
-      if (termoLimpo === 'admin' || termoLimpo === 'gestao' || termoLimpo === 'gerente' || termoLimpo === 'gestor' || termoLimpo === 'coord') {
+      if (termoLower === 'admin' || termoLower === 'gestao') {
         return u.role === 'GESTOR' || emailLower.includes('gestao') || emailLower.includes('cadu');
-      }
-      if (termoLimpo === 'agda' || termoLimpo === 'dra.agda' || termoLimpo === 'draagda') {
-        return emailLower.includes('agda') || nomeLower.includes('agda');
-      }
-      if (termoLimpo === 'camila' || termoLimpo === 'dra.camila' || termoLimpo === 'dracamila') {
-        return emailLower.includes('camila') || nomeLower.includes('camila');
-      }
-      if (termoLimpo === 'recepcao' || termoLimpo === 'secretaria1' || termoLimpo === 'sec1' || termoLimpo === 'recepcao1') {
-        return emailLower.includes('secretaria1') || idLower === 'user-sec1' || u.role === 'RECEPCAO_COMERCIAL';
-      }
-      if (termoLimpo === 'posvenda' || termoLimpo === 'secretaria2' || termoLimpo === 'sec2' || termoLimpo === 'recepcao2') {
-        return emailLower.includes('secretaria2') || idLower === 'user-sec2' || u.role === 'POS_VENDA';
       }
       return false;
     });
 
-    if (colaborador && !colaborador.ativo) {
-      setIsLoading(false);
-      const msg = 'Este usuário foi desativado pela administração. Entre em contato com a coordenação da clínica.';
-      setErroAuth(msg);
-      throw new Error(msg);
-    }
-
-    const emailEfetivo = colaborador
-      ? colaborador.email.toLowerCase().trim()
+    const emailParaAuth = colaboradorEncontrado
+      ? colaboradorEncontrado.email
       : termoLimpo.includes('@')
       ? termoLimpo
       : `${termoLimpo}@agdarodrigues.med.br`;
 
-    try {
-      if (colaborador) {
-        setUser({
-          uid: colaborador.id,
-          email: colaborador.email,
-          displayName: colaborador.nome,
-        });
+    // 2. Tentar autenticação no Supabase Auth primeiro
+    if (isSupabaseConfigured()) {
+      const client = getSupabaseClient();
+      if (client) {
+        try {
+          const { data: authData, error: authError } = await client.auth.signInWithPassword({
+            email: emailParaAuth,
+            password: senhaLimpa,
+          });
 
-        const perfil: ResponsavelPerfil = {
-          id: colaborador.id,
-          nome: colaborador.nome,
-          cargo: colaborador.cargo,
-          email: colaborador.email,
-          senhaPadrao: colaborador.senhaPadrao,
-          iniciais: colaborador.iniciais,
-          corBadge: colaborador.corBadge,
-          descricao: colaborador.observacoes || '',
-          role: colaborador.role,
-          permissoes: colaborador.permissoes,
-          ativo: colaborador.ativo,
-        };
-        setSessionPerfil(perfil);
-        try {
-          localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(perfil));
-        } catch (e) {}
-      } else {
-        const nomeFormatado = termoLimpo.includes('@')
-          ? termoLimpo.split('@')[0]
-          : termoLimpo;
-        const fallbackPerfil: ResponsavelPerfil = {
-          id: `user-${termoLimpo.replace(/[^a-z0-9]/g, '')}`,
-          nome: nomeFormatado.charAt(0).toUpperCase() + nomeFormatado.slice(1),
-          cargo: 'Gestor / Administrador',
-          email: emailEfetivo,
-          senhaPadrao: senhaLimpa,
-          iniciais: nomeFormatado.substring(0, 2).toUpperCase(),
-          corBadge: '#5C3A22',
-          descricao: 'Sessão iniciada',
-          role: 'GESTOR',
-          permissoes: SEED_USUARIOS[0].permissoes,
-          ativo: true,
-        };
-        setUser({
-          uid: fallbackPerfil.id,
-          email: fallbackPerfil.email,
-          displayName: fallbackPerfil.nome,
-        });
-        setSessionPerfil(fallbackPerfil);
-        try {
-          localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(fallbackPerfil));
-        } catch (e) {}
+          if (!authError && authData?.user) {
+            await carregarPerfilUsuarioSupabase(authData.user);
+            setIsLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.warn('Tentativa no Supabase Auth retornou erro, prosseguindo para validação de perfil:', e);
+        }
       }
-    } finally {
-      setIsLoading(false);
     }
+
+    // 3. Fallback para autenticação local / colaboradores cadastrados
+    const senhasMestras = ['Agda@2026', 'Lumina@2026', 'Gestor@2026', 'Master@2026', 'Admin@2026'];
+
+    let colabParaLogar = colaboradorEncontrado;
+
+    if (colabParaLogar) {
+      // Verificar se o usuário está ativo
+      if (colabParaLogar.ativo === false) {
+        setIsLoading(false);
+        const msg = 'Este usuário foi desativado pela administração. Entre em contato com a coordenação.';
+        setErroAuth(msg);
+        throw new Error(msg);
+      }
+
+      // Validar se a senha digitada é igual à senha cadastrada do usuário ou a uma senha mestra
+      const senhaValida =
+        (colabParaLogar.senhaPadrao && colabParaLogar.senhaPadrao === senhaLimpa) ||
+        senhasMestras.includes(senhaLimpa) ||
+        validarSenhaGestor(senhaLimpa);
+
+      if (!senhaValida) {
+        setIsLoading(false);
+        const msg = 'E-mail ou senha incorretos. Verifique suas credenciais.';
+        setErroAuth(msg);
+        throw new Error(msg);
+      }
+    } else {
+      // Se não encontrou usuário pré-cadastrado na lista, só autoriza se for uma senha mestra válida
+      const eSenhaMestra = senhasMestras.includes(senhaLimpa) || validarSenhaGestor(senhaLimpa);
+
+      if (!eSenhaMestra) {
+        setIsLoading(false);
+        const msg = 'E-mail ou senha incorretos. Verifique suas credenciais.';
+        setErroAuth(msg);
+        throw new Error(msg);
+      }
+
+      // Sintetizar perfil com a senha mestra válida
+      const nomeFormatado = termoLimpo.includes('@')
+        ? termoLimpo.split('@')[0].replace(/[._-]/g, ' ')
+        : termoLimpo;
+      const nomeFinal = nomeFormatado.charAt(0).toUpperCase() + nomeFormatado.slice(1);
+
+      colabParaLogar = {
+        id: `user-${Date.now().toString(36)}`,
+        empresaId: ID_EMPRESA_PADRAO,
+        empresa_id: ID_EMPRESA_PADRAO,
+        nome: nomeFinal,
+        email: emailParaAuth,
+        senhaPadrao: senhaLimpa,
+        cargo: 'Gestor / Administrador',
+        role: 'GESTOR',
+        permissoes: PERMISSOES_PRESET_GESTOR,
+        iniciais: gerarIniciais(nomeFinal),
+        corBadge: 'bg-[#1A1A1A] text-white border border-[#5C3A22]',
+        telefone: '',
+        ativo: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted_at: null,
+        version: 1,
+      };
+
+      setUsuarios((prev) => [colabParaLogar!, ...prev]);
+    }
+
+    const empresaId = colabParaLogar.empresa_id || colabParaLogar.empresaId || ID_EMPRESA_PADRAO;
+    const perfil: ResponsavelPerfil = {
+      id: colabParaLogar.id,
+      nome: colabParaLogar.nome,
+      cargo: colabParaLogar.cargo,
+      email: colabParaLogar.email,
+      senhaPadrao: colabParaLogar.senhaPadrao || senhaLimpa,
+      iniciais: colabParaLogar.iniciais,
+      corBadge: colabParaLogar.corBadge,
+      descricao: colabParaLogar.observacoes || '',
+      role: colabParaLogar.role,
+      permissoes: colabParaLogar.permissoes,
+      ativo: colabParaLogar.ativo,
+      empresa_id: empresaId,
+    };
+
+    setUser({
+      uid: colabParaLogar.id,
+      email: colabParaLogar.email,
+      displayName: colabParaLogar.nome,
+      empresa_id: empresaId,
+    });
+    setSessionPerfil(perfil);
+    setErroAuth(null);
+
+    try {
+      localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(perfil));
+    } catch (e) {}
+
+    // Tentar cadastrar/sincronizar no Supabase Auth em segundo plano se for primeira vez
+    if (isSupabaseConfigured()) {
+      const client = getSupabaseClient();
+      if (client) {
+        client.auth
+          .signUp({
+            email: colabParaLogar.email,
+            password: senhaLimpa,
+            options: { data: { full_name: colabParaLogar.nome } },
+          })
+          .catch(() => {});
+      }
+    }
+
+    setIsLoading(false);
+    return;
   };
 
-  // Cadastro de novo usuário com validação estrita
+  // Cadastro de novo usuário
   const cadastrarComEmailSenha = async (email: string, senha: string, nome: string) => {
     setIsLoading(true);
     setErroAuth(null);
@@ -523,7 +705,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         throw new Error('Todos os campos são obrigatórios para cadastro.');
       }
 
-      // Adiciona o novo colaborador na lista
+      // 1. Cadastrar no Supabase Auth se disponível
+      if (isSupabaseConfigured()) {
+        const client = getSupabaseClient();
+        if (client) {
+          const { data: authData, error: authError } = await client.auth.signUp({
+            email: emailLimpo,
+            password: senha,
+            options: { data: { full_name: nomeLimpo } },
+          });
+          if (authError) {
+            setErroAuth(authError.message);
+            throw new Error(authError.message);
+          }
+          if (authData.user) {
+            await carregarPerfilUsuarioSupabase(authData.user);
+            return;
+          }
+        }
+      }
+
+      // 2. Fallback de colaborador local
       const novo: CriarUsuarioPayload = {
         nome: nomeLimpo,
         email: emailLimpo,
@@ -537,32 +739,61 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         uid: colab.id,
         email: colab.email,
         displayName: colab.nome,
+        empresa_id: ID_EMPRESA_PADRAO,
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Deslogar: limpa completamente todos os logins e dados de sessão salvos
+  // Logout utilizando supabase.auth.signOut() e limpeza completa de cache de sessão
   const deslogar = async () => {
     setIsLoading(true);
     try {
-      localStorage.removeItem(STORAGE_SESSION_KEY);
-      localStorage.removeItem('crm_agda_rodrigues_auth_sessao_v1');
-      localStorage.removeItem('crm_sessao_responsavel_v2');
-      sessionStorage.clear();
-      setUser(null);
-      setSessionPerfil(null);
-      setErroAuth(null);
+      if (isSupabaseConfigured()) {
+        const client = getSupabaseClient();
+        if (client) {
+          await client.auth.signOut();
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao realizar signOut do Supabase Auth:', e);
     } finally {
-      setUser(null);
-      setSessionPerfil(null);
       try {
+        // Limpar todas as informações de sessão, preferências locais e tokens de autenticação
         localStorage.removeItem(STORAGE_SESSION_KEY);
         localStorage.removeItem('crm_agda_rodrigues_auth_sessao_v1');
         localStorage.removeItem('crm_sessao_responsavel_v2');
+        localStorage.removeItem('crm_multiempresa_empresa_ativa_id_v1');
+        localStorage.removeItem('crm_leads_col_widths_v2');
+
+        // Limpar tokens do Supabase e chaves de sessão no localStorage
+        const keysParaRemover: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (
+            key &&
+            (key.startsWith('sb-') ||
+              key.includes('auth-token') ||
+              key.includes('sessao') ||
+              key.includes('user_session'))
+          ) {
+            if (key !== 'crm_supabase_config_v1') {
+              keysParaRemover.push(key);
+            }
+          }
+        }
+        keysParaRemover.forEach((k) => localStorage.removeItem(k));
+
+        // Limpar todo o sessionStorage
         sessionStorage.clear();
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Erro ao limpar storage no logout:', e);
+      }
+
+      setUser(null);
+      setSessionPerfil(null);
+      setErroAuth(null);
       setIsLoading(false);
     }
   };
@@ -570,15 +801,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const limparErro = () => setErroAuth(null);
 
   // ----------------------------------------------------
-  // GESTÃO DE USUÁRIOS E CONTROLE DE ACESSOS (EXCLUSIVO GESTOR)
+  // GESTÃO DE USUÁRIOS E CONTROLE DE ACESSOS
   // ----------------------------------------------------
 
   const criarColaborador = async (payload: CriarUsuarioPayload): Promise<UsuarioColaborador> => {
     const timestamp = new Date().toISOString();
     const id = generateUserId();
     const iniciais = gerarIniciais(payload.nome);
+    const empresaId = payload.empresaId || responsavelAtivo?.empresa_id || ID_EMPRESA_PADRAO;
 
-    // Cores de badge por cargo/role
     let corBadge = payload.corBadge;
     if (!corBadge) {
       if (payload.role === 'GESTOR') corBadge = 'bg-[#1A1A1A] text-white border border-[#5C3A22]';
@@ -590,6 +821,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const novoUsuario: UsuarioColaborador = {
       id,
+      empresaId,
+      empresa_id: empresaId,
       nome: payload.nome.trim(),
       email: payload.email.trim().toLowerCase(),
       senhaPadrao: payload.senhaPadrao || 'Agda@2026',
@@ -608,10 +841,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       version: 1,
     };
 
-    // 1. Atualização Otimista
     setUsuarios((prev) => [novoUsuario, ...prev]);
 
-    // 2. Gravação no Supabase (se configurado)
     if (isSupabaseConfigured()) {
       try {
         await supabaseService.salvarUsuario(novoUsuario);
@@ -680,6 +911,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         role: (usuarioAtualizado as UsuarioColaborador).role,
         permissoes: (usuarioAtualizado as UsuarioColaborador).permissoes,
         ativo: (usuarioAtualizado as UsuarioColaborador).ativo,
+        empresa_id: (usuarioAtualizado as UsuarioColaborador).empresa_id || (usuarioAtualizado as UsuarioColaborador).empresaId,
       };
       setSessionPerfil(respAtual);
       try {
@@ -737,7 +969,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             ativo: false,
           });
         } catch (eSupabase) {
-          console.warn('Aviso ao registrar soft-delete de colaborador no Supabase:', eSupabase);
+          console.warn('Aviso ao registrar soft-delete no Supabase:', eSupabase);
         }
       }
     }
@@ -753,24 +985,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Validador de senha de Gestor Master para operações críticas do banco de dados
   const validarSenhaGestor = useCallback((senha: string): boolean => {
     if (!senha || !senha.trim()) return false;
     const senhaInformada = senha.trim();
 
-    // 1. Senha do usuário logado ou responsável ativo na sessão
     if (usuarioLogado?.senhaPadrao && usuarioLogado.senhaPadrao === senhaInformada) return true;
     if (responsavelAtivo?.senhaPadrao && responsavelAtivo.senhaPadrao === senhaInformada) return true;
 
-    // 2. Senha de qualquer usuário cadastrado com perfil GESTOR
     const gestores = usuarios.filter((u) => u.role === 'GESTOR' && u.ativo && !u.deleted_at);
     if (gestores.some((g) => g.senhaPadrao === senhaInformada)) return true;
 
-    // 3. Senhas corporativas padrão / master aceitas
     const senhasMestras = ['Agda@2026', 'Lumina@2026', 'Gestor@2026', 'Master@2026', 'Admin@2026'];
     if (senhasMestras.includes(senhaInformada)) return true;
 
-    // 4. Se o usuário atual tiver senha cadastrada no banco
     const usuarioAtualLista = usuarios.find((u) => u.id === (responsavelAtivo?.id || usuarioLogado?.id));
     if (usuarioAtualLista?.senhaPadrao && usuarioAtualLista.senhaPadrao === senhaInformada) return true;
 
@@ -778,8 +1005,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [usuarioLogado, responsavelAtivo, usuarios]);
 
   const responsavelNome = usuarioLogado?.nome || responsavelAtivo?.nome || user?.displayName || 'Equipe';
-
-  // Usuários não deletados para apresentação com memoização estável
   const usuariosAtivos = useMemo(() => usuarios.filter((u) => !u.deleted_at), [usuarios]);
 
   return (
@@ -795,9 +1020,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         erroAuth,
         temPermissao,
         podeAcessarSecao,
-        loginComResponsavel,
+        login: loginComEmailSenha,
         loginComEmailSenha,
+        loginComResponsavel,
         cadastrarComEmailSenha,
+        logout: deslogar,
         deslogar,
         limparErro,
         criarColaborador,
@@ -821,4 +1048,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-

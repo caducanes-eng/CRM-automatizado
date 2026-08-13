@@ -29,6 +29,7 @@ import {
 import { obterCoresSidebarCompletas, aplicarVariaveisCss } from '../utils/estetica';
 import { supabaseService, supabaseMapper } from '../services/supabaseService';
 import { isSupabaseConfigured, getSupabaseClient } from '../lib/supabase';
+import { useAuth } from './AuthContext';
 
 const STORAGE_KEYS = {
   EMPRESAS: 'crm_multiempresa_empresas_v1',
@@ -128,6 +129,27 @@ export const EmpresaProvider: React.FC<{
   userAuthEmail?: string | null;
   userAuthId?: string | null;
 }> = ({ children, userAuthEmail, userAuthId }) => {
+  // Tenta obter os dados do usuário autenticado a partir do AuthContext
+  let authUserEmail = userAuthEmail || '';
+  let authUserId = userAuthId || '';
+  let authEmpresaId = '';
+
+  try {
+    const auth = useAuth();
+    if (auth?.user) {
+      authUserEmail = auth.user.email || authUserEmail;
+      authUserId = auth.user.uid || authUserId;
+      authEmpresaId =
+        auth.usuarioLogado?.empresa_id ||
+        auth.usuarioLogado?.empresaId ||
+        auth.responsavelAtivo?.empresa_id ||
+        auth.user.empresa_id ||
+        '';
+    }
+  } catch (e) {
+    // Caso o AuthProvider não esteja envelopando (ex: renderização isolada)
+  }
+
   // 1. Estados das Empresas
   const [empresas, setEmpresas] = useState<Empresa[]>(() => {
     try {
@@ -172,6 +194,7 @@ export const EmpresaProvider: React.FC<{
 
   // 4. Empresa Ativa Selecionada
   const [empresaAtivaId, setEmpresaAtivaId] = useState<string>(() => {
+    if (authEmpresaId) return authEmpresaId;
     try {
       const salvo = localStorage.getItem(STORAGE_KEYS.EMPRESA_ATIVA_ID);
       if (salvo) return salvo;
@@ -182,35 +205,12 @@ export const EmpresaProvider: React.FC<{
   const [isCarregando, setIsCarregando] = useState<boolean>(false);
   const [isCarregandoConfig, setIsCarregandoConfig] = useState<boolean>(false);
 
-  // Detecção de usuário logado (via props, session storage ou Firebase Auth)
-  const [detectedEmail, setDetectedEmail] = useState<string>(() => {
-    if (userAuthEmail) return userAuthEmail;
-    try {
-      const sess = localStorage.getItem('crm_estetica_session_v1');
-      if (sess) {
-        const p = JSON.parse(sess);
-        if (p && p.email) return p.email;
-      }
-    } catch (e) {}
-    return '';
-  });
-
-  const [detectedId, setDetectedId] = useState<string>(() => {
-    if (userAuthId) return userAuthId;
-    try {
-      const sess = localStorage.getItem('crm_estetica_session_v1');
-      if (sess) {
-        const p = JSON.parse(sess);
-        if (p && p.id) return p.id;
-      }
-    } catch (e) {}
-    return '';
-  });
-
+  // Sincroniza a empresa ativa quando o usuário logado muda de empresa
   useEffect(() => {
-    if (userAuthEmail) setDetectedEmail(userAuthEmail);
-    if (userAuthId) setDetectedId(userAuthId);
-  }, [userAuthEmail, userAuthId]);
+    if (authEmpresaId && authEmpresaId !== empresaAtivaId) {
+      setEmpresaAtivaId(authEmpresaId);
+    }
+  }, [authEmpresaId]);
 
   // Persistência local imediata
   useEffect(() => {
@@ -300,13 +300,11 @@ export const EmpresaProvider: React.FC<{
 
   // Verificar se o usuário autenticado é Gestor Geral da Plataforma
   const isPlataformaAdmin = useMemo<boolean>(() => {
-    const emailLimpo = (detectedEmail || userAuthEmail || '').trim().toLowerCase();
-    const idLimpo = (detectedId || userAuthId || '').trim();
+    const emailLimpo = (authUserEmail || '').trim().toLowerCase();
+    const idLimpo = (authUserId || '').trim();
 
-    // Master gestor explícito do projeto
     if (emailLimpo === 'caducanes@gmail.com') return true;
 
-    // Verificar na lista de admins da plataforma
     const estaNaLista = plataformaAdmins.some(
       (p) =>
         (p.email && p.email.trim().toLowerCase() === emailLimpo && emailLimpo !== '') ||
@@ -314,16 +312,15 @@ export const EmpresaProvider: React.FC<{
     );
     if (estaNaLista) return true;
 
-    // Fallback para gestor principal no seed
     if (emailLimpo === 'gestao@agdarodrigues.med.br') return true;
 
     return false;
-  }, [detectedEmail, detectedId, userAuthEmail, userAuthId, plataformaAdmins]);
+  }, [authUserEmail, authUserId, plataformaAdmins]);
 
   // Membro atual do usuário
   const membroAtual = useMemo<EmpresaMembro | null>(() => {
-    const emailLimpo = (detectedEmail || userAuthEmail || '').trim().toLowerCase();
-    const idLimpo = (detectedId || userAuthId || '').trim();
+    const emailLimpo = (authUserEmail || '').trim().toLowerCase();
+    const idLimpo = (authUserId || '').trim();
 
     const membro = empresaMembros.find(
       (m) =>
@@ -333,7 +330,7 @@ export const EmpresaProvider: React.FC<{
     );
 
     return membro || null;
-  }, [detectedEmail, detectedId, userAuthEmail, userAuthId, empresaMembros]);
+  }, [authUserEmail, authUserId, empresaMembros]);
 
   // Se o usuário não for admin da plataforma e pertencer a uma empresa, fixa a empresa ativa nele
   useEffect(() => {
@@ -351,19 +348,19 @@ export const EmpresaProvider: React.FC<{
 
   // Status de Acesso
   const isEmpresaSuspensa = useMemo<boolean>(() => {
-    if (isPlataformaAdmin) return false; // Gestor da plataforma nunca é bloqueado por suspensão
+    if (isPlataformaAdmin) return false;
     return empresaAtiva?.status === 'suspensa';
   }, [isPlataformaAdmin, empresaAtiva]);
 
   const statusAcesso = useMemo<StatusAcessoUsuario>(() => {
     if (isPlataformaAdmin) return 'ativo';
-    const email = (detectedEmail || userAuthEmail || '').trim();
-    const id = (detectedId || userAuthId || '').trim();
+    const email = (authUserEmail || '').trim();
+    const id = (authUserId || '').trim();
     if (!email && !id) return 'pendente';
     if (!membroAtual) return 'pendente';
     if (isEmpresaSuspensa) return 'empresa_suspensa';
     return 'ativo';
-  }, [isPlataformaAdmin, detectedEmail, detectedId, userAuthEmail, userAuthId, membroAtual, isEmpresaSuspensa]);
+  }, [isPlataformaAdmin, authUserEmail, authUserId, membroAtual, isEmpresaSuspensa]);
 
   // Configuração visual da Empresa Ativa
   const config = useMemo<ConfiguracoesEmpresa>(() => {
@@ -420,10 +417,7 @@ export const EmpresaProvider: React.FC<{
     }
   }, [config.estetica]);
 
-  // ----------------------------------------------------
   // OPERAÇÕES DE GESTÃO DA PLATAFORMA (SUPER ADMIN)
-  // ----------------------------------------------------
-
   const criarEmpresa = useCallback(
     async (payload: CriarEmpresaPayload): Promise<Empresa> => {
       const timestamp = new Date().toISOString();
@@ -449,62 +443,24 @@ export const EmpresaProvider: React.FC<{
         status: payload.status || 'ativa',
         tipoLogo: payload.tipoLogo || 'monograma',
         monogramaIniciais: iniciais,
-        logoAltura: 'padrao',
-        logoAjusteLateral: 'total',
-        logoFundoHeader: 'integrado',
         estetica: ESTETICAS_PRESET[0],
         esteticasSalvas: ESTETICAS_PRESET,
-        adminPrincipalNome: payload.adminNome?.trim() || '',
-        adminPrincipalEmail: payload.adminEmail?.trim().toLowerCase() || '',
-        totalUsuarios: payload.adminEmail ? 1 : 0,
+        adminPrincipalEmail: payload.adminEmail?.trim().toLowerCase(),
+        adminPrincipalNome: payload.adminNome?.trim(),
+        totalUsuarios: 1,
         totalPacientes: 0,
         created_at: timestamp,
         updated_at: timestamp,
-        deleted_at: null,
         version: 1,
       };
 
-      // 1. Atualizar state
       setEmpresas((prev) => [novaEmpresa, ...prev]);
 
-      // 2. Salvar no Supabase (se configurado)
       if (isSupabaseConfigured()) {
         try {
           await supabaseService.salvarEmpresa(novaEmpresa);
-        } catch (eSupabase) {
-          console.warn('Aviso ao sincronizar nova empresa no Supabase:', eSupabase);
-        }
-      }
-
-      // Se passou dados do administrador inicial da empresa, cria o membro e usuário
-      if (payload.adminEmail && payload.adminNome) {
-        const userId = generateId('user');
-        const membroId = generateId('membro');
-
-        const novoMembro: EmpresaMembro = {
-          id: membroId,
-          userId,
-          empresaId: id,
-          papel: 'admin',
-          ativo: true,
-          usuarioNome: payload.adminNome.trim(),
-          usuarioEmail: payload.adminEmail.trim().toLowerCase(),
-          usuarioCargo: payload.adminCargo?.trim() || 'Administrador da Empresa',
-          ultimoAcesso: timestamp,
-          created_at: timestamp,
-          updated_at: timestamp,
-          deleted_at: null,
-          version: 1,
-        };
-
-        setEmpresaMembros((prev) => [novoMembro, ...prev]);
-
-        if (isSupabaseConfigured()) {
-          try {
-            await supabaseService.salvarMembroEmpresa(novoMembro);
-          } catch (eSupabase) {
-            console.warn('Aviso ao sincronizar membro inicial no Supabase:', eSupabase);
-          }
+        } catch (e) {
+          console.warn('Erro ao salvar empresa no Supabase:', e);
         }
       }
 
@@ -518,34 +474,45 @@ export const EmpresaProvider: React.FC<{
       const timestamp = new Date().toISOString();
       let atualizada: Empresa | null = null;
 
-      // Filtra apenas valores que NÃO são undefined
-      const payloadLimpo: Record<string, any> = {};
-      for (const [key, value] of Object.entries(payload)) {
-        if (value !== undefined) {
-          payloadLimpo[key] = value;
-        }
-      }
-
       setEmpresas((prev) =>
-        prev.map((emp) => {
-          if (emp.id !== empresaId) return emp;
+        prev.map((e) => {
+          if (e.id !== empresaId) return e;
+
           atualizada = {
-            ...emp,
-            ...payloadLimpo,
+            ...e,
+            nome: payload.nome !== undefined ? payload.nome.trim() : e.nome,
+            subtitulo: payload.subtitulo !== undefined ? payload.subtitulo.trim() : e.subtitulo,
+            cnpj: payload.cnpj !== undefined ? payload.cnpj.trim() : e.cnpj,
+            registroProfissional:
+              payload.registroProfissional !== undefined ? payload.registroProfissional.trim() : e.registroProfissional,
+            telefone: payload.telefone !== undefined ? payload.telefone.trim() : e.telefone,
+            email: payload.email !== undefined ? payload.email.trim().toLowerCase() : e.email,
+            endereco: payload.endereco !== undefined ? payload.endereco.trim() : e.endereco,
+            horarioFuncionamento:
+              payload.horarioFuncionamento !== undefined ? payload.horarioFuncionamento.trim() : e.horarioFuncionamento,
+            unidadePadrao: payload.unidadePadrao !== undefined ? payload.unidadePadrao.trim() : e.unidadePadrao,
+            status: payload.status !== undefined ? payload.status : e.status,
+            tipoLogo: payload.tipoLogo !== undefined ? payload.tipoLogo : e.tipoLogo,
+            logoUrl: payload.logoUrl !== undefined ? payload.logoUrl : e.logoUrl,
+            monogramaIniciais:
+              payload.monogramaIniciais !== undefined ? payload.monogramaIniciais.trim().toUpperCase() : e.monogramaIniciais,
+            logoAltura: payload.logoAltura !== undefined ? payload.logoAltura : e.logoAltura,
+            logoAjusteLateral: payload.logoAjusteLateral !== undefined ? payload.logoAjusteLateral : e.logoAjusteLateral,
+            logoFundoHeader: payload.logoFundoHeader !== undefined ? payload.logoFundoHeader : e.logoFundoHeader,
+            estetica: payload.estetica !== undefined ? payload.estetica : e.estetica,
+            esteticasSalvas: payload.esteticasSalvas !== undefined ? payload.esteticasSalvas : e.esteticasSalvas,
             updated_at: timestamp,
-            version: (emp.version || 1) + 1,
+            version: e.version + 1,
           };
           return atualizada;
         })
       );
 
-      if (atualizada) {
-        if (isSupabaseConfigured()) {
-          try {
-            await supabaseService.salvarEmpresa(atualizada);
-          } catch (eSupabase) {
-            console.warn('Aviso ao atualizar empresa no Supabase:', eSupabase);
-          }
+      if (atualizada && isSupabaseConfigured()) {
+        try {
+          await supabaseService.salvarEmpresa(atualizada);
+        } catch (e) {
+          console.warn('Erro ao atualizar empresa no Supabase:', e);
         }
       }
 
@@ -557,7 +524,7 @@ export const EmpresaProvider: React.FC<{
   const suspenderEmpresa = useCallback(
     async (empresaId: string): Promise<boolean> => {
       const res = await atualizarEmpresa(empresaId, { status: 'suspensa' });
-      return Boolean(res);
+      return res !== null;
     },
     [atualizarEmpresa]
   );
@@ -565,48 +532,23 @@ export const EmpresaProvider: React.FC<{
   const reativarEmpresa = useCallback(
     async (empresaId: string): Promise<boolean> => {
       const res = await atualizarEmpresa(empresaId, { status: 'ativa' });
-      return Boolean(res);
+      return res !== null;
     },
     [atualizarEmpresa]
   );
 
   const excluirEmpresa = useCallback(
     async (empresaId: string): Promise<boolean> => {
-      if (empresaId === ID_EMPRESA_PADRAO) {
-        throw new Error('A empresa padrão inicial não pode ser excluída.');
-      }
-
-      const timestamp = new Date().toISOString();
-      const empresaParaExcluir = empresas.find((e) => e.id === empresaId);
-
       setEmpresas((prev) => prev.filter((e) => e.id !== empresaId));
-      setEmpresaMembros((prev) => prev.filter((m) => m.empresaId !== empresaId));
-
-      if (isSupabaseConfigured() && empresaParaExcluir) {
-        try {
-          await supabaseService.salvarEmpresa({
-            ...empresaParaExcluir,
-            deleted_at: timestamp,
-            updated_at: timestamp,
-          });
-        } catch (eSupabase) {
-          console.warn('Aviso ao excluir empresa no Supabase:', eSupabase);
-        }
-      }
-
       if (empresaAtivaId === empresaId) {
         setEmpresaAtivaId(ID_EMPRESA_PADRAO);
       }
-
       return true;
     },
-    [empresaAtivaId, empresas]
+    [empresaAtivaId]
   );
 
-  // ----------------------------------------------------
-  // GESTÃO DE MEMBROS E VÍNCULOS
-  // ----------------------------------------------------
-
+  // VÍNCULOS E MEMBROS
   const vincularUsuarioEmpresa = useCallback(
     async (
       userId: string,
@@ -623,42 +565,26 @@ export const EmpresaProvider: React.FC<{
         empresaId,
         papel,
         ativo: true,
-        usuarioNome: dadosUsuario?.nome || 'Novo Colaborador',
-        usuarioEmail: dadosUsuario?.email || '',
-        usuarioCargo: dadosUsuario?.cargo || (papel === 'admin' ? 'Administrador' : 'Operador'),
-        ultimoAcesso: timestamp,
+        usuarioNome: dadosUsuario?.nome,
+        usuarioEmail: dadosUsuario?.email,
+        usuarioCargo: dadosUsuario?.cargo,
         created_at: timestamp,
         updated_at: timestamp,
-        deleted_at: null,
         version: 1,
       };
 
       setEmpresaMembros((prev) => [novoMembro, ...prev]);
-
-      if (isSupabaseConfigured()) {
-        try {
-          await supabaseService.salvarMembroEmpresa(novoMembro);
-        } catch (eSupabase) {
-          console.warn('Aviso ao salvar membro no Supabase:', eSupabase);
-        }
-      }
-
       return novoMembro;
     },
     []
   );
 
   const transferirUsuarioEmpresa = useCallback(
-    async (
-      userId: string,
-      novaEmpresaId: string,
-      novoPapel?: PapelEmpresa
-    ): Promise<boolean> => {
+    async (userId: string, novaEmpresaId: string, novoPapel?: PapelEmpresa): Promise<boolean> => {
       const timestamp = new Date().toISOString();
-
       setEmpresaMembros((prev) =>
         prev.map((m) => {
-          if (m.userId !== userId && m.id !== userId) return m;
+          if (m.userId !== userId) return m;
           return {
             ...m,
             empresaId: novaEmpresaId,
@@ -668,7 +594,6 @@ export const EmpresaProvider: React.FC<{
           };
         })
       );
-
       return true;
     },
     []
@@ -677,7 +602,6 @@ export const EmpresaProvider: React.FC<{
   const alterarPapelMembro = useCallback(
     async (membroId: string, novoPapel: PapelEmpresa): Promise<boolean> => {
       const timestamp = new Date().toISOString();
-
       setEmpresaMembros((prev) =>
         prev.map((m) => {
           if (m.id !== membroId) return m;
@@ -689,79 +613,52 @@ export const EmpresaProvider: React.FC<{
           };
         })
       );
-
       return true;
     },
     []
   );
 
-  const removerAcessoUsuario = useCallback(
-    async (membroId: string): Promise<boolean> => {
-      setEmpresaMembros((prev) => prev.filter((m) => m.id !== membroId));
-      return true;
-    },
-    []
-  );
+  const removerAcessoUsuario = useCallback(async (membroId: string): Promise<boolean> => {
+    setEmpresaMembros((prev) => prev.filter((m) => m.id !== membroId));
+    return true;
+  }, []);
 
+  // ADMINS PLATAFORMA
   const promoverParaAdminPlataforma = useCallback(
     async (userId: string, email: string, nome?: string): Promise<boolean> => {
       const timestamp = new Date().toISOString();
-      const id = generateId('plat-admin');
-
       const novoAdmin: PlataformaAdmin = {
-        id,
+        id: generateId('admin'),
         userId,
         email: email.trim().toLowerCase(),
-        nome: nome?.trim() || 'Gestor da Plataforma',
-        criadoPor: 'Gestor Geral',
+        nome,
+        criadoPor: 'Gestão Master',
         created_at: timestamp,
         updated_at: timestamp,
-        deleted_at: null,
         version: 1,
       };
-
       setPlataformaAdmins((prev) => [novoAdmin, ...prev]);
-
-      if (isSupabaseConfigured()) {
-        try {
-          await supabaseService.salvarAdminPlataforma(novoAdmin);
-        } catch (eSupabase) {
-          console.warn('Aviso ao sincronizar admin da plataforma no Supabase:', eSupabase);
-        }
-      }
-
       return true;
     },
     []
   );
 
-  const removerAdminPlataforma = useCallback(
-    async (userId: string): Promise<boolean> => {
-      setPlataformaAdmins((prev) => prev.filter((p) => p.userId !== userId && p.id !== userId));
-      return true;
-    },
-    []
-  );
+  const removerAdminPlataforma = useCallback(async (userId: string): Promise<boolean> => {
+    setPlataformaAdmins((prev) => prev.filter((p) => p.userId !== userId));
+    return true;
+  }, []);
 
-  // ----------------------------------------------------
-  // CONFIGURAÇÕES VISUAIS DA EMPRESA ATIVA
-  // ----------------------------------------------------
-
+  // CONFIGURAÇÃO DA EMPRESA ATIVA
   const atualizarConfig = useCallback(
     async (novosDados: Partial<ConfiguracoesEmpresa>): Promise<boolean> => {
-      if (!empresaAtivaId) return false;
       setIsCarregandoConfig(true);
-
       try {
+        if (!empresaAtivaId) return false;
+
         const payloadAtualizacao: AtualizarEmpresaPayload = {};
+
         if (novosDados.nomeEmpresa !== undefined) payloadAtualizacao.nome = novosDados.nomeEmpresa;
         if (novosDados.subtitulo !== undefined) payloadAtualizacao.subtitulo = novosDados.subtitulo;
-        if (novosDados.tipoLogo !== undefined) payloadAtualizacao.tipoLogo = novosDados.tipoLogo;
-        if (novosDados.logoUrl !== undefined) payloadAtualizacao.logoUrl = novosDados.logoUrl;
-        if (novosDados.monogramaIniciais !== undefined) payloadAtualizacao.monogramaIniciais = novosDados.monogramaIniciais;
-        if (novosDados.logoAltura !== undefined) payloadAtualizacao.logoAltura = novosDados.logoAltura;
-        if (novosDados.logoAjusteLateral !== undefined) payloadAtualizacao.logoAjusteLateral = novosDados.logoAjusteLateral;
-        if (novosDados.logoFundoHeader !== undefined) payloadAtualizacao.logoFundoHeader = novosDados.logoFundoHeader;
         if (novosDados.cnpj !== undefined) payloadAtualizacao.cnpj = novosDados.cnpj;
         if (novosDados.registroProfissional !== undefined) payloadAtualizacao.registroProfissional = novosDados.registroProfissional;
         if (novosDados.telefone !== undefined) payloadAtualizacao.telefone = novosDados.telefone;
@@ -769,17 +666,19 @@ export const EmpresaProvider: React.FC<{
         if (novosDados.endereco !== undefined) payloadAtualizacao.endereco = novosDados.endereco;
         if (novosDados.horarioFuncionamento !== undefined) payloadAtualizacao.horarioFuncionamento = novosDados.horarioFuncionamento;
         if (novosDados.unidadePadrao !== undefined) payloadAtualizacao.unidadePadrao = novosDados.unidadePadrao;
+        if (novosDados.tipoLogo !== undefined) payloadAtualizacao.tipoLogo = novosDados.tipoLogo;
+        if (novosDados.logoUrl !== undefined) payloadAtualizacao.logoUrl = novosDados.logoUrl;
+        if (novosDados.monogramaIniciais !== undefined) payloadAtualizacao.monogramaIniciais = novosDados.monogramaIniciais;
+        if (novosDados.logoAltura !== undefined) payloadAtualizacao.logoAltura = novosDados.logoAltura;
+        if (novosDados.logoAjusteLateral !== undefined) payloadAtualizacao.logoAjusteLateral = novosDados.logoAjusteLateral;
+        if (novosDados.logoFundoHeader !== undefined) payloadAtualizacao.logoFundoHeader = novosDados.logoFundoHeader;
         if (novosDados.estetica !== undefined) payloadAtualizacao.estetica = novosDados.estetica;
         if (novosDados.esteticasSalvas !== undefined) payloadAtualizacao.esteticasSalvas = novosDados.esteticasSalvas;
 
-        if (novosDados.estetica) {
-          aplicarVariaveisCss(novosDados.estetica);
-        }
-
-        await atualizarEmpresa(empresaAtivaId, payloadAtualizacao);
-        return true;
-      } catch (error) {
-        console.error('Erro ao atualizar configurações da empresa:', error);
+        const res = await atualizarEmpresa(empresaAtivaId, payloadAtualizacao);
+        return res !== null;
+      } catch (e) {
+        console.error('Erro ao atualizar configurações da empresa:', e);
         return false;
       } finally {
         setIsCarregandoConfig(false);
@@ -791,7 +690,7 @@ export const EmpresaProvider: React.FC<{
   const aplicarEstetica = useCallback(
     async (estetica: EsteticaPlataforma): Promise<boolean> => {
       aplicarVariaveisCss(estetica);
-      return atualizarConfig({ estetica });
+      return await atualizarConfig({ estetica });
     },
     [atualizarConfig]
   );
@@ -800,9 +699,7 @@ export const EmpresaProvider: React.FC<{
     async (novaEstetica: EsteticaPlataforma): Promise<boolean> => {
       try {
         const esteticasAtuais = config.esteticasSalvas || ESTETICAS_PRESET;
-        const indexExistente = esteticasAtuais.findIndex(
-          (e) => e.idPreset === novaEstetica.idPreset
-        );
+        const indexExistente = esteticasAtuais.findIndex((e) => e.idPreset === novaEstetica.idPreset);
         let novaLista: EsteticaPlataforma[];
 
         if (indexExistente >= 0) {
@@ -813,9 +710,7 @@ export const EmpresaProvider: React.FC<{
         }
 
         if (empresaAtivaId) {
-          await atualizarEmpresa(empresaAtivaId, {
-            estetica: novaEstetica,
-          });
+          await atualizarEmpresa(empresaAtivaId, { estetica: novaEstetica });
         }
 
         return await atualizarConfig({
