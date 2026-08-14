@@ -233,17 +233,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, []);
 
-  // Recarrega usuários do banco no início e quando a configuração mudar
+  // Recarrega usuários do banco no início e quando a configuração ou foco na janela mudar
   useEffect(() => {
     carregarUsuariosDatabase();
 
-    const handleConfigChange = () => {
+    const handleConfigOrFocus = () => {
       carregarUsuariosDatabase();
     };
 
-    window.addEventListener('supabase-config-changed', handleConfigChange);
+    window.addEventListener('supabase-config-changed', handleConfigOrFocus);
+    window.addEventListener('focus', handleConfigOrFocus);
+    document.addEventListener('visibilitychange', handleConfigOrFocus);
+
     return () => {
-      window.removeEventListener('supabase-config-changed', handleConfigChange);
+      window.removeEventListener('supabase-config-changed', handleConfigOrFocus);
+      window.removeEventListener('focus', handleConfigOrFocus);
+      document.removeEventListener('visibilitychange', handleConfigOrFocus);
     };
   }, [carregarUsuariosDatabase]);
 

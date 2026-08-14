@@ -259,37 +259,46 @@ export const EmpresaProvider: React.FC<{
   }, []);
 
   useEffect(() => {
-    if (isSupabaseConfigured()) {
-      carregarEmpresasSupabase();
-    }
+    let channel: any = null;
 
-    const handleConfigChange = () => {
+    const iniciarEmpresasRealtime = () => {
+      if (channel) {
+        try {
+          channel.unsubscribe();
+        } catch (e) {}
+        channel = null;
+      }
+
       if (isSupabaseConfigured()) {
         carregarEmpresasSupabase();
+        const client = getSupabaseClient();
+        if (client) {
+          channel = client
+            .channel('empresa_realtime_channel_' + Date.now())
+            .on(
+              'postgres_changes',
+              { event: '*', schema: 'public', table: 'empresas' },
+              () => {
+                carregarEmpresasSupabase();
+              }
+            )
+            .subscribe();
+        }
       }
     };
 
-    window.addEventListener('supabase-config-changed', handleConfigChange);
+    iniciarEmpresasRealtime();
 
-    let channel: any = null;
-    if (isSupabaseConfigured()) {
-      const client = getSupabaseClient();
-      if (client) {
-        channel = client
-          .channel('empresa_realtime_channel')
-          .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'empresas' },
-            () => {
-              carregarEmpresasSupabase();
-            }
-          )
-          .subscribe();
-      }
-    }
+    const handleConfigOrFocus = () => {
+      iniciarEmpresasRealtime();
+    };
+
+    window.addEventListener('supabase-config-changed', handleConfigOrFocus);
+    window.addEventListener('focus', handleConfigOrFocus);
 
     return () => {
-      window.removeEventListener('supabase-config-changed', handleConfigChange);
+      window.removeEventListener('supabase-config-changed', handleConfigOrFocus);
+      window.removeEventListener('focus', handleConfigOrFocus);
       if (channel) {
         try {
           channel.unsubscribe();

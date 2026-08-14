@@ -182,18 +182,26 @@ export function iniciarEscutaSupabaseConfigFirestore(): () => void {
 
   try {
     const docRef = doc(db, FIRESTORE_DOC_PATH.collection, FIRESTORE_DOC_PATH.doc);
+    let primeiraLeitura = true;
+
     const unsubscribe = onSnapshot(
       docRef,
       (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.data();
           if (data && data.url && data.anonKey) {
+            const limpoUrl = String(data.url).trim();
+            const limpoKey = String(data.anonKey).trim();
             const configAtual = getSupabaseConfig();
-            if (configAtual.url !== data.url || configAtual.anonKey !== data.anonKey) {
+
+            const mudou = configAtual.url !== limpoUrl || configAtual.anonKey !== limpoKey;
+
+            if (mudou || primeiraLeitura) {
+              primeiraLeitura = false;
               console.log('🔄 Sincronizando credenciais do Supabase obtidas via Firestore...');
               localStorage.setItem(
                 STORAGE_KEY_SUPABASE,
-                JSON.stringify({ url: data.url.trim(), anonKey: data.anonKey.trim() })
+                JSON.stringify({ url: limpoUrl, anonKey: limpoKey })
               );
               cachedClient = null;
               lastClientKey = '';
@@ -213,6 +221,15 @@ export function iniciarEscutaSupabaseConfigFirestore(): () => void {
     console.warn('Erro ao iniciar listener de Supabase config no Firestore:', e);
     return () => {};
   }
+}
+
+// Inicialização automática do listener ao carregar o módulo no navegador
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    try {
+      iniciarEscutaSupabaseConfigFirestore();
+    } catch (e) {}
+  }, 100);
 }
 
 /**

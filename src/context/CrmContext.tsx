@@ -237,82 +237,154 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, []);
 
+  // Recarrega dados ao autenticar, alterar configuração ou focar na janela
   useEffect(() => {
-    if (user) {
-      carregarDadosCompletos();
-    }
+    carregarDadosCompletos();
 
     const handleConfigChange = () => {
       console.log('🔄 Evento supabase-config-changed recebido. Recarregando dados...');
       carregarDadosCompletos();
     };
 
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('👁️ Janela reativada. Sincronizando dados em tempo real...');
+        carregarDadosCompletos();
+      }
+    };
+
     window.addEventListener('supabase-config-changed', handleConfigChange);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+
     return () => {
       window.removeEventListener('supabase-config-changed', handleConfigChange);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
     };
   }, [user, carregarDadosCompletos]);
 
-  // Supabase Realtime WebSocket Listener
+  // Supabase Realtime WebSocket Listener com suporte a re-inicialização dinâmica
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
-    const client = getSupabaseClient();
-    if (!client) return;
+    let activeChannel: any = null;
 
-    setRealtimeStatus('CONECTANDO');
-    logRealtimeEvent('SISTEMA', 'SYSTEM', 'Iniciando escuta Realtime no Supabase');
+    const iniciarRealtime = () => {
+      if (activeChannel) {
+        try {
+          activeChannel.unsubscribe();
+        } catch (e) {}
+        activeChannel = null;
+      }
 
-    const channel = client
-      .channel('crm_realtime_data_channel')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'leads' },
-        (payload) => {
-          const newRow = payload.new as Record<string, any> | undefined;
-          const oldRow = payload.old as Record<string, any> | undefined;
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            if (newRow && !newRow.deleted_at) {
-              carregarDadosCompletos();
-            } else if (newRow && newRow.deleted_at) {
-              setLeads((prev) => prev.filter((l) => l.id !== newRow.id));
+      if (!isSupabaseConfigured()) {
+        setRealtimeStatus('DESCONECTADO');
+        return;
+      }
+
+      const client = getSupabaseClient();
+      if (!client) {
+        setRealtimeStatus('DESCONECTADO');
+        return;
+      }
+
+      setRealtimeStatus('CONECTANDO');
+      logRealtimeEvent('SISTEMA', 'SYSTEM', 'Iniciando escuta Realtime no Supabase');
+
+      activeChannel = client
+        .channel('crm_realtime_data_channel_' + Date.now())
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'leads' },
+          (payload) => {
+            logRealtimeEvent('leads', payload.eventType as any, 'Alteração em tempo real na tabela de leads');
+            const newRow = payload.new as Record<string, any> | undefined;
+            const oldRow = payload.old as Record<string, any> | undefined;
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              if (newRow && !newRow.deleted_at) {
+                carregarDadosCompletos();
+              } else if (newRow && newRow.deleted_at) {
+                setLeads((prev) => prev.filter((l) => l.id !== newRow.id));
+              }
+            } else if (payload.eventType === 'DELETE' && oldRow?.id) {
+              setLeads((prev) => prev.filter((l) => l.id !== oldRow.id));
             }
-          } else if (payload.eventType === 'DELETE' && oldRow?.id) {
-            setLeads((prev) => prev.filter((l) => l.id !== oldRow.id));
           }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'fichas_leads' },
-        () => carregarDadosCompletos()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'fichas_lead' },
-        () => carregarDadosCompletos()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'compras' },
-        () => carregarDadosCompletos()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'procedimentos' },
-        () => carregarDadosCompletos()
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          setRealtimeStatus('CONECTADO');
-        } else if (status === 'CHANNEL_ERROR') {
-          setRealtimeStatus('ERRO');
-        }
-      });
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'fichas_leads' },
+          () => {
+            logRealtimeEvent('fichas_leads', 'UPDATE', 'Ficha atualizada em tempo real');
+            carregarDadosCompletos();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'fichas_lead' },
+          () => {
+            logRealtimeEvent('fichas_lead', 'UPDATE', 'Ficha atualizada em tempo real');
+            carregarDadosCompletos();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'compras' },
+          () => {
+            logRealtimeEvent('compras', 'UPDATE', 'Compra atualizada em tempo real');
+            carregarDadosCompletos();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'procedimentos' },
+          () => {
+            logRealtimeEvent('procedimentos', 'UPDATE', 'Procedimento atualizado em tempo real');
+            carregarDadosCompletos();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'usuarios' },
+          () => {
+            logRealtimeEvent('usuarios', 'UPDATE', 'Usuário/colaborador alterado em tempo real');
+            carregarDadosCompletos();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'empresas' },
+          () => {
+            logRealtimeEvent('empresas', 'UPDATE', 'Dados da empresa alterados em tempo real');
+            carregarDadosCompletos();
+          }
+        )
+        .subscribe((status: string) => {
+          if (status === 'SUBSCRIBED') {
+            setRealtimeStatus('CONECTADO');
+            logRealtimeEvent('SISTEMA', 'SYSTEM', 'Conectado com sucesso ao canal de Realtime!');
+          } else if (status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+            setRealtimeStatus('ERRO');
+          }
+        });
+    };
+
+    iniciarRealtime();
+
+    const handleConfigOrFocus = () => {
+      iniciarRealtime();
+    };
+
+    window.addEventListener('supabase-config-changed', handleConfigOrFocus);
+    window.addEventListener('focus', handleConfigOrFocus);
 
     return () => {
-      try {
-        channel.unsubscribe();
-      } catch (e) {}
+      window.removeEventListener('supabase-config-changed', handleConfigOrFocus);
+      window.removeEventListener('focus', handleConfigOrFocus);
+      if (activeChannel) {
+        try {
+          activeChannel.unsubscribe();
+        } catch (e) {}
+      }
     };
   }, [carregarDadosCompletos]);
 
