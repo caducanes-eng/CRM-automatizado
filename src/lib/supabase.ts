@@ -1,4 +1,6 @@
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
+import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { db } from './firebase';
 
 const STORAGE_KEY_SUPABASE = 'crm_supabase_config_v1';
 const FIRESTORE_DOC_PATH = { collection: 'configuracoes_sistema', doc: 'supabase' };
@@ -154,13 +156,63 @@ export function saveSupabaseConfig(url: string, anonKey: string): void {
 
   logRealtimeEvent('SISTEMA', 'SYSTEM', 'Novas credenciais do Supabase salvas localmente.');
 
+  // Sincroniza credenciais no Firestore para outros navegadores
+  if (db && limpoUrl && limpoKey) {
+    try {
+      const docRef = doc(db, FIRESTORE_DOC_PATH.collection, FIRESTORE_DOC_PATH.doc);
+      setDoc(docRef, {
+        url: limpoUrl,
+        anonKey: limpoKey,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true }).catch((e) => {
+        console.warn('Erro ao salvar config do Supabase no Firestore:', e);
+      });
+    } catch (e) {
+      console.warn('Aviso ao sincronizar Supabase no Firestore:', e);
+    }
+  }
+
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('supabase-config-changed'));
   }
 }
 
 export function iniciarEscutaSupabaseConfigFirestore(): () => void {
-  return () => {};
+  if (!db) return () => {};
+
+  try {
+    const docRef = doc(db, FIRESTORE_DOC_PATH.collection, FIRESTORE_DOC_PATH.doc);
+    const unsubscribe = onSnapshot(
+      docRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (data && data.url && data.anonKey) {
+            const configAtual = getSupabaseConfig();
+            if (configAtual.url !== data.url || configAtual.anonKey !== data.anonKey) {
+              console.log('🔄 Sincronizando credenciais do Supabase obtidas via Firestore...');
+              localStorage.setItem(
+                STORAGE_KEY_SUPABASE,
+                JSON.stringify({ url: data.url.trim(), anonKey: data.anonKey.trim() })
+              );
+              cachedClient = null;
+              lastClientKey = '';
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('supabase-config-changed'));
+              }
+            }
+          }
+        }
+      },
+      (error) => {
+        console.warn('Aviso ao escutar Supabase config no Firestore:', error);
+      }
+    );
+    return unsubscribe;
+  } catch (e) {
+    console.warn('Erro ao iniciar listener de Supabase config no Firestore:', e);
+    return () => {};
+  }
 }
 
 /**

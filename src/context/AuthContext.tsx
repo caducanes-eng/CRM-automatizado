@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import { doc, setDoc, collection, getDocs } from 'firebase/firestore';
+import { db, sanitizeForFirestore } from '../lib/firebase';
 import { supabaseService, supabaseMapper } from '../services/supabaseService';
 import { isSupabaseConfigured, getSupabaseClient } from '../lib/supabase';
 import {
@@ -164,6 +166,86 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.warn('Erro ao salvar usuários no cache local:', e);
     }
   }, [usuarios]);
+
+  // Carrega todos os colaboradores cadastrados no banco de dados (Supabase e/ou Firestore)
+  const carregarUsuariosDatabase = useCallback(async () => {
+    let usuariosRemotos: UsuarioColaborador[] = [];
+
+    if (isSupabaseConfigured()) {
+      const client = getSupabaseClient();
+      if (client) {
+        try {
+          const { data, error } = await client
+            .from('usuarios')
+            .select('*')
+            .is('deleted_at', null)
+            .order('nome', { ascending: true });
+
+          if (!error && data && data.length > 0) {
+            usuariosRemotos = data.map(supabaseMapper.dbToUsuario);
+          }
+        } catch (err) {
+          console.warn('Erro ao consultar lista de usuários no Supabase:', err);
+        }
+      }
+    }
+
+    if (usuariosRemotos.length === 0 && db) {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'usuarios'));
+        if (!querySnapshot.empty) {
+          const fsList: UsuarioColaborador[] = [];
+          querySnapshot.forEach((docSnap) => {
+            const data = docSnap.data() as any;
+            if (data && !data.deleted_at) {
+              fsList.push(data);
+            }
+          });
+          if (fsList.length > 0) {
+            usuariosRemotos = fsList;
+          }
+        }
+      } catch (err) {
+        console.warn('Erro ao consultar usuários no Firestore:', err);
+      }
+    }
+
+    if (usuariosRemotos.length > 0) {
+      setUsuarios((prev) => {
+        const map = new Map<string, UsuarioColaborador>();
+        SEED_USUARIOS.forEach((u) => {
+          map.set(u.id, u);
+          map.set(u.email.toLowerCase().trim(), u);
+        });
+
+        prev.forEach((u) => {
+          map.set(u.id, u);
+          map.set(u.email.toLowerCase().trim(), u);
+        });
+
+        usuariosRemotos.forEach((u) => {
+          map.set(u.id, u);
+          map.set(u.email.toLowerCase().trim(), u);
+        });
+
+        return Array.from(new Set(map.values()));
+      });
+    }
+  }, []);
+
+  // Recarrega usuários do banco no início e quando a configuração mudar
+  useEffect(() => {
+    carregarUsuariosDatabase();
+
+    const handleConfigChange = () => {
+      carregarUsuariosDatabase();
+    };
+
+    window.addEventListener('supabase-config-changed', handleConfigChange);
+    return () => {
+      window.removeEventListener('supabase-config-changed', handleConfigChange);
+    };
+  }, [carregarUsuariosDatabase]);
 
   // Função auxiliar para carregar perfil do usuário na tabela public.usuarios do Supabase
   const carregarPerfilUsuarioSupabase = useCallback(async (authUser: any) => {
@@ -587,6 +669,50 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     let colabParaLogar = colaboradorEncontrado;
 
+    // Se não encontrou na memória local, busca na tabela usuarios do Supabase ou Firestore
+    if (!colabParaLogar) {
+      if (isSupabaseConfigured()) {
+        const client = getSupabaseClient();
+        if (client) {
+          try {
+            const { data: dbUsers } = await client
+              .from('usuarios')
+              .select('*')
+              .or(`email.eq.${emailParaAuth.toLowerCase()},email.eq.${termoLimpo.toLowerCase()}`)
+              .is('deleted_at', null)
+              .limit(1);
+
+            if (dbUsers && dbUsers.length > 0) {
+              colabParaLogar = supabaseMapper.dbToUsuario(dbUsers[0]);
+              setUsuarios((prev) => [colabParaLogar!, ...prev]);
+            }
+          } catch (e) {
+            console.warn('Erro ao consultar usuário no Supabase durante login:', e);
+          }
+        }
+      }
+
+      if (!colabParaLogar && db) {
+        try {
+          const querySnapshot = await getDocs(collection(db, 'usuarios'));
+          querySnapshot.forEach((docSnap) => {
+            const data = docSnap.data() as any;
+            if (
+              data &&
+              !data.deleted_at &&
+              (data.email?.toLowerCase() === emailParaAuth.toLowerCase() ||
+                data.email?.toLowerCase() === termoLimpo.toLowerCase())
+            ) {
+              colabParaLogar = data as UsuarioColaborador;
+              setUsuarios((prev) => [colabParaLogar!, ...prev]);
+            }
+          });
+        } catch (e) {
+          console.warn('Erro ao consultar usuário no Firestore durante login:', e);
+        }
+      }
+    }
+
     if (colabParaLogar) {
       // Verificar se o usuário está ativo
       if (colabParaLogar.ativo === false) {
@@ -853,6 +979,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }
 
+    if (db) {
+      try {
+        await setDoc(doc(db, 'usuarios', novoUsuario.id), sanitizeForFirestore(novoUsuario), { merge: true });
+      } catch (errFs) {
+        console.warn('Aviso: falha ao espelhar colaborador no Firestore:', errFs);
+      }
+    }
+
     return novoUsuario;
   };
 
@@ -926,6 +1060,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await supabaseService.salvarUsuario(usuarioAtualizado);
       } catch (eSupabase) {
         console.warn('Aviso: falha ao atualizar colaborador no Supabase:', eSupabase);
+      }
+    }
+
+    if (usuarioAtualizado && db) {
+      try {
+        await setDoc(
+          doc(db, 'usuarios', (usuarioAtualizado as UsuarioColaborador).id),
+          sanitizeForFirestore(usuarioAtualizado),
+          { merge: true }
+        );
+      } catch (eFs) {
+        console.warn('Aviso: falha ao atualizar colaborador no Firestore:', eFs);
       }
     }
 

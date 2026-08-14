@@ -1,10 +1,25 @@
-// Firebase initialized stub (Migrated to Supabase)
-export const app = null as any;
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import firebaseConfig from '../../firebase-applet-config.json';
+
+let firebaseApp: any = null;
+let firestoreDb: any = null;
+
+try {
+  if (firebaseConfig && firebaseConfig.apiKey) {
+    firebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+    firestoreDb = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId || undefined);
+  }
+} catch (e) {
+  console.warn('Erro ao inicializar Firebase:', e);
+}
+
+export const app = firebaseApp;
 export const auth = null as any;
-export const db = null as any;
+export const db = firestoreDb;
 
 /**
- * Sanitiza recursivamente objetos
+ * Sanitiza recursivamente objetos para o Firestore (remove valores undefined)
  */
 export function sanitizeForFirestore<T>(obj: T): T {
   if (obj === undefined) {
@@ -27,5 +42,6 @@ export function sanitizeForFirestore<T>(obj: T): T {
   }
   return clean as T;
 }
+
 
 
