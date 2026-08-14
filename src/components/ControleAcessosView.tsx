@@ -630,6 +630,11 @@ export const ControleAcessosView: React.FC = () => {
                       Histórico Compras
                     </span>
                   )}
+                  {user.permissoes.podeAcessarKpisComissao && (
+                    <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-900 text-[10px] font-bold border border-amber-200">
+                      Comissão & KPIs
+                    </span>
+                  )}
                   {user.permissoes.podeAcessarControleAcessos && (
                     <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-900 text-[10px] font-bold border border-amber-200">
                       Controle Acessos
@@ -867,7 +872,7 @@ export const ControleAcessosView: React.FC = () => {
                     {
                       role: 'GESTOR' as NivelAcesso,
                       titulo: '👑 Gestão Geral',
-                      desc: 'Acesso total irrestrito a funis, compras, relatórios e controle de acessos.',
+                      desc: 'Acesso total irrestrito a funis, comissões & KPIs, compras, relatórios e controle de acessos.',
                     },
                     {
                       role: 'MEDICO' as NivelAcesso,
@@ -877,7 +882,7 @@ export const ControleAcessosView: React.FC = () => {
                     {
                       role: 'RECEPCAO_COMERCIAL' as NivelAcesso,
                       titulo: '📞 Recepção & Comercial',
-                      desc: 'Cadastro Rápido, Em Captação, Agendamentos e Leads Perdidos.',
+                      desc: 'Cadastro Rápido, Em Captação, Agendamentos, Leads Perdidos e Comissão & KPIs (BON-001).',
                     },
                     {
                       role: 'POS_VENDA' as NivelAcesso,
@@ -1011,6 +1016,19 @@ export const ControleAcessosView: React.FC = () => {
                     <div>
                       <p className="font-semibold text-slate-800">Histórico de Compras</p>
                       <p className="text-[11px] text-slate-500">Visualizar faturamento e compras de leads</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-2.5 p-2.5 rounded-lg border border-[#B8960C]/30 bg-amber-50/50 cursor-pointer hover:bg-amber-100/60">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(formData.permissoes.podeAcessarKpisComissao)}
+                      onChange={() => handleTogglePermissao('podeAcessarKpisComissao')}
+                      className="mt-0.5 rounded text-amber-800 focus:ring-amber-800"
+                    />
+                    <div>
+                      <p className="font-bold text-amber-950">Comissão & KPIs (BON-001)</p>
+                      <p className="text-[11px] text-amber-800">Cálculo de metas, travas de segurança e bonificação</p>
                     </div>
                   </label>
 

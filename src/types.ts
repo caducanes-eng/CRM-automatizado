@@ -9,6 +9,7 @@ export type SectionId =
   | 'leads_perdidos'
   | 'historico_compras'
   | 'funil_conversao'
+  | 'kpis_comissao'
   | 'controle_acessos'
   | 'configuracoes';
 
@@ -142,6 +143,7 @@ export interface PermissoesUsuario {
   podeAcessarLeadsPerdidos: boolean;
   podeAcessarHistoricoCompras: boolean;
   podeAcessarFunilConversao: boolean;
+  podeAcessarKpisComissao?: boolean;
   podeAcessarControleAcessos: boolean;
   podeAcessarConfiguracoes: boolean;
   podeExcluirRegistros: boolean;
@@ -161,6 +163,7 @@ export const PERMISSOES_PRESET_GESTOR: PermissoesUsuario = {
   podeAcessarLeadsPerdidos: true,
   podeAcessarHistoricoCompras: true,
   podeAcessarFunilConversao: true,
+  podeAcessarKpisComissao: true,
   podeAcessarControleAcessos: true,
   podeAcessarConfiguracoes: true,
   podeExcluirRegistros: true,
@@ -180,6 +183,7 @@ export const PERMISSOES_PRESET_MEDICO: PermissoesUsuario = {
   podeAcessarLeadsPerdidos: false,
   podeAcessarHistoricoCompras: true,
   podeAcessarFunilConversao: false,
+  podeAcessarKpisComissao: false,
   podeAcessarControleAcessos: false,
   podeAcessarConfiguracoes: false,
   podeExcluirRegistros: false,
@@ -199,6 +203,7 @@ export const PERMISSOES_PRESET_RECEPCAO: PermissoesUsuario = {
   podeAcessarLeadsPerdidos: true,
   podeAcessarHistoricoCompras: false,
   podeAcessarFunilConversao: false,
+  podeAcessarKpisComissao: true,
   podeAcessarControleAcessos: false,
   podeAcessarConfiguracoes: false,
   podeExcluirRegistros: false,
@@ -218,6 +223,7 @@ export const PERMISSOES_PRESET_POS_VENDA: PermissoesUsuario = {
   podeAcessarLeadsPerdidos: true,
   podeAcessarHistoricoCompras: true,
   podeAcessarFunilConversao: false,
+  podeAcessarKpisComissao: false,
   podeAcessarControleAcessos: false,
   podeAcessarConfiguracoes: false,
   podeExcluirRegistros: false,
@@ -795,4 +801,52 @@ export interface EstatisticasProcedimento {
   pacientesReativadosPrazo: number; // Atingiram prazo de validade e foram movidos para Reativação
   ativo: boolean;
 }
+
+/**
+ * ENTIDADE "KpiSecretariaMensal" (Snapshot congelado e acompanhamento de bonificação BON-001)
+ */
+export interface KpiSecretariaMensal {
+  id: string;
+  empresaId?: string;
+  empresa_id?: string;
+  mesAno: string; // Formato 'YYYY-MM'
+  mes_ano?: string;
+  consultasRealizadas: number;
+  consultas_realizadas?: number;
+  totalAgendamentos: number;
+  total_agendamentos?: number;
+  taxaComparecimento: number;
+  taxa_comparecimento?: number;
+  travaComparecimentoOk: boolean;
+  trava_comparecimento_ok?: boolean;
+  leadsPosConsulta: number;
+  leads_pos_consulta?: number;
+  leadsVendaFeita: number;
+  leads_venda_feita?: number;
+  taxaFechamento: number;
+  taxa_fechamento?: number;
+  faturamentoRealizado: number;
+  faturamento_realizado?: number;
+  metaFaturamento: number;
+  meta_faturamento?: number;
+  percentualMetaFaturamento: number;
+  percentual_meta_faturamento?: number;
+  bonusCaptacao: number;
+  bonus_captacao?: number;
+  bonusComparecimento: number;
+  bonus_comparecimento?: number;
+  bonusFechamento: number;
+  bonus_fechamento?: number;
+  bonusFaturamento: number;
+  bonus_faturamento?: number;
+  comissaoTotal: number;
+  comissao_total?: number;
+  fechado: boolean;
+  fechadoEm?: string | null;
+  fechado_em?: string | null;
+  observacoes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 

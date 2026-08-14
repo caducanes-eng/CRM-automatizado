@@ -19,6 +19,7 @@ import { NutricaoView } from './components/NutricaoView';
 import { LeadsPerdidosView } from './components/LeadsPerdidosView';
 import { HistoricoComprasView } from './components/HistoricoComprasView';
 import { FunilConversaoView } from './components/FunilConversaoView';
+import { KpiSecretariaView } from './components/KpiSecretariaView';
 import { ControleAcessosView } from './components/ControleAcessosView';
 import { ConfiguracoesEmpresaView } from './components/ConfiguracoesEmpresaView';
 import { FichaLeadModal } from './components/FichaLeadModal';
@@ -133,6 +134,9 @@ export default function App() {
 
       case 'funil_conversao':
         return <FunilConversaoView />;
+
+      case 'kpis_comissao':
+        return <KpiSecretariaView />;
 
       case 'controle_acessos':
         return <ControleAcessosView />;

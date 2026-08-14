@@ -16,6 +16,7 @@ import {
   SlidersHorizontal,
   Crown,
   Building2,
+  Award,
 } from 'lucide-react';
 import { SectionId, NavigationItem } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -106,6 +107,12 @@ export const navigationItems: {
         label: 'Funil de conversão',
         description: 'Métricas e taxas de conversão',
         icon: Filter,
+      },
+      {
+        id: 'kpis_comissao',
+        label: 'Comissão & KPIs',
+        description: 'Metas e bonificação da secretária (BON-001)',
+        icon: Award,
       },
       {
         id: 'controle_acessos',

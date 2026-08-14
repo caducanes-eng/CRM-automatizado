@@ -454,6 +454,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           return temPermissao('podeAcessarHistoricoCompras');
         case 'funil_conversao':
           return temPermissao('podeAcessarFunilConversao');
+        case 'kpis_comissao':
+          return temPermissao('podeAcessarKpisComissao' as any);
         case 'controle_acessos':
           return temPermissao('podeAcessarControleAcessos');
         case 'configuracoes':
