@@ -7,22 +7,14 @@ import {
   ShieldCheck,
   Eye,
   EyeOff,
-  UserCheck,
-  Sparkles,
-  Crown,
-  Stethoscope,
-  PhoneCall,
-  HeartHandshake,
   Building2,
 } from 'lucide-react';
-import { useAuth, PERFIS_RESPONSAVEIS } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 export const LoginView: React.FC = () => {
   const {
     login,
     loginComEmailSenha,
-    loginComResponsavel,
-    usuarios,
     erroAuth,
     isLoading,
     limparErro,
@@ -46,9 +38,6 @@ export const LoginView: React.FC = () => {
       // O erro foi capturado, registrado em erroAuth e a navegação foi impedida
     }
   };
-
-  // Perfis de acesso rápido (dos usuários cadastrados ou do seed)
-  const perfisAcessoRapido = (usuarios && usuarios.length > 0 ? usuarios : PERFIS_RESPONSAVEIS).slice(0, 5);
 
   return (
     <div
@@ -104,7 +93,7 @@ export const LoginView: React.FC = () => {
                 <div className="space-y-1 leading-snug">
                   <span className="font-semibold text-rose-950">{erroAuth}</span>
                   <div className="text-[11px] text-rose-700 pt-0.5">
-                    Verifique os dados informados ou selecione um dos perfis abaixo para login rápido.
+                    Verifique se os dados digitados estão corretos.
                   </div>
                 </div>
               </div>
@@ -118,9 +107,6 @@ export const LoginView: React.FC = () => {
                   className="text-xs font-bold text-[#0F172A] uppercase tracking-wider flex items-center justify-between"
                 >
                   <span>E-mail / Usuário:</span>
-                  <span className="text-[10px] text-[#64748B] normal-case font-normal">
-                    (ex: gestao@agdarodrigues.med.br)
-                  </span>
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-[#94A3B8] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -148,9 +134,6 @@ export const LoginView: React.FC = () => {
                   >
                     Senha:
                   </label>
-                  <span className="text-[11px] text-[#64748B] font-medium">
-                    Padrão do Sistema: <code className="bg-[#F1F5F9] px-1.5 py-0.5 rounded text-[#0F172A] font-mono text-[11px]">Agda@2026</code>
-                  </span>
                 </div>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-[#94A3B8] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -202,57 +185,6 @@ export const LoginView: React.FC = () => {
                 )}
               </button>
             </form>
-
-            {/* Divisor de Acesso Rápido */}
-            <div className="relative my-4">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-[#E2E8F0]" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-3 text-[11px] font-bold text-[#64748B] tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-[#0F172A]" />
-                  Acesso Rápido de Responsável
-                </span>
-              </div>
-            </div>
-
-            {/* Botões de Acesso Rápido */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {perfisAcessoRapido.map((perfil) => {
-                const isSuperAdmin = perfil.email === 'caducanes@gmail.com' || perfil.id === 'user-cadu';
-                const isGestao = perfil.role === 'GESTOR' || perfil.email.includes('gestao');
-                const isMedico = perfil.role === 'MEDICO' || perfil.cargo.toLowerCase().includes('médic');
-                const isSec1 = perfil.id === 'user-sec1' || perfil.email.includes('secretaria1');
-
-                let Icone = UserCheck;
-                if (isSuperAdmin || isGestao) Icone = Crown;
-                else if (isMedico) Icone = Stethoscope;
-                else if (isSec1) Icone = PhoneCall;
-                else Icone = HeartHandshake;
-
-                return (
-                  <button
-                    key={perfil.id}
-                    type="button"
-                    onClick={() => loginComResponsavel(perfil)}
-                    disabled={isLoading}
-                    className="p-2.5 text-left rounded-lg border border-[#E2E8F0] hover:border-[#0F172A] bg-[#F8FAFC] hover:bg-white transition-all cursor-pointer group flex items-start gap-2.5 disabled:opacity-50 shadow-2xs"
-                  >
-                    <div className="w-7 h-7 rounded-md bg-[#0F172A] text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 transition-colors">
-                      <Icone className="w-3.5 h-3.5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-[#0F172A] truncate group-hover:text-[#1E293B]">
-                        {perfil.nome}
-                      </div>
-                      <div className="text-[10px] text-[#64748B] truncate">
-                        {perfil.cargo}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
           {/* Rodapé do Card */}
