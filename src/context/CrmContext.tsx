@@ -205,15 +205,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     fecharFichaLead();
   }, [fecharFichaLead]);
 
-  // Carregamento inicial e sinc de dados pelo Supabase
+  // Carregamento inicial e sinc de dados pelo Supabase e Firestore
   const carregarDadosCompletos = useCallback(async () => {
     try {
       setIsLoading(true);
-      if (!isSupabaseConfigured()) {
-        setIsLoading(false);
-        return;
-      }
-
       const dados = await supabaseService.carregarDadosCompletos();
       if (dados) {
         setLeads(dados.leads || []);

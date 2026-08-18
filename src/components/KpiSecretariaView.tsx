@@ -81,6 +81,8 @@ export const KpiSecretariaView: React.FC = () => {
         empresaId: empresaAtivaId,
         mesAno: mesAnoSelecionado,
         consultasRealizadas: kpiAtual.consultasRealizadas,
+        procedimentosAgendados: kpiAtual.procedimentosAgendados,
+        procedimentosRealizados: kpiAtual.procedimentosRealizados,
         totalAgendamentos: kpiAtual.totalAgendamentos,
         taxaComparecimento: kpiAtual.taxaComparecimento,
         travaComparecimentoOk: kpiAtual.travaComparecimentoOk,
@@ -245,7 +247,10 @@ export const KpiSecretariaView: React.FC = () => {
           {/* KPI 1: Captação */}
           <div className="bg-white rounded-xl p-4 border border-slate-200/80 shadow-2xs flex flex-col justify-between space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700">1. Captação</span>
+              <div>
+                <span className="text-xs font-bold text-slate-800">1. Captação</span>
+                <p className="text-[10px] text-slate-400">Consultas no mês</p>
+              </div>
               <span className="p-1 rounded bg-slate-100 text-slate-600">
                 <CalendarCheck className="w-3.5 h-3.5" />
               </span>
@@ -271,7 +276,10 @@ export const KpiSecretariaView: React.FC = () => {
           {/* KPI 2: Comparecimento */}
           <div className="bg-white rounded-xl p-4 border border-slate-200/80 shadow-2xs flex flex-col justify-between space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700">2. Comparecimento</span>
+              <div>
+                <span className="text-xs font-bold text-slate-800">2. Comparecimento</span>
+                <p className="text-[10px] text-slate-400">Procedimentos s/ no-show</p>
+              </div>
               <span className="p-1 rounded bg-slate-100 text-slate-600">
                 <Users className="w-3.5 h-3.5" />
               </span>
@@ -295,7 +303,10 @@ export const KpiSecretariaView: React.FC = () => {
           {/* KPI 3: Fechamento */}
           <div className="bg-white rounded-xl p-4 border border-slate-200/80 shadow-2xs flex flex-col justify-between space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700">3. Fechamento</span>
+              <div>
+                <span className="text-xs font-bold text-slate-800">3. Fechamento</span>
+                <p className="text-[10px] text-slate-400">Orçamentos aprovados</p>
+              </div>
               <span className="p-1 rounded bg-slate-100 text-slate-600">
                 <Target className="w-3.5 h-3.5" />
               </span>
@@ -319,7 +330,10 @@ export const KpiSecretariaView: React.FC = () => {
           {/* KPI 4: Faturamento */}
           <div className="bg-white rounded-xl p-4 border border-slate-200/80 shadow-2xs flex flex-col justify-between space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700">4. Faturamento</span>
+              <div>
+                <span className="text-xs font-bold text-slate-800">4. Faturamento</span>
+                <p className="text-[10px] text-slate-400">Receita vs. Meta</p>
+              </div>
               <span className="p-1 rounded bg-slate-100 text-slate-600">
                 <DollarSign className="w-3.5 h-3.5" />
               </span>
@@ -390,12 +404,12 @@ export const KpiSecretariaView: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <CalendarCheck className="w-4 h-4 text-amber-800" />
                       <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                        1. Captação & Comparecimento
+                        1. Captação & 2. Comparecimento
                       </h3>
                     </div>
                     {kpiAtual.travaComparecimentoOk ? (
                       <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                        Trava OK (≥75%)
+                        Trava Comparecimento OK (≥75%)
                       </span>
                     ) : (
                       <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
@@ -406,21 +420,24 @@ export const KpiSecretariaView: React.FC = () => {
 
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div>
-                      <span className="text-slate-500 block">Consultas Atendidas</span>
+                      <span className="text-slate-500 block">Consultas Realizadas</span>
                       <strong className="text-slate-900 text-sm">{kpiAtual.consultasRealizadas}</strong>
+                      <span className="text-[10px] text-slate-400 block">Volume do mês</span>
                     </div>
                     <div>
                       <span className="text-slate-500 block">Bônus Captação</span>
                       <strong className="text-slate-900 text-sm">{formatarMoeda(kpiAtual.bonusCaptacao)}</strong>
+                      <span className="text-[10px] text-slate-400 block">{kpiAtual.consultasRealizadas >= 50 ? 'Nível 50 (R$ 500)' : kpiAtual.consultasRealizadas >= 40 ? 'Nível 40 (R$ 400)' : kpiAtual.consultasRealizadas >= 30 ? 'Nível 30 (R$ 300)' : 'Abaixo de 30'}</span>
                     </div>
                     <div>
-                      <span className="text-slate-500 block">Taxa Presença</span>
+                      <span className="text-slate-500 block">Taxa de Comparecimento</span>
                       <strong className="text-slate-900 text-sm">{kpiAtual.taxaComparecimento}%</strong>
-                      <span className="text-[10px] text-slate-400 block">({kpiAtual.consultasRealizadas} de {kpiAtual.totalAgendamentos})</span>
+                      <span className="text-[10px] text-slate-400 block">({kpiAtual.procedimentosRealizados || kpiAtual.consultasRealizadas} de {kpiAtual.procedimentosAgendados || kpiAtual.totalAgendamentos} procedimentos)</span>
                     </div>
                     <div>
-                      <span className="text-slate-500 block">Bônus Presença</span>
+                      <span className="text-slate-500 block">Bônus Comparecimento</span>
                       <strong className="text-slate-900 text-sm">{formatarMoeda(kpiAtual.bonusComparecimento)}</strong>
+                      <span className="text-[10px] text-slate-400 block">Sem no-show (exclui consultas)</span>
                     </div>
                   </div>
                 </div>
@@ -431,23 +448,24 @@ export const KpiSecretariaView: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <Target className="w-4 h-4 text-amber-800" />
                       <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                        2. Fechamento & Faturamento
+                        3. Fechamento & 4. Faturamento
                       </h3>
                     </div>
                     <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                      Meta: R$ 80.000
+                      Meta Base: {formatarMoeda(kpiAtual.metaFaturamento)}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div>
-                      <span className="text-slate-500 block">Taxa Fechamento</span>
+                      <span className="text-slate-500 block">Taxa de Fechamento</span>
                       <strong className="text-slate-900 text-sm">{kpiAtual.taxaFechamento}%</strong>
-                      <span className="text-[10px] text-slate-400 block">({kpiAtual.leadsVendaFeita} de {kpiAtual.leadsPosConsulta})</span>
+                      <span className="text-[10px] text-slate-400 block">({kpiAtual.leadsVendaFeita} aprovados de {kpiAtual.leadsPosConsulta} em follow-up)</span>
                     </div>
                     <div>
                       <span className="text-slate-500 block">Bônus Fechamento</span>
                       <strong className="text-slate-900 text-sm">{formatarMoeda(kpiAtual.bonusFechamento)}</strong>
+                      <span className="text-[10px] text-slate-400 block">{kpiAtual.taxaFechamento > 60 ? '> 60% (R$ 1.000)' : kpiAtual.taxaFechamento >= 46 ? '46% a 60% (R$ 700)' : kpiAtual.taxaFechamento >= 30 ? '30% a 45% (R$ 400)' : 'Abaixo de 30%'}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 block">Faturamento Realizado</span>
@@ -457,6 +475,7 @@ export const KpiSecretariaView: React.FC = () => {
                     <div>
                       <span className="text-slate-500 block">Bônus Faturamento</span>
                       <strong className="text-slate-900 text-sm">{formatarMoeda(kpiAtual.bonusFaturamento)}</strong>
+                      <span className="text-[10px] text-slate-400 block">{kpiAtual.percentualBonusBaseFaturamento || (kpiAtual.percentualMetaFaturamento >= 120 ? 150 : kpiAtual.percentualMetaFaturamento >= 100 ? 100 : kpiAtual.percentualMetaFaturamento >= 86 ? 70 : kpiAtual.percentualMetaFaturamento >= 71 ? 50 : 0)}% do bônus-base</span>
                     </div>
                   </div>
                 </div>
@@ -475,13 +494,13 @@ export const KpiSecretariaView: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     <tr>
-                      <td className="p-2.5 font-semibold text-slate-900">1. Captação (Consultas)</td>
-                      <td className="p-2.5">{kpiAtual.consultasRealizadas} consultas</td>
+                      <td className="p-2.5 font-semibold text-slate-900">1. Captação (Consultas no mês)</td>
+                      <td className="p-2.5">{kpiAtual.consultasRealizadas} consultas realizadas</td>
                       <td className="p-2.5">
                         {kpiAtual.travaComparecimentoOk ? (
-                          <span className="text-emerald-700 font-medium">✓ Trava Liberada</span>
+                          <span className="text-emerald-700 font-medium">✓ Trava Liberada (Comparecimento ≥ 75%)</span>
                         ) : (
-                          <span className="text-rose-600 font-bold">⚠️ Trava &lt;75% Zerou</span>
+                          <span className="text-rose-600 font-bold">⚠️ Trava &lt;75% Zerou Bônus</span>
                         )}
                       </td>
                       <td className="p-2.5 text-right font-bold text-slate-900">
@@ -489,13 +508,17 @@ export const KpiSecretariaView: React.FC = () => {
                       </td>
                     </tr>
                     <tr>
-                      <td className="p-2.5 font-semibold text-slate-900">2. Taxa de Comparecimento</td>
-                      <td className="p-2.5">{kpiAtual.taxaComparecimento}% ({kpiAtual.consultasRealizadas}/{kpiAtual.totalAgendamentos})</td>
+                      <td className="p-2.5 font-semibold text-slate-900">2. Comparecimento (Procedimentos s/ no-show)</td>
+                      <td className="p-2.5">{kpiAtual.taxaComparecimento}% ({kpiAtual.procedimentosRealizados || kpiAtual.consultasRealizadas}/{kpiAtual.procedimentosAgendados || kpiAtual.totalAgendamentos})</td>
                       <td className="p-2.5">
-                        {kpiAtual.taxaComparecimento >= 75 ? (
-                          <span className="text-emerald-700 font-medium">Elegível</span>
+                        {kpiAtual.taxaComparecimento > 95 ? (
+                          <span className="text-emerald-700 font-medium">Acima de 95% (Faixa Máxima)</span>
+                        ) : kpiAtual.taxaComparecimento >= 86 ? (
+                          <span className="text-emerald-700 font-medium">86% a 95%</span>
+                        ) : kpiAtual.taxaComparecimento >= 75 ? (
+                          <span className="text-emerald-700 font-medium">75% a 85%</span>
                         ) : (
-                          <span className="text-rose-600 font-bold">Abaixo do Mínimo (75%)</span>
+                          <span className="text-rose-600 font-bold">Abaixo de 75% (Sem Bônus)</span>
                         )}
                       </td>
                       <td className="p-2.5 text-right font-bold text-slate-900">
@@ -503,17 +526,39 @@ export const KpiSecretariaView: React.FC = () => {
                       </td>
                     </tr>
                     <tr>
-                      <td className="p-2.5 font-semibold text-slate-900">3. Taxa de Fechamento</td>
+                      <td className="p-2.5 font-semibold text-slate-900">3. Fechamento (Follow-up pós-consulta)</td>
                       <td className="p-2.5">{kpiAtual.taxaFechamento}% ({kpiAtual.leadsVendaFeita}/{kpiAtual.leadsPosConsulta})</td>
-                      <td className="p-2.5">Follow-up Pós-Consulta</td>
+                      <td className="p-2.5">
+                        {kpiAtual.taxaFechamento > 60 ? (
+                          <span className="text-emerald-700 font-medium">Acima de 60% (Faixa Máxima)</span>
+                        ) : kpiAtual.taxaFechamento >= 46 ? (
+                          <span className="text-emerald-700 font-medium">46% a 60%</span>
+                        ) : kpiAtual.taxaFechamento >= 30 ? (
+                          <span className="text-emerald-700 font-medium">30% a 45%</span>
+                        ) : (
+                          <span className="text-slate-500 font-medium">Abaixo de 30% (Sem Bônus)</span>
+                        )}
+                      </td>
                       <td className="p-2.5 text-right font-bold text-slate-900">
                         {formatarMoeda(kpiAtual.bonusFechamento)}
                       </td>
                     </tr>
                     <tr>
-                      <td className="p-2.5 font-semibold text-slate-900">4. Faturamento Mensal</td>
-                      <td className="p-2.5">{formatarMoeda(kpiAtual.faturamentoRealizado)} ({kpiAtual.percentualMetaFaturamento}%)</td>
-                      <td className="p-2.5">Meta R$ 80.000,00</td>
+                      <td className="p-2.5 font-semibold text-slate-900">4. Faturamento Mensal vs. Meta</td>
+                      <td className="p-2.5">{formatarMoeda(kpiAtual.faturamentoRealizado)} ({kpiAtual.percentualMetaFaturamento}% da meta)</td>
+                      <td className="p-2.5">
+                        {kpiAtual.percentualMetaFaturamento >= 120 ? (
+                          <span className="text-amber-800 font-bold">Acima de 120% (150% do Bônus-Base)</span>
+                        ) : kpiAtual.percentualMetaFaturamento >= 100 ? (
+                          <span className="text-emerald-700 font-bold">100% a 119% (100% do Bônus-Base)</span>
+                        ) : kpiAtual.percentualMetaFaturamento >= 86 ? (
+                          <span className="text-emerald-700 font-medium">86% a 99% (70% do Bônus-Base)</span>
+                        ) : kpiAtual.percentualMetaFaturamento >= 71 ? (
+                          <span className="text-emerald-700 font-medium">71% a 85% (50% do Bônus-Base)</span>
+                        ) : (
+                          <span className="text-slate-500 font-medium">0% a 70% (Sem Bônus)</span>
+                        )}
+                      </td>
                       <td className="p-2.5 text-right font-bold text-slate-900">
                         {formatarMoeda(kpiAtual.bonusFaturamento)}
                       </td>
@@ -540,21 +585,24 @@ export const KpiSecretariaView: React.FC = () => {
               {/* Régua 1 */}
               <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
                 <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 font-bold text-slate-900 flex justify-between items-center">
-                  <span>1. Captação (Consultas)</span>
-                  <span className="text-[10px] text-rose-700 font-semibold bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">Exige Presença ≥ 75%</span>
+                  <div>
+                    <span className="block font-bold">Captação</span>
+                    <span className="text-[10px] text-slate-500 font-normal">Volume de consultas realizadas no mês</span>
+                  </div>
+                  <span className="text-[10px] text-rose-700 font-semibold bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">Trava Presença ≥ 75%</span>
                 </div>
                 <table className="w-full text-left">
-                  <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                  <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                     <tr>
-                      <th className="p-2">Faixa</th>
-                      <th className="p-2 text-right">Bônus</th>
+                      <th className="p-2">CONSULTAS REALIZADAS NO MÊS</th>
+                      <th className="p-2 text-right">BÔNUS</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    <tr><td className="p-2">&lt; 30 consultas</td><td className="p-2 text-right text-slate-400 font-semibold">R$ 0,00</td></tr>
-                    <tr><td className="p-2">30 a 39 consultas</td><td className="p-2 text-right font-bold text-slate-900">R$ 300,00</td></tr>
-                    <tr><td className="p-2">40 a 49 consultas</td><td className="p-2 text-right font-bold text-slate-900">R$ 400,00</td></tr>
-                    <tr><td className="p-2 font-bold text-slate-900">≥ 50 consultas</td><td className="p-2 text-right font-bold text-amber-900">R$ 500,00</td></tr>
+                    <tr><td className="p-2 text-slate-500">&lt; 30 consultas</td><td className="p-2 text-right text-slate-400 font-semibold">Sem bônus</td></tr>
+                    <tr><td className="p-2 font-medium text-slate-800">30</td><td className="p-2 text-right font-bold text-slate-900">R$ 300</td></tr>
+                    <tr><td className="p-2 font-medium text-slate-800">40</td><td className="p-2 text-right font-bold text-slate-900">R$ 400</td></tr>
+                    <tr><td className="p-2 font-bold text-slate-900">50</td><td className="p-2 text-right font-bold text-amber-900">R$ 500</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -562,21 +610,24 @@ export const KpiSecretariaView: React.FC = () => {
               {/* Régua 2 */}
               <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
                 <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 font-bold text-slate-900 flex justify-between items-center">
-                  <span>2. Taxa de Comparecimento</span>
+                  <div>
+                    <span className="block font-bold">Comparecimento</span>
+                    <span className="text-[10px] text-slate-500 font-normal">% procedimentos s/ no-show (exclui consultas)</span>
+                  </div>
                   <span className="text-[10px] text-amber-800 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">Trava de Segurança</span>
                 </div>
                 <table className="w-full text-left">
-                  <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                  <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                     <tr>
-                      <th className="p-2">Faixa</th>
-                      <th className="p-2 text-right">Bônus</th>
+                      <th className="p-2">TAXA DE COMPARECIMENTO</th>
+                      <th className="p-2 text-right">BÔNUS</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    <tr><td className="p-2 text-rose-600 font-semibold">&lt; 75% (Trava)</td><td className="p-2 text-right text-rose-600 font-bold">R$ 0,00</td></tr>
-                    <tr><td className="p-2">75% a 85%</td><td className="p-2 text-right font-bold text-slate-900">R$ 300,00</td></tr>
-                    <tr><td className="p-2">86% a 95%</td><td className="p-2 text-right font-bold text-slate-900">R$ 500,00</td></tr>
-                    <tr><td className="p-2 font-bold text-slate-900">&gt; 95%</td><td className="p-2 text-right font-bold text-amber-900">R$ 700,00</td></tr>
+                    <tr><td className="p-2 text-rose-600 font-semibold">Abaixo de 75%</td><td className="p-2 text-right text-rose-600 font-bold">Sem bônus</td></tr>
+                    <tr><td className="p-2 font-medium text-slate-800">75% a 85%</td><td className="p-2 text-right font-bold text-slate-900">R$ 300</td></tr>
+                    <tr><td className="p-2 font-medium text-slate-800">86% a 95%</td><td className="p-2 text-right font-bold text-slate-900">R$ 500</td></tr>
+                    <tr><td className="p-2 font-bold text-slate-900">Acima de 95%</td><td className="p-2 text-right font-bold text-amber-900">R$ 700</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -584,20 +635,21 @@ export const KpiSecretariaView: React.FC = () => {
               {/* Régua 3 */}
               <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
                 <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 font-bold text-slate-900">
-                  3. Taxa de Fechamento (Follow-up)
+                  <span className="block font-bold">Fechamento</span>
+                  <span className="text-[10px] text-slate-500 font-normal">% de orçamentos aprovados após follow-up</span>
                 </div>
                 <table className="w-full text-left">
-                  <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                  <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                     <tr>
-                      <th className="p-2">Faixa</th>
-                      <th className="p-2 text-right">Bônus</th>
+                      <th className="p-2">TAXA DE FECHAMENTO</th>
+                      <th className="p-2 text-right">BÔNUS</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    <tr><td className="p-2">&lt; 30%</td><td className="p-2 text-right text-slate-400 font-semibold">R$ 0,00</td></tr>
-                    <tr><td className="p-2">30% a 45%</td><td className="p-2 text-right font-bold text-slate-900">R$ 400,00</td></tr>
-                    <tr><td className="p-2">46% a 60%</td><td className="p-2 text-right font-bold text-slate-900">R$ 700,00</td></tr>
-                    <tr><td className="p-2 font-bold text-slate-900">&gt; 60%</td><td className="p-2 text-right font-bold text-amber-900">R$ 1.000,00</td></tr>
+                    <tr><td className="p-2 text-slate-500">Abaixo de 30%</td><td className="p-2 text-right text-slate-400 font-semibold">Sem bônus</td></tr>
+                    <tr><td className="p-2 font-medium text-slate-800">30% a 45%</td><td className="p-2 text-right font-bold text-slate-900">R$ 400</td></tr>
+                    <tr><td className="p-2 font-medium text-slate-800">46% a 60%</td><td className="p-2 text-right font-bold text-slate-900">R$ 700</td></tr>
+                    <tr><td className="p-2 font-bold text-slate-900">Acima de 60%</td><td className="p-2 text-right font-bold text-amber-900">R$ 1.000</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -605,21 +657,23 @@ export const KpiSecretariaView: React.FC = () => {
               {/* Régua 4 */}
               <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
                 <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 font-bold text-slate-900">
-                  4. Faturamento (Meta R$ 80.000)
+                  <span className="block font-bold">Faturamento</span>
+                  <span className="text-[10px] text-slate-500 font-normal">Receita gerada vs. meta mensal</span>
                 </div>
                 <table className="w-full text-left">
-                  <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                  <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                     <tr>
-                      <th className="p-2">Faixa (% Meta)</th>
-                      <th className="p-2 text-right">Bônus</th>
+                      <th className="p-2">% DA META BATIDA</th>
+                      <th className="p-2 text-center">BÔNUS</th>
+                      <th className="p-2 text-right">% DO BÔNUS-BASE</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    <tr><td className="p-2">&lt; 71% (&lt; R$ 56.8k)</td><td className="p-2 text-right text-slate-400 font-semibold">R$ 0,00</td></tr>
-                    <tr><td className="p-2">71% a 85% (R$ 56.8k - R$ 68k)</td><td className="p-2 text-right font-bold text-slate-900">R$ 1.000,00</td></tr>
-                    <tr><td className="p-2">86% a 99% (R$ 68.8k - R$ 79.2k)</td><td className="p-2 text-right font-bold text-slate-900">R$ 1.400,00</td></tr>
-                    <tr><td className="p-2 font-bold text-slate-900">100% a 119% (R$ 80k - R$ 95.2k)</td><td className="p-2 text-right font-bold text-emerald-800">R$ 2.000,00</td></tr>
-                    <tr><td className="p-2 font-bold text-slate-900">≥ 120% (≥ R$ 96k)</td><td className="p-2 text-right font-bold text-amber-900">R$ 3.000,00</td></tr>
+                    <tr><td className="p-2 text-slate-500">0% a 70%</td><td className="p-2 text-center text-slate-400 font-semibold">Sem bônus</td><td className="p-2 text-right text-slate-400">—</td></tr>
+                    <tr><td className="p-2 font-medium text-slate-800">71% a 85%</td><td className="p-2 text-center font-bold text-slate-900">R$ 1.000</td><td className="p-2 text-right font-semibold text-slate-700">50%</td></tr>
+                    <tr><td className="p-2 font-medium text-slate-800">86% a 99%</td><td className="p-2 text-center font-bold text-slate-900">R$ 1.400</td><td className="p-2 text-right font-semibold text-slate-700">70%</td></tr>
+                    <tr><td className="p-2 font-bold text-slate-900">100% a 119%</td><td className="p-2 text-center font-bold text-emerald-800">R$ 2.000</td><td className="p-2 text-right font-bold text-emerald-800">100%</td></tr>
+                    <tr><td className="p-2 font-bold text-slate-900">Acima de 120%</td><td className="p-2 text-center font-bold text-amber-900">R$ 3.000</td><td className="p-2 text-right font-bold text-amber-900">150%</td></tr>
                   </tbody>
                 </table>
               </div>

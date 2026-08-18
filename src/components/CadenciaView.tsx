@@ -130,15 +130,17 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
   const leadsProcessados = useMemo(() => {
     return leadsDaSituacao.map((lead) => {
       const diasCorridos = calcularDiasCorridos(lead.dataEntrada);
-      const etapaAtual = lead.etapaPorSituacao?.[situacao] || '';
+      const etapaArmazenada = lead.etapaPorSituacao?.[situacao];
+      const proximaEtapa = obterProximaEtapa(situacao, etapaArmazenada);
       const etapaEsperada = calcularEtapaEsperada(situacao, diasCorridos);
-      const statusCadencia = calcularStatusCadencia(situacao, etapaAtual, etapaEsperada);
-      const deveContatarHoje = verificarSeDeveContatarHoje(situacao, diasCorridos, statusCadencia, etapaAtual);
+      const statusCadencia = calcularStatusCadencia(situacao, proximaEtapa, etapaEsperada);
+      const deveContatarHoje = verificarSeDeveContatarHoje(situacao, diasCorridos, statusCadencia, etapaArmazenada);
 
       return {
         ...lead,
         diasCorridos,
-        etapaAtual,
+        etapaArmazenada,
+        proximaEtapa,
         etapaEsperada,
         statusCadencia,
         deveContatarHoje,
@@ -216,25 +218,37 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
   };
 
   // Renderizador do Badge de Status
-  const renderStatusBadge = (status: StatusCadencia) => {
+  const renderStatusBadge = (status: StatusCadencia, todasConcluidas?: boolean) => {
+    if (todasConcluidas) {
+      return (
+        <span
+          id="status-badge-concluido"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-[11px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs"
+        >
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+          <span>Concluído</span>
+        </span>
+      );
+    }
+
     switch (status) {
       case 'Atrasado':
         return (
           <span
             id="status-badge-atrasado"
-            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-sm text-[11px] font-bold uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-200"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-[11px] font-bold uppercase tracking-wider bg-rose-50 text-rose-800 border border-rose-300 shadow-2xs"
           >
             <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-            <span>Atrasado</span>
+            <span>Em atraso</span>
           </span>
         );
       case 'Em dia':
         return (
           <span
             id="status-badge-em-dia"
-            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-sm text-[11px] font-bold uppercase tracking-wider bg-[#F2EFEA] text-[#1A1A1A] border border-[#D9D6D0]"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-[11px] font-bold uppercase tracking-wider bg-emerald-50/80 text-emerald-900 border border-emerald-200 shadow-2xs"
           >
-            <CheckCircle2 className="w-3.5 h-3.5 text-[#5C3A22] shrink-0" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
             <span>Em dia</span>
           </span>
         );
@@ -242,9 +256,9 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
         return (
           <span
             id="status-badge-adiantado"
-            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-sm text-[11px] font-bold uppercase tracking-wider bg-[#5C3A22]/10 text-[#5C3A22] border border-[#5C3A22]/30"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-[11px] font-bold uppercase tracking-wider bg-sky-50 text-sky-900 border border-sky-200 shadow-2xs"
           >
-            <TrendingUp className="w-3.5 h-3.5 text-[#5C3A22] shrink-0" />
+            <TrendingUp className="w-3.5 h-3.5 text-sky-700 shrink-0" />
             <span>Adiantado</span>
           </span>
         );
@@ -253,7 +267,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
         return (
           <span
             id="status-badge-sem-etapa"
-            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-sm text-[11px] font-bold uppercase tracking-wider bg-[#F2EFEA] text-[#8F887E] border border-[#D9D6D0]"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-[11px] font-bold uppercase tracking-wider bg-[#F2EFEA] text-[#8F887E] border border-[#D9D6D0]"
           >
             <AlertTriangle className="w-3.5 h-3.5 text-[#8F887E] shrink-0" />
             <span>Sem etapa</span>
@@ -576,7 +590,13 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
                       {/* 3. Dias corridos */}
                       <td className="py-3 px-4 text-center whitespace-nowrap">
                         <span
-                          className="inline-block px-2 py-0.5 rounded-sm text-xs font-bold bg-white text-[#1A1A1A] border border-[#D9D6D0]"
+                          className={`inline-block px-2.5 py-1 rounded-sm text-xs font-bold border transition-colors ${
+                            lead.statusCadencia === 'Atrasado'
+                              ? 'bg-rose-50 text-rose-800 border-rose-200'
+                              : lead.statusCadencia === 'Adiantado'
+                              ? 'bg-sky-50 text-sky-800 border-sky-200'
+                              : 'bg-white text-[#1A1A1A] border-[#D9D6D0]'
+                          }`}
                         >
                           {lead.diasCorridos === 0
                             ? 'Hoje (0d)'
@@ -594,13 +614,17 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
                           onClick={() => handleAbrirModalEtapa(lead)}
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-semibold border transition-all cursor-pointer shadow-2xs group max-w-full text-left ${
                             todasConcluidas
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                              : lead.statusCadencia === 'Atrasado'
+                              ? 'bg-rose-50/60 text-rose-900 border-rose-300 hover:bg-rose-100 hover:border-rose-400'
                               : 'bg-white text-[#1A1A1A] border-[#D9D6D0] hover:border-[#5C3A22] hover:bg-[#F2EFEA]'
                           }`}
                           title="Clique para responder: Etapa realizada? Concluída ou cancelar"
                         >
                           {todasConcluidas ? (
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          ) : lead.statusCadencia === 'Atrasado' ? (
+                            <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                           ) : (
                             <Clock className="w-3.5 h-3.5 text-[#5C3A22] group-hover:text-emerald-700 shrink-0" />
                           )}
@@ -610,7 +634,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
 
                       {/* 5. Etapa esperada */}
                       <td className="py-3 px-4 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-xs font-medium bg-[#F2EFEA] text-[#1A1A1A] border border-[#D9D6D0]">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium bg-[#F2EFEA] text-[#1A1A1A] border border-[#D9D6D0]">
                           <Clock className="w-3 h-3 text-[#5C3A22] shrink-0" />
                           <span>{lead.etapaEsperada}</span>
                         </span>
@@ -618,7 +642,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
 
                       {/* 6. Status */}
                       <td className="py-3 px-4 text-center whitespace-nowrap">
-                        {renderStatusBadge(lead.statusCadencia)}
+                        {renderStatusBadge(lead.statusCadencia, todasConcluidas)}
                       </td>
 
                       {/* Botão Ação / Ficha */}

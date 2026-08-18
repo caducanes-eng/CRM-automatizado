@@ -253,24 +253,18 @@ export function calcularEtapaEsperada(situacao: SituacaoLead, diasCorridos: numb
 }
 
 /**
- * Compara a posição da Etapa atual com a Etapa esperada na sequência da cadência
+ * Compara a posição da Próxima Etapa do lead com a Etapa Esperada (calculada pelos dias corridos).
  * - se todas as etapas foram concluídas → Status = "Em dia"
- * - se a etapa atual ainda não foi selecionada → Status = "Sem etapa selecionada" (destaque amarelo)
- * - se a atual está ATRÁS da esperada → Status = "Atrasado" (destaque vermelho)
- * - se está igual → Status = "Em dia" (destaque verde)
- * - se está à frente → Status = "Adiantado" (destaque azul/celeste)
+ * - se a próxima etapa está ATRÁS da etapa esperada (índice menor) → Status = "Atrasado" (Em atraso)
+ * - se a próxima etapa é IGUAL à etapa esperada → Status = "Em dia"
+ * - se a próxima etapa está À FRENTE da etapa esperada (índice maior) → Status = "Adiantado"
  */
 export function calcularStatusCadencia(
   situacao: SituacaoLead,
-  etapaAtual: string | undefined | null,
+  etapaOuProximaEtapa: string | undefined | null,
   etapaEsperada: string
 ): StatusCadencia {
-  if (verificarSeTodasEtapasConcluidas(situacao, etapaAtual)) {
-    return 'Em dia';
-  }
-
-  if (!etapaAtual || etapaAtual.trim() === '') {
-    // Se ainda não foi definido, o padrão esperado é o primeiro contato
+  if (verificarSeTodasEtapasConcluidas(situacao, etapaOuProximaEtapa)) {
     return 'Em dia';
   }
 
@@ -279,14 +273,16 @@ export function calcularStatusCadencia(
     return 'Em dia';
   }
 
-  const etapaAtualTrim = etapaAtual.trim();
+  // Obter a etapa efetiva/próxima etapa a ser realizada pelo lead
+  const proximaEtapa = obterProximaEtapa(situacao, etapaOuProximaEtapa);
+  if (proximaEtapa === ETAPAS_CONCLUIDAS_LABEL || proximaEtapa.toLowerCase().includes('concluída')) {
+    return 'Em dia';
+  }
 
-  // Busca exata pelo índice
-  let indexAtual = opcoes.indexOf(etapaAtualTrim);
-
-  // Fallback caso venha com pequenas variações de texto
+  // Busca pelo índice da próxima etapa na régua da cadência
+  let indexAtual = opcoes.indexOf(proximaEtapa);
   if (indexAtual === -1) {
-    const norm = normalizarEtapa(etapaAtualTrim);
+    const norm = normalizarEtapa(proximaEtapa);
     indexAtual = opcoes.findIndex((op) => {
       const opNorm = normalizarEtapa(op);
       return (
@@ -301,14 +297,31 @@ export function calcularStatusCadencia(
   }
 
   if (indexAtual === -1) {
-    return 'Sem etapa selecionada';
+    indexAtual = 0; // Padrão se não encontrado: primeiro contato
   }
 
-  const indexEsperado = opcoes.indexOf(etapaEsperada);
+  // Busca pelo índice da etapa esperada de acordo com os dias corridos
+  let indexEsperado = opcoes.indexOf(etapaEsperada);
   if (indexEsperado === -1) {
-    return 'Em dia';
+    const normEsp = normalizarEtapa(etapaEsperada);
+    indexEsperado = opcoes.findIndex((op) => {
+      const opNorm = normalizarEtapa(op);
+      return (
+        normEsp === opNorm ||
+        (normEsp.includes('contato 1') && opNorm.includes('contato 1')) ||
+        (normEsp.includes('contato 2') && opNorm.includes('contato 2')) ||
+        (normEsp.includes('contato 3') && opNorm.includes('contato 3')) ||
+        (normEsp.includes('contato 4') && opNorm.includes('contato 4')) ||
+        (normEsp.includes('contato 5') && opNorm.includes('contato 5'))
+      );
+    });
   }
 
+  if (indexEsperado === -1) {
+    indexEsperado = 0;
+  }
+
+  // Comparação estrita entre Próxima Etapa e Etapa Esperada
   if (indexAtual < indexEsperado) {
     return 'Atrasado';
   }

@@ -156,19 +156,26 @@ export function saveSupabaseConfig(url: string, anonKey: string): void {
 
   logRealtimeEvent('SISTEMA', 'SYSTEM', 'Novas credenciais do Supabase salvas localmente.');
 
-  // Sincroniza credenciais no Firestore para outros navegadores
+  // Sincroniza credenciais no Firestore para outros navegadores apenas se a cota estiver disponível
   if (db && limpoUrl && limpoKey) {
     try {
       const docRef = doc(db, FIRESTORE_DOC_PATH.collection, FIRESTORE_DOC_PATH.doc);
-      setDoc(docRef, {
-        url: limpoUrl,
-        anonKey: limpoKey,
-        updatedAt: new Date().toISOString(),
-      }, { merge: true }).catch((e) => {
-        console.warn('Erro ao salvar config do Supabase no Firestore:', e);
+      setDoc(
+        docRef,
+        {
+          url: limpoUrl,
+          anonKey: limpoKey,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      ).catch((e) => {
+        // Silencia erro se for cota excedida
+        if (!String(e?.message || '').includes('Quota') && !String(e?.code || '').includes('resource-exhausted')) {
+          console.warn('Erro ao salvar config do Supabase no Firestore:', e);
+        }
       });
     } catch (e) {
-      console.warn('Aviso ao sincronizar Supabase no Firestore:', e);
+      // Ignora erro
     }
   }
 
@@ -225,11 +232,9 @@ export function iniciarEscutaSupabaseConfigFirestore(): () => void {
 
 // Inicialização automática do listener ao carregar o módulo no navegador
 if (typeof window !== 'undefined') {
-  setTimeout(() => {
-    try {
-      iniciarEscutaSupabaseConfigFirestore();
-    } catch (e) {}
-  }, 100);
+  try {
+    iniciarEscutaSupabaseConfigFirestore();
+  } catch (e) {}
 }
 
 /**

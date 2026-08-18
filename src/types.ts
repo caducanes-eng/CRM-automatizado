@@ -813,6 +813,10 @@ export interface KpiSecretariaMensal {
   mes_ano?: string;
   consultasRealizadas: number;
   consultas_realizadas?: number;
+  procedimentosAgendados?: number;
+  procedimentos_agendados?: number;
+  procedimentosRealizados?: number;
+  procedimentos_realizados?: number;
   totalAgendamentos: number;
   total_agendamentos?: number;
   taxaComparecimento: number;

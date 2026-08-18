@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
-import { doc, setDoc, collection, getDocs } from 'firebase/firestore';
-import { db, sanitizeForFirestore } from '../lib/firebase';
 import { supabaseService, supabaseMapper } from '../services/supabaseService';
+import { firestoreService } from '../services/firestoreService';
 import { isSupabaseConfigured, getSupabaseClient } from '../lib/supabase';
 import {
   UsuarioColaborador,
@@ -190,20 +189,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }
 
-    if (usuariosRemotos.length === 0 && db) {
+    if (usuariosRemotos.length === 0 && !firestoreService.isQuotaExhausted()) {
       try {
-        const querySnapshot = await getDocs(collection(db, 'usuarios'));
-        if (!querySnapshot.empty) {
-          const fsList: UsuarioColaborador[] = [];
-          querySnapshot.forEach((docSnap) => {
-            const data = docSnap.data() as any;
-            if (data && !data.deleted_at) {
-              fsList.push(data);
-            }
-          });
-          if (fsList.length > 0) {
-            usuariosRemotos = fsList;
-          }
+        const dadosFs = await firestoreService.carregarDadosCompletos();
+        if (dadosFs.usuarios && dadosFs.usuarios.length > 0) {
+          usuariosRemotos = dadosFs.usuarios;
         }
       } catch (err) {
         console.warn('Erro ao consultar usuários no Firestore:', err);
@@ -211,25 +201,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     if (usuariosRemotos.length > 0) {
-      setUsuarios((prev) => {
-        const map = new Map<string, UsuarioColaborador>();
-        SEED_USUARIOS.forEach((u) => {
-          map.set(u.id, u);
-          map.set(u.email.toLowerCase().trim(), u);
-        });
-
-        prev.forEach((u) => {
-          map.set(u.id, u);
-          map.set(u.email.toLowerCase().trim(), u);
-        });
-
-        usuariosRemotos.forEach((u) => {
-          map.set(u.id, u);
-          map.set(u.email.toLowerCase().trim(), u);
-        });
-
-        return Array.from(new Set(map.values()));
-      });
+      setUsuarios(usuariosRemotos);
     }
   }, []);
 
@@ -612,12 +584,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     // 1. Resolver e-mail se o usuário tiver digitado login, apelido ou nome
-    const todosUsuarios = [...usuarios];
-    SEED_USUARIOS.forEach((seedU) => {
-      if (!todosUsuarios.some((u) => u.id === seedU.id || u.email.toLowerCase() === seedU.email.toLowerCase())) {
-        todosUsuarios.push(seedU);
-      }
-    });
+    const todosUsuarios = usuarios.length > 0 ? usuarios : SEED_USUARIOS;
 
     const colaboradorEncontrado = todosUsuarios.find((u) => {
       const emailLower = (u.email || '').toLowerCase().trim();
@@ -697,21 +664,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       }
 
-      if (!colabParaLogar && db) {
+      if (!colabParaLogar && !firestoreService.isQuotaExhausted()) {
         try {
-          const querySnapshot = await getDocs(collection(db, 'usuarios'));
-          querySnapshot.forEach((docSnap) => {
-            const data = docSnap.data() as any;
-            if (
-              data &&
-              !data.deleted_at &&
-              (data.email?.toLowerCase() === emailParaAuth.toLowerCase() ||
-                data.email?.toLowerCase() === termoLimpo.toLowerCase())
-            ) {
-              colabParaLogar = data as UsuarioColaborador;
-              setUsuarios((prev) => [colabParaLogar!, ...prev]);
-            }
-          });
+          const dadosFs = await firestoreService.carregarDadosCompletos();
+          const match = (dadosFs.usuarios || []).find(
+            (u) =>
+              !u.deleted_at &&
+              (u.email?.toLowerCase() === emailParaAuth.toLowerCase() ||
+                u.email?.toLowerCase() === termoLimpo.toLowerCase())
+          );
+          if (match) {
+            colabParaLogar = match;
+            setUsuarios((prev) => [colabParaLogar!, ...prev]);
+          }
         } catch (e) {
           console.warn('Erro ao consultar usuário no Firestore durante login:', e);
         }
@@ -740,43 +705,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         throw new Error(msg);
       }
     } else {
-      // Se não encontrou usuário pré-cadastrado na lista, só autoriza se for uma senha mestra válida
-      const eSenhaMestra = senhasMestras.includes(senhaLimpa) || validarSenhaGestor(senhaLimpa);
-
-      if (!eSenhaMestra) {
-        setIsLoading(false);
-        const msg = 'E-mail ou senha incorretos. Verifique suas credenciais.';
-        setErroAuth(msg);
-        throw new Error(msg);
-      }
-
-      // Sintetizar perfil com a senha mestra válida
-      const nomeFormatado = termoLimpo.includes('@')
-        ? termoLimpo.split('@')[0].replace(/[._-]/g, ' ')
-        : termoLimpo;
-      const nomeFinal = nomeFormatado.charAt(0).toUpperCase() + nomeFormatado.slice(1);
-
-      colabParaLogar = {
-        id: `user-${Date.now().toString(36)}`,
-        empresaId: ID_EMPRESA_PADRAO,
-        empresa_id: ID_EMPRESA_PADRAO,
-        nome: nomeFinal,
-        email: emailParaAuth,
-        senhaPadrao: senhaLimpa,
-        cargo: 'Gestor / Administrador',
-        role: 'GESTOR',
-        permissoes: PERMISSOES_PRESET_GESTOR,
-        iniciais: gerarIniciais(nomeFinal),
-        corBadge: 'bg-[#1A1A1A] text-white border border-[#5C3A22]',
-        telefone: '',
-        ativo: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted_at: null,
-        version: 1,
-      };
-
-      setUsuarios((prev) => [colabParaLogar!, ...prev]);
+      setIsLoading(false);
+      const msg = 'Usuário ou e-mail não encontrado. Verifique o login digitado ou solicite seu cadastro à administração.';
+      setErroAuth(msg);
+      throw new Error(msg);
     }
 
     const empresaId = colabParaLogar.empresa_id || colabParaLogar.empresaId || ID_EMPRESA_PADRAO;
@@ -984,12 +916,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }
 
-    if (db) {
-      try {
-        await setDoc(doc(db, 'usuarios', novoUsuario.id), sanitizeForFirestore(novoUsuario), { merge: true });
-      } catch (errFs) {
-        console.warn('Aviso: falha ao espelhar colaborador no Firestore:', errFs);
-      }
+    if (novoUsuario) {
+      firestoreService.salvarUsuario(novoUsuario).catch(() => {});
     }
 
     return novoUsuario;
@@ -1068,16 +996,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }
 
-    if (usuarioAtualizado && db) {
-      try {
-        await setDoc(
-          doc(db, 'usuarios', (usuarioAtualizado as UsuarioColaborador).id),
-          sanitizeForFirestore(usuarioAtualizado),
-          { merge: true }
-        );
-      } catch (eFs) {
-        console.warn('Aviso: falha ao atualizar colaborador no Firestore:', eFs);
-      }
+    if (usuarioAtualizado) {
+      firestoreService.salvarUsuario(usuarioAtualizado).catch(() => {});
     }
 
     return usuarioAtualizado;
