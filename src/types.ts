@@ -3,6 +3,7 @@ export type SectionId =
   | 'em_captacao'
   | 'consulta_agendada'
   | 'pos_consulta'
+  | 'procedimento_agendado'
   | 'pos_procedimento'
   | 'reativacao'
   | 'nutricao'
@@ -137,6 +138,7 @@ export interface PermissoesUsuario {
   podeAcessarEmCaptacao: boolean;
   podeAcessarConsultaAgendada?: boolean;
   podeAcessarPosConsulta: boolean;
+  podeAcessarProcedimentoAgendado?: boolean;
   podeAcessarPosProcedimento: boolean;
   podeAcessarReativacao: boolean;
   podeAcessarNutricao: boolean;
@@ -157,6 +159,7 @@ export const PERMISSOES_PRESET_GESTOR: PermissoesUsuario = {
   podeAcessarEmCaptacao: true,
   podeAcessarConsultaAgendada: true,
   podeAcessarPosConsulta: true,
+  podeAcessarProcedimentoAgendado: true,
   podeAcessarPosProcedimento: true,
   podeAcessarReativacao: true,
   podeAcessarNutricao: true,
@@ -177,6 +180,7 @@ export const PERMISSOES_PRESET_MEDICO: PermissoesUsuario = {
   podeAcessarEmCaptacao: false,
   podeAcessarConsultaAgendada: true,
   podeAcessarPosConsulta: true,
+  podeAcessarProcedimentoAgendado: true,
   podeAcessarPosProcedimento: true,
   podeAcessarReativacao: false,
   podeAcessarNutricao: false,
@@ -197,6 +201,7 @@ export const PERMISSOES_PRESET_RECEPCAO: PermissoesUsuario = {
   podeAcessarEmCaptacao: true,
   podeAcessarConsultaAgendada: true,
   podeAcessarPosConsulta: true,
+  podeAcessarProcedimentoAgendado: true,
   podeAcessarPosProcedimento: false,
   podeAcessarReativacao: false,
   podeAcessarNutricao: false,
@@ -217,6 +222,7 @@ export const PERMISSOES_PRESET_POS_VENDA: PermissoesUsuario = {
   podeAcessarEmCaptacao: false,
   podeAcessarConsultaAgendada: false,
   podeAcessarPosConsulta: true,
+  podeAcessarProcedimentoAgendado: true,
   podeAcessarPosProcedimento: true,
   podeAcessarReativacao: true,
   podeAcessarNutricao: true,
@@ -835,6 +841,8 @@ export interface KpiSecretariaMensal {
   meta_faturamento?: number;
   percentualMetaFaturamento: number;
   percentual_meta_faturamento?: number;
+  dataInicioMetrificacao?: string;
+  data_inicio_metrificacao?: string;
   bonusCaptacao: number;
   bonus_captacao?: number;
   bonusComparecimento: number;

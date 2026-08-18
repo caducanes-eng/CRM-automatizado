@@ -22,6 +22,16 @@ import {
   AlertCircle,
   TrendingUp,
   AlertTriangle,
+  Sparkles,
+  BookOpen,
+  Copy,
+  Check,
+  MessageSquare,
+  Lightbulb,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  Info,
 } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
 import { useEmpresa } from '../context/EmpresaContext';
@@ -46,6 +56,11 @@ import {
   verificarSeTodasEtapasConcluidas,
   ETAPAS_CONCLUIDAS_LABEL,
 } from '../utils/cadencia';
+import {
+  obterIntencaoDaEtapa,
+  GUIA_INTENCOES_OFICIAL,
+  IntencaoMensagem,
+} from '../utils/guiaIntencoes';
 import { ImportExportModal } from './ImportExportModal';
 
 interface LeadTableViewProps {
@@ -78,7 +93,7 @@ interface ColumnConfig {
 export const COLUNAS_TABELA_LEADS: ColumnConfig[] = [
   { key: 'nome', label: 'Paciente', defaultWidth: 220, minWidth: 140, sortField: 'nome' },
   { key: 'situacao', label: 'Situação', defaultWidth: 170, minWidth: 130, sortField: 'situacao' },
-  { key: 'etapa', label: 'Próxima Etapa', defaultWidth: 170, minWidth: 120, sortField: 'etapa' },
+  { key: 'etapa', label: 'Etapa atual', defaultWidth: 170, minWidth: 120, sortField: 'etapa' },
   { key: 'interesse', label: 'Interesse', defaultWidth: 170, minWidth: 110, sortField: 'interesse' },
   { key: 'possivelValor', label: 'Possível Valor', defaultWidth: 130, minWidth: 100, align: 'right', sortField: 'possivelValor' },
   { key: 'totalComprado', label: 'Total Realizado', defaultWidth: 130, minWidth: 100, align: 'right', sortField: 'totalComprado' },
@@ -150,6 +165,8 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
   // Modal de confirmação de etapa realizada: "Etapa realizada? Concluída ou cancelar"
   const [modalEtapaLead, setModalEtapaLead] = useState<Lead | null>(null);
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+  const [copiadoMensagem, setCopiadoMensagem] = useState<boolean>(false);
+  const [mostrarGuiaCompleto, setMostrarGuiaCompleto] = useState<boolean>(false);
 
   // Cores dinâmicas selecionadas para a barra lateral / navegação
   const cores = useMemo(() => obterCoresSidebarCompletas(config.estetica), [config.estetica]);
@@ -1043,7 +1060,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
         </div>
       )}
 
-      {/* Modal de Confirmação: Etapa realizada? Concluída ou cancelar */}
+      {/* Modal de Confirmação: Layout Limpo e Direto */}
       {modalEtapaLead && (
         <div
           id="modal-confirmacao-etapa-backdrop"
@@ -1055,58 +1072,59 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
             className="bg-white rounded-sm shadow-2xl border border-[#D9D6D0] w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header com título de alto contraste */}
+            {/* Header Limpo */}
             <div className="px-5 py-4 bg-[#1A1A1A] text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-[#C9A882]" />
                 <h3 className="text-sm font-bold uppercase tracking-wider text-white">
-                  Etapa realizada?
+                  Atualizar Etapa
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setModalEtapaLead(null)}
                 className="text-white/70 hover:text-white cursor-pointer"
-                title="Fechar caixa de pergunta"
+                title="Fechar"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Conteúdo da Caixa de Pergunta */}
+            {/* Conteúdo Limpo */}
             <div className="p-5 space-y-4">
               {/* Identificação do Paciente */}
-              <div className="p-3.5 bg-[#F8F7F4] rounded-sm border border-[#D9D6D0] space-y-1">
-                <span className="text-[10px] font-bold text-[#6E6E6E] uppercase tracking-wider block">
-                  Paciente
-                </span>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-bold text-[#1A1A1A] truncate">
+              <div className="p-3 bg-[#F8F7F4] rounded-sm border border-[#D9D6D0] flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-bold text-[#8F887E] uppercase tracking-wider block">
+                    Paciente
+                  </span>
+                  <span className="text-sm font-bold text-[#1A1A1A] truncate block">
                     {modalEtapaLead.nome}
                   </span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm bg-white border border-[#D9D6D0] text-[#1A1A1A] shrink-0">
-                    {modalEtapaLead.situacao}
-                  </span>
                 </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm bg-white border border-[#D9D6D0] text-[#1A1A1A] shrink-0">
+                  {modalEtapaLead.situacao}
+                </span>
               </div>
 
-              {/* Etapa Atual / Próxima */}
+              {/* Etapa Atual & Intuito/Finalidade */}
               {(() => {
                 const situacao = modalEtapaLead.situacao;
                 const etapaArmazenada = modalEtapaLead.etapaPorSituacao?.[situacao];
                 const todasJaConcluidas = verificarSeTodasEtapasConcluidas(situacao, etapaArmazenada);
                 const etapaAtualCalculada = obterProximaEtapa(situacao, etapaArmazenada);
                 const previsaoAvanco = avancarProximaEtapa(situacao, etapaArmazenada);
+                const dadosIntencao = obterIntencaoDaEtapa(situacao, etapaAtualCalculada);
 
                 if (todasJaConcluidas) {
                   return (
-                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-sm text-center space-y-2">
-                      <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-sm text-center space-y-1.5">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-600 mx-auto" />
                       <p className="text-xs font-bold text-emerald-900">
                         Todas as etapas da cadência já foram concluídas!
                       </p>
                       <p className="text-[11px] text-emerald-700">
-                        Deseja reiniciar a sequência de acompanhamento a partir do primeiro contato?
+                        Deseja reiniciar a sequência de acompanhamento?
                       </p>
                     </div>
                   );
@@ -1114,31 +1132,49 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
 
                 return (
                   <div className="space-y-3">
-                    <div className="p-3.5 bg-[#F2EFEA] border border-[#D9D6D0] rounded-sm space-y-1">
-                      <span className="text-[10px] font-bold text-[#6E6E6E] uppercase tracking-wider block">
-                        Etapa a ser concluída agora:
+                    {/* Etapa Atual */}
+                    <div className="p-3 bg-[#F2EFEA] border border-[#D9D6D0] rounded-sm">
+                      <span className="text-[10px] font-bold text-[#8A6142] uppercase tracking-wider block">
+                        Etapa a ser concluída:
                       </span>
-                      <span className="text-sm font-bold text-[#1A1A1A] block">
+                      <span className="text-sm font-bold text-[#1A1A1A] block mt-0.5">
                         {etapaAtualCalculada}
                       </span>
                     </div>
 
-                    <div className="text-xs text-[#6E6E6E] space-y-1">
-                      <p>
-                        Ao marcar como <strong className="text-emerald-800">Concluída</strong>, o sistema calculará automaticamente o próximo passo:
-                      </p>
-                      <div className="p-2.5 rounded-sm bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-900 flex items-center gap-2">
-                        <span className="text-emerald-700 font-bold">→</span>
-                        <span>{previsaoAvanco.proximaEtapa}</span>
+                    {/* Intuito e Finalidade Limpos */}
+                    <div className="p-3.5 bg-[#FAF8F5] border border-[#D9D6D0] rounded-sm space-y-2.5">
+                      <div>
+                        <span className="text-[10px] font-bold text-[#8A6142] uppercase tracking-wider block">
+                          Intuito da Mensagem
+                        </span>
+                        <p className="text-xs font-bold text-[#1A1A1A] mt-0.5">
+                          {dadosIntencao.intencao}
+                        </p>
                       </div>
+
+                      <div className="border-t border-[#E8E5DF] pt-2">
+                        <span className="text-[10px] font-bold text-[#8F887E] uppercase tracking-wider block">
+                          Finalidade
+                        </span>
+                        <p className="text-xs text-[#4A4A4A] mt-0.5 leading-relaxed">
+                          {dadosIntencao.finalidade}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Próximo Passo */}
+                    <div className="text-[11px] text-[#6E6E6E] flex items-center justify-between p-2 rounded-sm bg-emerald-50/70 border border-emerald-200/60">
+                      <span>Próxima etapa ao concluir:</span>
+                      <strong className="text-emerald-800">{previsaoAvanco.proximaEtapa}</strong>
                     </div>
                   </div>
                 );
               })()}
             </div>
 
-            {/* Ações: Concluída ou Cancelar */}
-            <div className="px-5 py-3.5 bg-[#F8F7F4] border-t border-[#D9D6D0] flex items-center justify-end gap-2.5">
+            {/* Ações */}
+            <div className="px-5 py-3.5 bg-[#F8F7F4] border-t border-[#D9D6D0] flex items-center justify-end gap-2">
               <button
                 id="btn-cancelar-pergunta-etapa"
                 type="button"
@@ -1159,7 +1195,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                   className="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-sm bg-[#5C3A22] hover:bg-[#4A2E1B] text-white transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Reiniciar Cadência</span>
+                  <span>Reiniciar</span>
                 </button>
               ) : (
                 <button
@@ -1169,7 +1205,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                   className="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                  <span>Concluída</span>
+                  <span>Concluir</span>
                 </button>
               )}
             </div>

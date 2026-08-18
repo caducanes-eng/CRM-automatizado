@@ -1593,6 +1593,13 @@ export interface ParametrosCalculoKpi {
   metaFaturamento?: number;
 }
 
+export interface OpcoesFetchKpi {
+  dataInicioCorte?: string; // Ex: '2026-08-15'
+  metaFaturamentoCustom?: number;
+  leadsLocais?: any[];
+  comprasLocais?: any[];
+}
+
 export interface ResultadoCalculoKpi {
   consultasRealizadas: number;
   totalAgendamentos: number;
@@ -1612,6 +1619,10 @@ export interface ResultadoCalculoKpi {
   bonusFaturamento: number;
   percentualBonusBaseFaturamento: number;
   comissaoTotal: number;
+  dataInicioMetrificacao?: string;
+  diasConsiderados?: number;
+  totalDiasMes?: number;
+  metaProporcionalSugerida?: number;
 }
 
 /**
@@ -1747,13 +1758,31 @@ const STORAGE_KEY_KPIS_HISTORICO = 'crm_kpis_secretaria_snapshots_v1';
 
 /**
  * Busca e calcula em tempo real os 4 KPIs para o mês/ano selecionado (ex: '2026-08')
+ * Suporta filtro de data de início de gravação de dados (corte operacional, ex: '2026-08-15')
  */
 export async function fetchKpisMesAtual(
   empresaId: string,
-  mesAnoStr?: string
+  mesAnoStr?: string,
+  opcoes?: OpcoesFetchKpi
 ): Promise<ResultadoCalculoKpi> {
   const empUuid = normalizarUuid(empresaId);
   const mesAno = mesAnoStr || new Date().toISOString().slice(0, 7);
+  const dataInicioCorte = opcoes?.dataInicioCorte;
+  const metaFaturamentoCustom = opcoes?.metaFaturamentoCustom;
+
+  // Cálculo de dias do mês e dias considerados no período
+  const [ano, mes] = mesAno.split('-').map(Number);
+  const totalDiasMes = new Date(ano || 2026, mes || 8, 0).getDate() || 31;
+  let diasConsiderados = totalDiasMes;
+  if (dataInicioCorte && dataInicioCorte.startsWith(mesAno)) {
+    const diaInicio = parseInt(dataInicioCorte.split('-')[2] || '1', 10);
+    diasConsiderados = Math.max(1, totalDiasMes - diaInicio + 1);
+  }
+  const metaBasePadrao = 80000;
+  const metaProporcionalSugerida = Math.round((metaBasePadrao * diasConsiderados) / totalDiasMes);
+  const metaFinal = metaFaturamentoCustom !== undefined && metaFaturamentoCustom > 0
+    ? metaFaturamentoCustom
+    : metaBasePadrao;
 
   let consultasRealizadas = 0;
   let totalAgendamentos = 0;
@@ -1776,7 +1805,11 @@ export async function fetchKpisMesAtual(
       if (!errAgend && agendData && agendData.length > 0) {
         agendData.forEach((item: any) => {
           const dt = item.data_agendamento || item.created_at || '';
-          if (dt.startsWith(mesAno)) {
+          const dtIso = dt.slice(0, 10);
+          const dentroMes = dt.startsWith(mesAno);
+          const atendeCorte = !dataInicioCorte || dtIso >= dataInicioCorte;
+
+          if (dentroMes && atendeCorte) {
             totalAgendamentos++;
             const st = (item.status_confirmacao_agendamento || item.status_confirmacao || item.status || '').toLowerCase();
             const servicoTxt = `${item.tipo_servico || ''} ${item.procedimento || ''} ${item.procedimento_interesse || ''} ${item.servico || ''} ${item.tipo || ''}`.toLowerCase();
@@ -1806,7 +1839,11 @@ export async function fetchKpisMesAtual(
           leadsData.forEach((lead: any) => {
             const metaAgend = lead.etapa_por_situacao?._agendamento || {};
             const dtAgend = metaAgend.dataAgendamento || lead.data_agendamento || lead.created_at || '';
-            if (dtAgend.startsWith(mesAno)) {
+            const dtIso = dtAgend.slice(0, 10);
+            const dentroMes = dtAgend.startsWith(mesAno);
+            const atendeCorte = !dataInicioCorte || dtIso >= dataInicioCorte;
+
+            if (dentroMes && atendeCorte) {
               totalAgendamentos++;
               const st = (metaAgend.statusConfirmacaoAgendamento || lead.status_confirmacao_agendamento || '').toLowerCase();
               const servicoTxt = `${metaAgend.procedimento || ''} ${lead.procedimento_interesse || ''} ${lead.procedimento || ''}`.toLowerCase();
@@ -1836,11 +1873,17 @@ export async function fetchKpisMesAtual(
 
       if (leadsFech) {
         leadsFech.forEach((lead: any) => {
-          if (lead.situacao === 'Pós consulta' || lead.situacao === 'Pós procedimento' || lead.status_venda === 'Venda feita') {
-            leadsPosConsulta++;
-          }
-          if (lead.status_venda === 'Venda feita' || lead.situacao === 'Pós procedimento') {
-            leadsVendaFeita++;
+          const dtLead = lead.updated_at || lead.created_at || '';
+          const dtIso = dtLead.slice(0, 10);
+          const atendeCorte = !dataInicioCorte || dtIso >= dataInicioCorte;
+
+          if (atendeCorte) {
+            if (lead.situacao === 'Pós consulta' || lead.situacao === 'Pós procedimento' || lead.status_venda === 'Venda feita') {
+              leadsPosConsulta++;
+            }
+            if (lead.status_venda === 'Venda feita' || lead.situacao === 'Pós procedimento') {
+              leadsVendaFeita++;
+            }
           }
         });
       }
@@ -1854,7 +1897,11 @@ export async function fetchKpisMesAtual(
       if (comprasData && comprasData.length > 0) {
         comprasData.forEach((c: any) => {
           const dt = c.data || c.created_at || '';
-          if (dt.startsWith(mesAno)) {
+          const dtIso = dt.slice(0, 10);
+          const dentroMes = dt.startsWith(mesAno);
+          const atendeCorte = !dataInicioCorte || dtIso >= dataInicioCorte;
+
+          if (dentroMes && atendeCorte) {
             faturamentoRealizado += Number(c.valor_total || c.valor || 0);
           }
         });
@@ -1868,7 +1915,11 @@ export async function fetchKpisMesAtual(
         if (cAlt) {
           cAlt.forEach((c: any) => {
             const dt = c.data || c.created_at || '';
-            if (dt.startsWith(mesAno)) {
+            const dtIso = dt.slice(0, 10);
+            const dentroMes = dt.startsWith(mesAno);
+            const atendeCorte = !dataInicioCorte || dtIso >= dataInicioCorte;
+
+            if (dentroMes && atendeCorte) {
               faturamentoRealizado += Number(c.valor_total || c.valor || 0);
             }
           });
@@ -1879,18 +1930,91 @@ export async function fetchKpisMesAtual(
     }
   }
 
-  // Se nenhum dado for retornado no Supabase ou localmente no mês selecionado, providenciar dados base demonstrativos
-  if (totalAgendamentos === 0 && faturamentoRealizado === 0) {
-    consultasRealizadas = 42;
-    totalAgendamentos = 68;
-    procedimentosAgendados = 34;
-    procedimentosRealizados = 31; // ~91.2% comparecimento
-    leadsPosConsulta = 36;
-    leadsVendaFeita = 18; // 50% fechamento
-    faturamentoRealizado = 84000; // 105% da meta (R$ 80k)
+  // Integração com dados locais do CRM quando fornecidos
+  if (opcoes?.leadsLocais && opcoes.leadsLocais.length > 0) {
+    let localConsultas = 0;
+    let localTotalAgend = 0;
+    let localProcAgend = 0;
+    let localProcRealizados = 0;
+    let localPosConsulta = 0;
+    let localVendaFeita = 0;
+
+    opcoes.leadsLocais.forEach((lead) => {
+      if (lead.deleted_at) return;
+      const dt = lead.dataAgendamento || (lead.etapaPorSituacao as any)?._agendamento?.dataAgendamento || lead.created_at || '';
+      const dtIso = dt.slice(0, 10);
+      const dentroMes = dt.startsWith(mesAno);
+      const atendeCorte = !dataInicioCorte || dtIso >= dataInicioCorte;
+
+      if (dentroMes && atendeCorte) {
+        localTotalAgend++;
+        const servicoTxt = `${lead.procedimentoInteresse || ''} ${(lead.etapaPorSituacao as any)?._agendamento?.procedimento || ''}`.toLowerCase();
+        const ehConsulta = servicoTxt.includes('consulta') || servicoTxt.includes('avalia') || servicoTxt.includes('retorno') || lead.situacao === 'Consulta agendada';
+        const compareceu = lead.situacao === 'Pós consulta' || lead.situacao === 'Pós procedimento' || lead.statusVenda === 'Venda feita';
+
+        if (ehConsulta) {
+          if (compareceu) localConsultas++;
+        } else {
+          localProcAgend++;
+          if (compareceu || lead.situacao === 'Procedimento agendado') {
+            localProcRealizados++;
+          }
+        }
+      }
+
+      const dtLead = lead.updated_at || lead.created_at || '';
+      const dtLeadIso = dtLead.slice(0, 10);
+      if (!dataInicioCorte || dtLeadIso >= dataInicioCorte) {
+        if (lead.situacao === 'Pós consulta' || lead.situacao === 'Pós procedimento' || lead.statusVenda === 'Venda feita') {
+          localPosConsulta++;
+        }
+        if (lead.statusVenda === 'Venda feita' || lead.situacao === 'Pós procedimento') {
+          localVendaFeita++;
+        }
+      }
+    });
+
+    if (localTotalAgend > 0 || localPosConsulta > 0) {
+      consultasRealizadas = Math.max(consultasRealizadas, localConsultas);
+      totalAgendamentos = Math.max(totalAgendamentos, localTotalAgend);
+      procedimentosAgendados = Math.max(procedimentosAgendados, localProcAgend);
+      procedimentosRealizados = Math.max(procedimentosRealizados, localProcRealizados);
+      leadsPosConsulta = Math.max(leadsPosConsulta, localPosConsulta);
+      leadsVendaFeita = Math.max(leadsVendaFeita, localVendaFeita);
+    }
   }
 
-  return calcularRegraComissao({
+  if (opcoes?.comprasLocais && opcoes.comprasLocais.length > 0) {
+    let localFat = 0;
+    opcoes.comprasLocais.forEach((c) => {
+      if (c.deleted_at) return;
+      const dt = c.data || c.created_at || '';
+      const dtIso = dt.slice(0, 10);
+      const dentroMes = dt.startsWith(mesAno);
+      const atendeCorte = !dataInicioCorte || dtIso >= dataInicioCorte;
+
+      if (dentroMes && atendeCorte) {
+        localFat += Number(c.valor || c.valorTotal || 0);
+      }
+    });
+    if (localFat > 0) {
+      faturamentoRealizado = Math.max(faturamentoRealizado, localFat);
+    }
+  }
+
+  // Se nenhum dado for retornado no Supabase ou localmente no mês selecionado, providenciar dados base demonstrativos calibrados ao período
+  if (totalAgendamentos === 0 && faturamentoRealizado === 0) {
+    const fatorTempo = diasConsiderados / totalDiasMes;
+    consultasRealizadas = Math.round(42 * fatorTempo);
+    totalAgendamentos = Math.round(68 * fatorTempo);
+    procedimentosAgendados = Math.round(34 * fatorTempo);
+    procedimentosRealizados = Math.round(31 * fatorTempo);
+    leadsPosConsulta = Math.round(36 * fatorTempo);
+    leadsVendaFeita = Math.round(18 * fatorTempo);
+    faturamentoRealizado = Math.round(84000 * fatorTempo);
+  }
+
+  const resultado = calcularRegraComissao({
     consultasRealizadas,
     totalAgendamentos,
     procedimentosAgendados,
@@ -1898,8 +2022,16 @@ export async function fetchKpisMesAtual(
     leadsPosConsulta,
     leadsVendaFeita,
     faturamentoRealizado,
-    metaFaturamento: 80000,
+    metaFaturamento: metaFinal,
   });
+
+  return {
+    ...resultado,
+    dataInicioMetrificacao: dataInicioCorte,
+    diasConsiderados,
+    totalDiasMes,
+    metaProporcionalSugerida,
+  };
 }
 
 function obterSeedSnapshotsHistoricos(empresaId: string): KpiSecretariaMensal[] {

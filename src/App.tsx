@@ -94,7 +94,7 @@ export default function App() {
         );
 
       case 'consulta_agendada':
-        return <ConsultasAgendadasView />;
+        return <ConsultasAgendadasView tipo="consulta" />;
 
       case 'pos_consulta':
         return (
@@ -104,6 +104,9 @@ export default function App() {
             subtitulo="Acompanhamento da cadência de pós-avaliação e orçamentos apresentados"
           />
         );
+
+      case 'procedimento_agendado':
+        return <ConsultasAgendadasView tipo="procedimento" />;
 
       case 'pos_procedimento':
         return (

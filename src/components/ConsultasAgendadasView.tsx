@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   CalendarClock,
+  CalendarDays,
   CalendarCheck,
   Clock,
   Phone,
@@ -54,7 +55,14 @@ type FiltroAgendamento =
   | 'canceladas'
   | 'realizadas';
 
-export const ConsultasAgendadasView: React.FC = () => {
+interface ConsultasAgendadasViewProps {
+  tipo?: 'consulta' | 'procedimento';
+}
+
+export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
+  tipo = 'consulta',
+}) => {
+  const isProcedimento = tipo === 'procedimento';
   const {
     leads,
     obterFichaPorLead,
@@ -91,10 +99,14 @@ export const ConsultasAgendadasView: React.FC = () => {
   const [formDataAgendamento, setFormDataAgendamento] = useState('');
   const [formHorarioAgendamento, setFormHorarioAgendamento] = useState('14:00');
   const [formProfissional, setFormProfissional] = useState('');
-  const [formTipoConsulta, setFormTipoConsulta] = useState('Avaliação de Harmonização Facial');
+  const [formTipoConsulta, setFormTipoConsulta] = useState(
+    isProcedimento ? 'Harmonização Facial' : 'Avaliação de Harmonização Facial'
+  );
   const [formUnidade, setFormUnidade] = useState('Consultório Principal');
   const [formObservacoes, setFormObservacoes] = useState(
-    'Chegar 15 minutos antes. Vir sem maquiagem facial ou protetor solar com cor.'
+    isProcedimento
+      ? 'Chegar 15 minutos antes. Seguir orientações de cuidados prévios.'
+      : 'Chegar 15 minutos antes. Vir sem maquiagem facial ou protetor solar com cor.'
   );
   const [formStatusConfirmacao, setFormStatusConfirmacao] =
     useState<StatusConfirmacaoAgendamento>('Agendada');
@@ -107,17 +119,18 @@ export const ConsultasAgendadasView: React.FC = () => {
     setTimeout(() => setFeedbackToast(null), 3200);
   };
 
-  // 1. Filtrar leads com agendamento ativo ou na situação de consulta agendada
+  // 1. Filtrar leads com agendamento ativo de acordo com a aba (consulta vs procedimento)
   const leadsAgendados = useMemo(() => {
     return leads.filter((lead) => {
       if (lead.deleted_at) return false;
+      if (isProcedimento) {
+        return lead.situacao === 'Procedimento agendado';
+      }
       const temData = Boolean(lead.dataAgendamento);
-      const isSituacaoAgendada =
-        lead.situacao === 'Consulta agendada' ||
-        lead.situacao === 'Procedimento agendado';
-      return temData || isSituacaoAgendada;
+      const isSituacaoConsulta = lead.situacao === 'Consulta agendada';
+      return isSituacaoConsulta || (temData && lead.situacao !== 'Procedimento agendado');
     });
-  }, [leads]);
+  }, [leads, isProcedimento]);
 
   // Lista de todos os leads ativos para o select de "Novo Agendamento"
   const leadsDisponiveis = useMemo(() => {
@@ -418,9 +431,10 @@ export const ConsultasAgendadasView: React.FC = () => {
 
     if (isNovo && (formLeadId === 'NOVO' || !formLeadId)) {
       // Criar Novo Paciente e Agendamento no Supabase
+      const situacaoCriar = isProcedimento ? 'Procedimento agendado' : 'Consulta agendada';
       const novoLead = await criarLead({
         nome: formNome.trim(),
-        situacao: 'Consulta agendada',
+        situacao: situacaoCriar,
         dataAgendamento: formDataAgendamento,
         horarioAgendamento: formHorarioAgendamento,
         profissionalAgendamento: formProfissional,
@@ -457,6 +471,11 @@ export const ConsultasAgendadasView: React.FC = () => {
       const leadAlvo = leads.find((l) => l.id === targetLeadId);
       const novoStatusVenda: StatusVenda = leadAlvo?.statusVenda || 'Em processo';
       const lembreteRecemAtivado = formLembrete24hEnviado && !leadAlvo?.lembrete24hEnviado;
+      const situacaoSalvar = leadEditando
+        ? (leadEditando.situacao === 'Procedimento agendado' || leadEditando.situacao === 'Consulta agendada'
+            ? leadEditando.situacao
+            : isProcedimento ? 'Procedimento agendado' : 'Consulta agendada')
+        : (isProcedimento ? 'Procedimento agendado' : 'Consulta agendada');
 
       await atualizarLead(targetLeadId, {
         nome: formNome.trim() || leadAlvo?.nome || 'Paciente',
@@ -468,7 +487,7 @@ export const ConsultasAgendadasView: React.FC = () => {
         unidadeAgendamento: formUnidade,
         observacoesAgendamento: formObservacoes,
         statusConfirmacaoAgendamento: formStatusConfirmacao,
-        situacao: 'Consulta agendada',
+        situacao: situacaoSalvar,
         statusVenda: novoStatusVenda,
         possivelValor: Number(formPossivelValor) || 0,
         lembrete24hEnviado: formLembrete24hEnviado,
@@ -533,14 +552,20 @@ export const ConsultasAgendadasView: React.FC = () => {
               className="w-8 h-8 rounded-sm flex items-center justify-center font-bold text-white shadow-xs"
               style={{ backgroundColor: corPrimaria }}
             >
-              <CalendarClock className="w-4 h-4 text-white" />
+              {isProcedimento ? (
+                <CalendarDays className="w-4 h-4 text-white" />
+              ) : (
+                <CalendarClock className="w-4 h-4 text-white" />
+              )}
             </div>
             <div>
               <h1 className="text-base sm:text-lg font-bold text-[#1A1A1A] tracking-tight uppercase">
-                Consultas Agendadas & Lembretes 24h
+                {isProcedimento ? 'Procedimentos Agendados & Lembretes 24h' : 'Consultas Agendadas & Lembretes 24h'}
               </h1>
               <p className="text-xs text-[#6E6E6E]">
-                Gestão dos agendamentos, confirmações de presença e envio do lembrete de 24 horas antes para a secretária.
+                {isProcedimento
+                  ? 'Gestão dos agendamentos de procedimentos estéticos, confirmações e envio de lembrete 24 horas antes.'
+                  : 'Gestão dos agendamentos, confirmações de presença e envio do lembrete de 24 horas antes para a secretária.'}
               </p>
             </div>
           </div>
@@ -562,7 +587,7 @@ export const ConsultasAgendadasView: React.FC = () => {
             className="inline-flex items-center gap-2 px-4 py-2 text-white font-bold text-xs uppercase tracking-wider rounded-sm shadow-xs hover:brightness-110 transition-all cursor-pointer shrink-0"
           >
             <Plus className="w-4 h-4 text-white" />
-            <span> Agendar Consulta</span>
+            <span>{isProcedimento ? ' Agendar Procedimento' : ' Agendar Consulta'}</span>
           </button>
         </div>
       </div>
@@ -614,7 +639,7 @@ export const ConsultasAgendadasView: React.FC = () => {
           </p>
         </button>
 
-        {/* Card 2: Consultas de Amanhã (Janela 24h) */}
+        {/* Card 2: Consultas/Procedimentos de Amanhã (Janela 24h) */}
         <button
           id="card-filtro-consultas-amanha"
           type="button"
@@ -637,7 +662,7 @@ export const ConsultasAgendadasView: React.FC = () => {
           <p className="text-[10px] text-amber-800 font-semibold mt-0.5">Janela de lembrete</p>
         </button>
 
-        {/* Card 3: Consultas de Hoje */}
+        {/* Card 3: Consultas/Procedimentos de Hoje */}
         <button
           id="card-filtro-consultas-hoje"
           type="button"
@@ -650,7 +675,7 @@ export const ConsultasAgendadasView: React.FC = () => {
         >
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-[#1A1A1A] uppercase tracking-wider">
-              Consultas Hoje
+              {isProcedimento ? 'Procedimentos Hoje' : 'Consultas Hoje'}
             </span>
             <Clock className="w-4 h-4 text-[#5C3A22]" />
           </div>

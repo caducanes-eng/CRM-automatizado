@@ -11,6 +11,13 @@ import {
   AlertTriangle,
   RefreshCw,
   Calendar,
+  Filter,
+  SlidersHorizontal,
+  Info,
+  Sparkles,
+  Edit3,
+  Check,
+  Clock,
 } from 'lucide-react';
 import { useEmpresa } from '../context/EmpresaContext';
 import { useCrm } from '../context/CrmContext';
@@ -24,12 +31,20 @@ import { KpiSecretariaMensal } from '../types';
 
 export const KpiSecretariaView: React.FC = () => {
   const { empresaAtivaId } = useEmpresa();
-  const { dispararFeedback } = useCrm();
+  const { leads, compras, dispararFeedback } = useCrm();
 
   // Mês selecionado no formato 'YYYY-MM' (Ex: '2026-08')
   const [mesAnoSelecionado, setMesAnoSelecionado] = useState<string>(
     new Date().toISOString().slice(0, 7)
   );
+
+  // Filtro de Início de Metrificação (Corte Operacional) - Padrão 15/08/2026
+  const [tipoCorte, setTipoCorte] = useState<'inicio_operacao' | 'mes_completo' | 'personalizado'>('inicio_operacao');
+  const [dataInicioPersonalizada, setDataInicioPersonalizada] = useState<string>('2026-08-15');
+  const [metaProporcionalAtiva, setMetaProporcionalAtiva] = useState<boolean>(false);
+  const [metaBaseManual, setMetaBaseManual] = useState<number>(80000);
+  const [modalEditarMeta, setModalEditarMeta] = useState<boolean>(false);
+  const [tempMetaInput, setTempMetaInput] = useState<string>('80000');
 
   const [carregando, setCarregando] = useState<boolean>(true);
   const [salvandoSnapshot, setSalvandoSnapshot] = useState<boolean>(false);
@@ -38,12 +53,32 @@ export const KpiSecretariaView: React.FC = () => {
   const [modalCongelarAberto, setModalCongelarAberto] = useState<boolean>(false);
   const [abaAtiva, setAbaAtiva] = useState<'kpis' | 'reguas' | 'historico'>('kpis');
 
-  // Carregar dados ao alterar mês ou empresa
+  // Determinar a data de corte efetiva
+  const dataInicioCorteEfetiva = useMemo(() => {
+    if (tipoCorte === 'inicio_operacao') {
+      return mesAnoSelecionado === '2026-08' ? '2026-08-15' : `${mesAnoSelecionado}-01`;
+    }
+    if (tipoCorte === 'personalizado') {
+      return dataInicioPersonalizada;
+    }
+    return undefined; // Mês completo
+  }, [tipoCorte, mesAnoSelecionado, dataInicioPersonalizada]);
+
+  // Carregar dados ao alterar mês, empresa ou filtros de metrificação
   const carregarDados = async () => {
     setCarregando(true);
     try {
+      const metaEfetiva = metaProporcionalAtiva && kpiAtual?.metaProporcionalSugerida
+        ? kpiAtual.metaProporcionalSugerida
+        : metaBaseManual;
+
       const [resultadoKpis, historicoSnapshots] = await Promise.all([
-        fetchKpisMesAtual(empresaAtivaId, mesAnoSelecionado),
+        fetchKpisMesAtual(empresaAtivaId, mesAnoSelecionado, {
+          dataInicioCorte: dataInicioCorteEfetiva,
+          metaFaturamentoCustom: metaEfetiva,
+          leadsLocais: leads,
+          comprasLocais: compras,
+        }),
         fetchHistoricoKpis(empresaAtivaId),
       ]);
 
@@ -59,7 +94,7 @@ export const KpiSecretariaView: React.FC = () => {
 
   useEffect(() => {
     carregarDados();
-  }, [empresaAtivaId, mesAnoSelecionado]);
+  }, [empresaAtivaId, mesAnoSelecionado, dataInicioCorteEfetiva, metaProporcionalAtiva, metaBaseManual, leads.length, compras.length]);
 
   // Verificar se o mês atual já está congelado no histórico
   const snapshotMesAtual = useMemo(() => {
@@ -92,6 +127,7 @@ export const KpiSecretariaView: React.FC = () => {
         faturamentoRealizado: kpiAtual.faturamentoRealizado,
         metaFaturamento: kpiAtual.metaFaturamento,
         percentualMetaFaturamento: kpiAtual.percentualMetaFaturamento,
+        dataInicioMetrificacao: dataInicioCorteEfetiva,
         bonusCaptacao: kpiAtual.bonusCaptacao,
         bonusComparecimento: kpiAtual.bonusComparecimento,
         bonusFechamento: kpiAtual.bonusFechamento,
@@ -99,7 +135,7 @@ export const KpiSecretariaView: React.FC = () => {
         comissaoTotal: kpiAtual.comissaoTotal,
         fechado: true,
         fechadoEm: new Date().toISOString(),
-        observacoes: `Snapshot de bonificação fechado em ${new Date().toLocaleDateString('pt-BR')}`,
+        observacoes: `Snapshot de bonificação fechado em ${new Date().toLocaleDateString('pt-BR')} (Metrificação calculada a partir de ${dataInicioCorteEfetiva || '01/' + mesAnoSelecionado})`,
       };
 
       await salvarSnapshotKpi(snapshot);
@@ -135,6 +171,13 @@ export const KpiSecretariaView: React.FC = () => {
     }).format(val || 0);
   };
 
+  const formatarDataBR = (iso?: string) => {
+    if (!iso) return '-';
+    const partes = iso.split('-');
+    if (partes.length === 3) return `${partes[2]}/${partes[1]}/${partes[0]}`;
+    return iso;
+  };
+
   return (
     <div className="space-y-6 pb-12 font-sans">
       {/* ------------------------------------------------------------------- */}
@@ -142,7 +185,7 @@ export const KpiSecretariaView: React.FC = () => {
       {/* ------------------------------------------------------------------- */}
       <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-2xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">
               Comissão & KPIs
             </h1>
@@ -162,11 +205,11 @@ export const KpiSecretariaView: React.FC = () => {
             )}
           </div>
           <p className="text-xs text-slate-500">
-            Acompanhamento de metas, presença, conversão e bonificação mensal da recepção.
+            Acompanhamento de metas mensais, presença, conversão e bonificação da recepção.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
           {/* Seletor Mês/Ano */}
           <div className="relative">
             <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -213,6 +256,145 @@ export const KpiSecretariaView: React.FC = () => {
       </div>
 
       {/* ------------------------------------------------------------------- */}
+      {/* BARRA DE FILTRO DE METRIFICAÇÃO & CORTE DE DATAS (15/08) */}
+      {/* ------------------------------------------------------------------- */}
+      <div className="bg-gradient-to-r from-amber-50/70 via-white to-amber-50/40 rounded-xl p-4 border border-amber-200/90 shadow-2xs space-y-3">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 rounded-lg bg-amber-800 text-white shadow-2xs">
+              <Filter className="w-4 h-4" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Filtro de Metrificação de Metas
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                  Data de Início da Gravação
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600">
+                Define a partir de qual data os registros são calculados para a apuração justa das metas.
+              </p>
+            </div>
+          </div>
+
+          {/* Botões de Seleção Rápida */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              id="btn-filtro-inicio-operacao-15ago"
+              onClick={() => {
+                setTipoCorte('inicio_operacao');
+                setDataInicioPersonalizada('2026-08-15');
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                tipoCorte === 'inicio_operacao'
+                  ? 'bg-amber-800 text-white shadow-xs'
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <Sparkles className="w-3 h-3 text-amber-300" />
+              A partir de 15/08 (Início Oficial)
+            </button>
+
+            <button
+              id="btn-filtro-mes-completo"
+              onClick={() => setTipoCorte('mes_completo')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                tipoCorte === 'mes_completo'
+                  ? 'bg-amber-800 text-white shadow-xs'
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <Calendar className="w-3 h-3" />
+              Mês Completo (01 a 31)
+            </button>
+
+            <button
+              id="btn-filtro-personalizado"
+              onClick={() => setTipoCorte('personalizado')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                tipoCorte === 'personalizado'
+                  ? 'bg-amber-800 text-white shadow-xs'
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <SlidersHorizontal className="w-3 h-3" />
+              Personalizado
+            </button>
+          </div>
+        </div>
+
+        {/* Linha de Detalhes e Ajustes Extras */}
+        <div className="pt-2.5 border-t border-amber-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-slate-700">
+            <Info className="w-3.5 h-3.5 text-amber-800 shrink-0" />
+            <span>
+              {dataInicioCorteEfetiva ? (
+                <>
+                  Metrificação calculando dados a partir de{' '}
+                  <strong className="text-amber-950 font-bold">{formatarDataBR(dataInicioCorteEfetiva)}</strong>
+                  {kpiAtual?.diasConsiderados && kpiAtual?.totalDiasMes && (
+                    <span className="text-slate-500">
+                      {' '}({kpiAtual.diasConsiderados} de {kpiAtual.totalDiasMes} dias considerados no período)
+                    </span>
+                  )}
+                  . Dados anteriores são desconsiderados.
+                </>
+              ) : (
+                'Calculando todos os registros do mês de 01 a 31 integralmente.'
+              )}
+            </span>
+          </div>
+
+          {/* Custom Date Input se 'personalizado' */}
+          {tipoCorte === 'personalizado' && (
+            <div className="flex items-center gap-2 bg-white px-2.5 py-1 rounded-lg border border-amber-300">
+              <label htmlFor="input-data-inicio-corte" className="text-[11px] font-bold text-slate-700">
+                Calcular a partir de:
+              </label>
+              <input
+                id="input-data-inicio-corte"
+                type="date"
+                value={dataInicioPersonalizada}
+                onChange={(e) => setDataInicioPersonalizada(e.target.value)}
+                className="text-xs font-semibold text-slate-900 bg-transparent border-0 focus:ring-0 p-0 cursor-pointer"
+              />
+            </div>
+          )}
+
+          {/* Ajuste de Meta Proporcional / Meta Base */}
+          <div className="flex items-center gap-2">
+            <button
+              id="btn-toggle-meta-proporcional"
+              onClick={() => setMetaProporcionalAtiva(!metaProporcionalAtiva)}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all border cursor-pointer flex items-center gap-1 ${
+                metaProporcionalAtiva
+                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+              title="Ajusta o alvo de faturamento proporcionalmente aos dias ativos calculados"
+            >
+              {metaProporcionalAtiva ? <Check className="w-3 h-3 text-amber-800" /> : <Clock className="w-3 h-3 text-slate-400" />}
+              Meta Proporcional ({kpiAtual?.metaProporcionalSugerida ? formatarMoeda(kpiAtual.metaProporcionalSugerida) : 'Ativar'})
+            </button>
+
+            <button
+              id="btn-editar-meta-base"
+              onClick={() => {
+                setTempMetaInput(String(metaBaseManual));
+                setModalEditarMeta(true);
+              }}
+              className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+              title="Editar meta base de faturamento"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------------- */}
       {/* PAINEL DE RESUMO PRINCIPAL */}
       {/* ------------------------------------------------------------------- */}
       {kpiAtual && (
@@ -228,7 +410,7 @@ export const KpiSecretariaView: React.FC = () => {
                 {formatarMoeda(kpiAtual.comissaoTotal)}
               </div>
               <p className="text-[11px] text-amber-200 mt-0.5">
-                Total acumulado do mês
+                Total apurado no período
               </p>
             </div>
             <div className="pt-2 border-t border-amber-800/80">
@@ -249,7 +431,7 @@ export const KpiSecretariaView: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-xs font-bold text-slate-800">1. Captação</span>
-                <p className="text-[10px] text-slate-400">Consultas no mês</p>
+                <p className="text-[10px] text-slate-400">Consultas no período</p>
               </div>
               <span className="p-1 rounded bg-slate-100 text-slate-600">
                 <CalendarCheck className="w-3.5 h-3.5" />
@@ -343,7 +525,7 @@ export const KpiSecretariaView: React.FC = () => {
                 {formatarMoeda(kpiAtual.faturamentoRealizado)}
               </div>
               <p className="text-[11px] text-slate-500">
-                {kpiAtual.percentualMetaFaturamento}% da meta (Bônus: {formatarMoeda(kpiAtual.bonusFaturamento)})
+                {kpiAtual.percentualMetaFaturamento}% da meta ({formatarMoeda(kpiAtual.metaFaturamento)})
               </p>
             </div>
             <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
@@ -422,7 +604,7 @@ export const KpiSecretariaView: React.FC = () => {
                     <div>
                       <span className="text-slate-500 block">Consultas Realizadas</span>
                       <strong className="text-slate-900 text-sm">{kpiAtual.consultasRealizadas}</strong>
-                      <span className="text-[10px] text-slate-400 block">Volume do mês</span>
+                      <span className="text-[10px] text-slate-400 block">Volume apurado no período</span>
                     </div>
                     <div>
                       <span className="text-slate-500 block">Bônus Captação</span>
@@ -452,7 +634,7 @@ export const KpiSecretariaView: React.FC = () => {
                       </h3>
                     </div>
                     <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                      Meta Base: {formatarMoeda(kpiAtual.metaFaturamento)}
+                      Meta Aplicada: {formatarMoeda(kpiAtual.metaFaturamento)}
                     </span>
                   </div>
 
@@ -692,6 +874,7 @@ export const KpiSecretariaView: React.FC = () => {
                     <th className="p-2.5">% Conversão</th>
                     <th className="p-2.5">Faturamento</th>
                     <th className="p-2.5">Comissão Total</th>
+                    <th className="p-2.5">Início Metrificação</th>
                     <th className="p-2.5">Status</th>
                     <th className="p-2.5 text-right">Ação</th>
                   </tr>
@@ -719,6 +902,9 @@ export const KpiSecretariaView: React.FC = () => {
                       <td className="p-2.5 font-bold text-amber-900">
                         {formatarMoeda(h.comissaoTotal || h.comissao_total || 0)}
                       </td>
+                      <td className="p-2.5 text-[11px] text-slate-500">
+                        {formatarDataBR(h.dataInicioMetrificacao || h.data_inicio_metrificacao) || '01/MM'}
+                      </td>
                       <td className="p-2.5">
                         {h.fechado ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
@@ -745,7 +931,7 @@ export const KpiSecretariaView: React.FC = () => {
                   ))}
                   {historico.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="p-6 text-center text-slate-500 text-xs">
+                      <td colSpan={9} className="p-6 text-center text-slate-500 text-xs">
                         Nenhum histórico congelado gravado até o momento.
                       </td>
                     </tr>
@@ -756,6 +942,66 @@ export const KpiSecretariaView: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* ------------------------------------------------------------------- */}
+      {/* MODAL DE EDIÇÃO DE META BASE */}
+      {/* ------------------------------------------------------------------- */}
+      {modalEditarMeta && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                <Target className="w-4 h-4 text-amber-800" />
+                Ajustar Meta Base de Faturamento
+              </h3>
+              <button
+                onClick={() => setModalEditarMeta(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  Valor da Meta Mensal (R$)
+                </label>
+                <input
+                  type="number"
+                  value={tempMetaInput}
+                  onChange={(e) => setTempMetaInput(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
+                  placeholder="80000"
+                />
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Padrão da política BON-001: R$ 80.000,00. O bônus de faturamento será recalculado automaticamente com base nesta meta.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setModalEditarMeta(false)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  const num = Number(tempMetaInput);
+                  if (num > 0) {
+                    setMetaBaseManual(num);
+                    setModalEditarMeta(false);
+                    dispararFeedback(`Meta de faturamento atualizada para ${formatarMoeda(num)}`);
+                  }
+                }}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-amber-800 hover:bg-amber-900"
+              >
+                Salvar Meta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ------------------------------------------------------------------- */}
       {/* MODAL DE CONFIRMAÇÃO PARA CONGELAR / FECHAR MÊS */}
@@ -782,10 +1028,14 @@ export const KpiSecretariaView: React.FC = () => {
 
             <div className="space-y-3 text-xs text-slate-600">
               <p>
-                Confirma o congelamento oficial do mês <strong className="text-slate-900">{mesAnoSelecionado}</strong>? A apuração será gravada no histórico de forma permanente.
+                Confirma o congelamento oficial do mês <strong className="text-slate-900">{mesAnoSelecionado}</strong>? A apuração será gravada no histórico de forma permanente com o filtro de data configurado.
               </p>
 
               <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Início da Metrificação:</span>
+                  <span className="font-bold text-amber-900">{formatarDataBR(dataInicioCorteEfetiva) || '01/' + mesAnoSelecionado}</span>
+                </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Consultas Atendidas:</span>
                   <span className="font-bold text-slate-800">{kpiAtual.consultasRealizadas}</span>
@@ -801,6 +1051,10 @@ export const KpiSecretariaView: React.FC = () => {
                 <div className="flex justify-between">
                   <span className="text-slate-500">Faturamento Realizado:</span>
                   <span className="font-bold text-slate-800">{formatarMoeda(kpiAtual.faturamentoRealizado)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Meta Aplicada:</span>
+                  <span className="font-bold text-slate-800">{formatarMoeda(kpiAtual.metaFaturamento)}</span>
                 </div>
                 <div className="flex justify-between border-t border-slate-200 pt-1.5 text-xs font-bold text-slate-900">
                   <span>Comissão Total:</span>

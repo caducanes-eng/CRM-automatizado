@@ -501,6 +501,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           return temPermissao('podeAcessarConsultaAgendada' as any) || temPermissao('podeAcessarEmCaptacao') || temPermissao('podeAcessarPosConsulta');
         case 'pos_consulta':
           return temPermissao('podeAcessarPosConsulta');
+        case 'procedimento_agendado':
+          return temPermissao('podeAcessarProcedimentoAgendado' as any) || temPermissao('podeAcessarPosProcedimento') || temPermissao('podeAcessarPosConsulta');
         case 'pos_procedimento':
           return temPermissao('podeAcessarPosProcedimento');
         case 'reativacao':

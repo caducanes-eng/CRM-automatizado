@@ -5,6 +5,7 @@ import {
   Phone,
   Calendar,
   CalendarClock,
+  CalendarDays,
   MapPin,
   FileText,
   DollarSign,
@@ -462,7 +463,8 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
   const gerarTextoLembrete24h = () => {
     const nomePaciente = (nome || lead?.nome || 'Paciente').trim();
     const clinicaNome = config.nomeEmpresa || 'Dra. Agda Rodrigues';
-    const tipo = tipoConsulta || interesse || 'sua avaliação de Harmonização Facial';
+    const isProcedimento = situacao === 'Procedimento agendado';
+    const tipo = tipoConsulta || interesse || (isProcedimento ? 'seu procedimento estético' : 'sua avaliação de Harmonização Facial');
     const profissional = profissionalAgendamento || responsavel || 'nossa especialista';
     const dataFmt = formatarDataBR(dataAgendamento || obterDataHoje());
     const horario = horarioAgendamento || '14:00';
@@ -471,10 +473,12 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
       ? `\n\n📌 *Orientações importantes:* ${observacoesAgendamento}`
       : '';
 
+    const termoAtendimento = isProcedimento ? 'procedimento de' : 'consulta de';
+
     return (
       `Olá, *${nomePaciente}*! Tudo bem?\n\n` +
       `Aqui é da equipe da *${clinicaNome}*.\n\n` +
-      `Passando para confirmar sua consulta de *${tipo}* com *${profissional}*, agendada para *${dataFmt}* às *${horario}* na unidade *${unidade}*.` +
+      `Passando para confirmar seu ${termoAtendimento} *${tipo}* com *${profissional}*, agendado para *${dataFmt}* às *${horario}* na unidade *${unidade}*.` +
       obs +
       `\n\nPodemos confirmar sua presença? Por favor, responda com *1 para CONFIRMAR* ou nos avise caso precise remarcar o horário.\n\nAguardamos você! ✨`
     );
@@ -975,11 +979,11 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                       </span>
                     </div>
 
-                    {/* Próxima Etapa */}
+                    {/* Etapa atual */}
                     <div className="p-3 rounded-sm bg-[#F8F7F4] border border-[#D9D6D0] space-y-1.5">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold text-[#6E6E6E] uppercase tracking-wider block">
-                          Próxima Etapa
+                          Etapa atual
                         </span>
                         {todasConcluidas && (
                           <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-xs bg-emerald-100 text-emerald-800 uppercase tracking-wider">
@@ -1154,12 +1158,12 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                         </select>
                       </div>
 
-                      {/* Próxima Etapa da Situação (Calculada Automaticamente com Botão Concluído) */}
+                      {/* Etapa Atual da Situação (Calculada Automaticamente com Botão Concluído) */}
                       <div className="space-y-1">
                         <label
                           className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
                         >
-                          Próxima Etapa ({situacao})
+                          Etapa atual ({situacao})
                         </label>
                         {isSemEtapa ? (
                           <div className="w-full h-9 px-3 text-xs flex items-center text-[#8F887E] bg-[#E5E2DC] rounded-sm border border-[#D9D6D0]">
@@ -1396,94 +1400,61 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
               </div>
 
               {/* -------------------------------------------------------------------
-                  BLOCO DE AGENDAMENTO DA CONSULTA & LEMBRETE 24H
-                  (Aberto quando a situação for Consulta agendada ou solicitado)
+                  BLOCO DE AGENDAMENTO (CONSULTA OU PROCEDIMENTO) & LEMBRETE 24H
+                  (Disponível EXCLUSIVAMENTE nas etapas 'Consulta agendada' e 'Procedimento agendado')
                  ------------------------------------------------------------------- */}
-              <div
-                id="bloco-agendamento-consulta"
-                className={`p-4 sm:p-5 rounded-sm border shadow-xs space-y-4 transition-all duration-200 ${
-                  situacao === 'Consulta agendada' || Boolean(dataAgendamento) || showBlocoAgendamento
-                    ? 'bg-amber-50/40 border-amber-300 ring-1 ring-amber-300'
-                    : 'bg-white border-[#D9D6D0]'
-                }`}
-              >
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#D9D6D0] pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className="w-7 h-7 rounded-sm flex items-center justify-center font-bold text-white shadow-xs"
-                      style={{ backgroundColor: corPrimaria }}
-                    >
-                      <CalendarClock className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-[#1A1A1A]">
-                          Agendamento da Consulta & Lembrete 24h
-                        </h3>
-                        {dataAgendamento && (
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-sm border ${
-                              statusConfirmacaoAgendamento === 'Confirmada'
-                                ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                                : statusConfirmacaoAgendamento === 'Realizada'
-                                ? 'bg-[#5C3A22]/10 text-[#5C3A22] border-[#5C3A22]/30'
-                                : 'bg-amber-100 text-amber-900 border-amber-300'
-                            }`}
-                          >
-                            {statusConfirmacaoAgendamento}
-                          </span>
+              {(situacao === 'Consulta agendada' || situacao === 'Procedimento agendado') && (
+                <div
+                  id="bloco-agendamento-consulta"
+                  className="p-4 sm:p-5 rounded-sm border shadow-xs space-y-4 transition-all duration-200 bg-amber-50/40 border-amber-300 ring-1 ring-amber-300"
+                >
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#D9D6D0] pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="w-7 h-7 rounded-sm flex items-center justify-center font-bold text-white shadow-xs"
+                        style={{ backgroundColor: corPrimaria }}
+                      >
+                        {situacao === 'Procedimento agendado' ? (
+                          <CalendarDays className="w-4 h-4 text-white" />
+                        ) : (
+                          <CalendarClock className="w-4 h-4 text-white" />
                         )}
                       </div>
-                      <p className="text-[11px] text-[#6E6E6E]">
-                        Data, horário, especialista, orientações e envio da confirmação de 24h antes
-                      </p>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-[#1A1A1A]">
+                            {situacao === 'Procedimento agendado'
+                              ? 'Agendamento do Procedimento & Lembrete 24h'
+                              : 'Agendamento da Consulta & Lembrete 24h'}
+                          </h3>
+                          {dataAgendamento && (
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-sm border ${
+                                statusConfirmacaoAgendamento === 'Confirmada'
+                                  ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                  : statusConfirmacaoAgendamento === 'Realizada'
+                                  ? 'bg-[#5C3A22]/10 text-[#5C3A22] border-[#5C3A22]/30'
+                                  : 'bg-amber-100 text-amber-900 border-amber-300'
+                              }`}
+                            >
+                              {statusConfirmacaoAgendamento}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[#6E6E6E]">
+                          {situacao === 'Procedimento agendado'
+                            ? 'Data, horário, especialista/médico, procedimento e envio da confirmação de 24h antes'
+                            : 'Data, horário, especialista, orientações e envio da confirmação de 24h antes'}
+                        </p>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    {dataAgendamento ? (
-                      <span className="text-[11px] font-bold text-[#1A1A1A] bg-white px-2.5 py-1 rounded-sm border border-[#D9D6D0] font-mono">
-                        📅 {formatarDataBR(dataAgendamento)} às {horarioAgendamento}
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const d = new Date();
-                          d.setDate(d.getDate() + 1);
-                          setDataAgendamento(d.toISOString().split('T')[0]);
-                          setSituacao('Consulta agendada');
-                          setStatusVenda('Agendado');
-                          setShowBlocoAgendamento(true);
-                        }}
-                        className="text-[11px] font-bold text-[#5C3A22] hover:underline uppercase tracking-wider cursor-pointer"
-                      >
-                        + Definir data de agendamento
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Campos do Agendamento */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                  {/* Data da Consulta com Atalhos Rápidos */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label
-                        htmlFor="input-agendamento-data"
-                        className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
-                      >
-                        Data da Consulta <span className="text-rose-600">*</span>
-                      </label>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setDataAgendamento(obterDataHoje())}
-                          className="text-[10px] text-[#5C3A22] hover:underline font-bold uppercase cursor-pointer"
-                        >
-                          Hoje
-                        </button>
-                        <span className="text-[10px] text-[#D9D6D0]">|</span>
+                    <div className="flex items-center gap-2">
+                      {dataAgendamento ? (
+                        <span className="text-[11px] font-bold text-[#1A1A1A] bg-white px-2.5 py-1 rounded-sm border border-[#D9D6D0] font-mono">
+                          📅 {formatarDataBR(dataAgendamento)} às {horarioAgendamento}
+                        </span>
+                      ) : (
                         <button
                           type="button"
                           onClick={() => {
@@ -1491,323 +1462,358 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                             d.setDate(d.getDate() + 1);
                             setDataAgendamento(d.toISOString().split('T')[0]);
                           }}
-                          className="text-[10px] text-[#5C3A22] hover:underline font-bold uppercase cursor-pointer"
+                          className="text-[11px] font-bold text-[#5C3A22] hover:underline uppercase tracking-wider cursor-pointer"
                         >
-                          Amanhã
+                          + Definir data de agendamento
                         </button>
-                        <span className="text-[10px] text-[#D9D6D0]">|</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const d = new Date();
-                            d.setDate(d.getDate() + 7);
-                            setDataAgendamento(d.toISOString().split('T')[0]);
-                          }}
-                          className="text-[10px] text-[#5C3A22] hover:underline font-bold uppercase cursor-pointer"
-                        >
-                          +7d
-                        </button>
-                      </div>
+                      )}
                     </div>
-                    <input
-                      id="input-agendamento-data"
-                      type="date"
-                      value={dataAgendamento}
-                      onChange={(e) => {
-                        setDataAgendamento(e.target.value);
-                        if (situacao !== 'Consulta agendada') {
-                          setSituacao('Consulta agendada');
-                        }
-                      }}
-                      className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-semibold focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
-                    />
                   </div>
 
-                  {/* Horário da Consulta */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
+                  {/* Campos do Agendamento */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                    {/* Data */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label
+                          htmlFor="input-agendamento-data"
+                          className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                        >
+                          {situacao === 'Procedimento agendado' ? 'Data do Procedimento' : 'Data da Consulta'}{' '}
+                          <span className="text-rose-600">*</span>
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setDataAgendamento(obterDataHoje())}
+                            className="text-[10px] text-[#5C3A22] hover:underline font-bold uppercase cursor-pointer"
+                          >
+                            Hoje
+                          </button>
+                          <span className="text-[10px] text-[#D9D6D0]">|</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const d = new Date();
+                              d.setDate(d.getDate() + 1);
+                              setDataAgendamento(d.toISOString().split('T')[0]);
+                            }}
+                            className="text-[10px] text-[#5C3A22] hover:underline font-bold uppercase cursor-pointer"
+                          >
+                            Amanhã
+                          </button>
+                          <span className="text-[10px] text-[#D9D6D0]">|</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const d = new Date();
+                              d.setDate(d.getDate() + 7);
+                              setDataAgendamento(d.toISOString().split('T')[0]);
+                            }}
+                            className="text-[10px] text-[#5C3A22] hover:underline font-bold uppercase cursor-pointer"
+                          >
+                            +7d
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        id="input-agendamento-data"
+                        type="date"
+                        value={dataAgendamento}
+                        onChange={(e) => setDataAgendamento(e.target.value)}
+                        className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-semibold focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
+                      />
+                    </div>
+
+                    {/* Horário */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label
+                          htmlFor="input-agendamento-horario"
+                          className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                        >
+                          {situacao === 'Procedimento agendado' ? 'Horário do Procedimento' : 'Horário da Consulta'}{' '}
+                          <span className="text-rose-600">*</span>
+                        </label>
+                        <div className="flex items-center gap-1">
+                          {['09:00', '14:00', '16:00'].map((hr) => (
+                            <button
+                              key={hr}
+                              type="button"
+                              onClick={() => setHorarioAgendamento(hr)}
+                              className="text-[9px] text-[#5C3A22] hover:underline font-bold uppercase cursor-pointer"
+                            >
+                              {hr}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <input
+                        id="input-agendamento-horario"
+                        type="text"
+                        value={horarioAgendamento}
+                        onChange={(e) => setHorarioAgendamento(e.target.value)}
+                        placeholder="Ex: 14:00, 15:30..."
+                        className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-semibold font-mono focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
+                      />
+                    </div>
+
+                    {/* Profissional */}
+                    <div className="space-y-1">
                       <label
-                        htmlFor="input-agendamento-horario"
+                        htmlFor="select-agendamento-profissional"
                         className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
                       >
-                        Horário da Consulta <span className="text-rose-600">*</span>
+                        {situacao === 'Procedimento agendado' ? 'Especialista / Responsável' : 'Especialista / Médico'}
                       </label>
-                      <div className="flex items-center gap-1">
-                        {['09:00', '14:00', '16:00'].map((hr) => (
-                          <button
-                            key={hr}
-                            type="button"
-                            onClick={() => setHorarioAgendamento(hr)}
-                            className="text-[9px] text-[#5C3A22] hover:underline font-bold uppercase cursor-pointer"
-                          >
-                            {hr}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <input
-                      id="input-agendamento-horario"
-                      type="text"
-                      value={horarioAgendamento}
-                      onChange={(e) => setHorarioAgendamento(e.target.value)}
-                      placeholder="Ex: 14:00, 15:30..."
-                      className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-semibold font-mono focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
-                    />
-                  </div>
-
-                  {/* Profissional / Especialista */}
-                  <div className="space-y-1">
-                    <label
-                      htmlFor="select-agendamento-profissional"
-                      className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
-                    >
-                      Especialista / Médico
-                    </label>
-                    <select
-                      id="select-agendamento-profissional"
-                      value={profissionalAgendamento}
-                      onChange={(e) => setProfissionalAgendamento(e.target.value)}
-                      className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer"
-                    >
-                      {colaboradoresAtivos.length > 0 ? (
-                        colaboradoresAtivos.map((colab) => (
-                          <option key={colab.id} value={colab.nome}>
-                            {colab.nome} {colab.cargo ? `— ${colab.cargo}` : ''}
-                          </option>
-                        ))
-                      ) : (
-                        listaNomesResponsaveis.map((resp) => (
-                          <option key={resp} value={resp}>
-                            {resp}
-                          </option>
-                        ))
-                      )}
-                    </select>
-                  </div>
-
-                  {/* Status da Confirmação */}
-                  <div className="space-y-1">
-                    <label
-                      htmlFor="select-agendamento-status-confirmacao"
-                      className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
-                    >
-                      Status da Confirmação
-                    </label>
-                    <select
-                      id="select-agendamento-status-confirmacao"
-                      value={statusConfirmacaoAgendamento}
-                      onChange={(e) =>
-                        setStatusConfirmacaoAgendamento(
-                          e.target.value as StatusConfirmacaoAgendamento
-                        )
-                      }
-                      className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white font-bold text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer"
-                    >
-                      {TODOS_STATUS_CONFIRMACAO_AGENDAMENTO.map((st) => (
-                        <option key={st} value={st}>
-                          {st}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-1">
-                  {/* Procedimento / Tipo de Consulta */}
-                  <div className="space-y-1">
-                    <label
-                      htmlFor="input-agendamento-tipo-consulta"
-                      className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
-                    >
-                      Procedimento / Tipo de Consulta
-                    </label>
-                    <input
-                      id="input-agendamento-tipo-consulta"
-                      type="text"
-                      value={tipoConsulta}
-                      onChange={(e) => setTipoConsulta(e.target.value)}
-                      placeholder="Ex: Avaliação Facial, Botox, Preenchimento..."
-                      className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
-                    />
-                  </div>
-
-                  {/* Unidade / Consultório */}
-                  <div className="space-y-1">
-                    <label
-                      htmlFor="input-agendamento-unidade"
-                      className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
-                    >
-                      Unidade / Sala de Atendimento
-                    </label>
-                    <input
-                      id="input-agendamento-unidade"
-                      type="text"
-                      value={unidadeAgendamento}
-                      onChange={(e) => setUnidadeAgendamento(e.target.value)}
-                      placeholder="Ex: Consultório Principal, Sala Jardins..."
-                      className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
-                    />
-                  </div>
-                </div>
-
-                {/* Orientações Prévias ao Paciente */}
-                <div className="space-y-1">
-                  <label
-                    htmlFor="textarea-agendamento-orientacoes"
-                    className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
-                  >
-                    Orientações Prévias ao Paciente (serão enviadas no lembrete de 24h)
-                  </label>
-                  <input
-                    id="textarea-agendamento-orientacoes"
-                    type="text"
-                    value={observacoesAgendamento}
-                    onChange={(e) => setObservacoesAgendamento(e.target.value)}
-                    placeholder="Ex: Chegar 15 minutos antes. Vir sem maquiagem facial ou protetor solar com cor."
-                    className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden placeholder:text-[#8F887E]"
-                  />
-                </div>
-
-                {/* -------------------------------------------------------------------
-                    SUB-BLOCO: ETAPA DO LEMBRETE DE 24 HORAS ANTES (SECRETÁRIA)
-                   ------------------------------------------------------------------- */}
-                <div
-                  id="subbloco-lembrete-24h"
-                  className="p-3.5 sm:p-4 rounded-sm bg-white border border-[#D9D6D0] space-y-3"
-                >
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-[#D9D6D0] pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <Send className="w-4 h-4 text-emerald-700" />
-                      <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-[#1A1A1A] flex items-center gap-2">
-                          <span>Etapa: Mensagem de Lembrete 24h Antes</span>
-                          {lembrete24hEnviado ? (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm bg-emerald-100 text-emerald-900 border border-emerald-300">
-                              ✓ Enviado
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm bg-amber-100 text-amber-900 border border-amber-300">
-                              ⏰ Pendente de Envio
-                            </span>
-                          )}
-                        </h4>
-                        <p className="text-[10px] text-[#6E6E6E]">
-                          {lembrete24hEnviado && dataEnvioLembrete24h
-                            ? `Disparado em ${dataEnvioLembrete24h} por ${mensagemLembrete24hEnviadaPor || 'Secretária'}`
-                            : 'A secretária deve enviar a confirmação para a paciente 24 horas antes do horário marcado.'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        id="btn-disparar-whatsapp-24h-ficha"
-                        type="button"
-                        onClick={handleDispararWhatsApp24hModal}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs uppercase tracking-wider shadow-xs transition-all cursor-pointer"
-                        title="Abrir WhatsApp com o texto pronto do lembrete e marcar como enviado"
+                      <select
+                        id="select-agendamento-profissional"
+                        value={profissionalAgendamento}
+                        onChange={(e) => setProfissionalAgendamento(e.target.value)}
+                        className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer"
                       >
-                        <MessageCircle className="w-3.5 h-3.5 text-white" />
-                        <span>Disparar WhatsApp 24h</span>
-                      </button>
+                        {colaboradoresAtivos.length > 0 ? (
+                          colaboradoresAtivos.map((colab) => (
+                            <option key={colab.id} value={colab.nome}>
+                              {colab.nome} {colab.cargo ? `— ${colab.cargo}` : ''}
+                            </option>
+                          ))
+                        ) : (
+                          listaNomesResponsaveis.map((resp) => (
+                            <option key={resp} value={resp}>
+                              {resp}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
 
-                      {!lembrete24hEnviado ? (
+                    {/* Status da Confirmação */}
+                    <div className="space-y-1">
+                      <label
+                        htmlFor="select-agendamento-status-confirmacao"
+                        className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                      >
+                        Status da Confirmação
+                      </label>
+                      <select
+                        id="select-agendamento-status-confirmacao"
+                        value={statusConfirmacaoAgendamento}
+                        onChange={(e) =>
+                          setStatusConfirmacaoAgendamento(
+                            e.target.value as StatusConfirmacaoAgendamento
+                          )
+                        }
+                        className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white font-bold text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer"
+                      >
+                        {TODOS_STATUS_CONFIRMACAO_AGENDAMENTO.map((st) => (
+                          <option key={st} value={st}>
+                            {st}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-1">
+                    {/* Procedimento / Tipo de Consulta */}
+                    <div className="space-y-1">
+                      <label
+                        htmlFor="input-agendamento-tipo-consulta"
+                        className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                      >
+                        {situacao === 'Procedimento agendado' ? 'Procedimento a Realizar' : 'Procedimento / Tipo de Consulta'}
+                      </label>
+                      <input
+                        id="input-agendamento-tipo-consulta"
+                        type="text"
+                        value={tipoConsulta}
+                        onChange={(e) => setTipoConsulta(e.target.value)}
+                        placeholder={situacao === 'Procedimento agendado' ? 'Ex: Harmonização Facial, Botox, Preenchimento...' : 'Ex: Avaliação Facial, Botox, Preenchimento...'}
+                        className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
+                      />
+                    </div>
+
+                    {/* Unidade / Consultório */}
+                    <div className="space-y-1">
+                      <label
+                        htmlFor="input-agendamento-unidade"
+                        className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                      >
+                        Unidade / Sala de Atendimento
+                      </label>
+                      <input
+                        id="input-agendamento-unidade"
+                        type="text"
+                        value={unidadeAgendamento}
+                        onChange={(e) => setUnidadeAgendamento(e.target.value)}
+                        placeholder="Ex: Consultório Principal, Sala Jardins..."
+                        className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Orientações Prévias ao Paciente */}
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="textarea-agendamento-orientacoes"
+                      className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                    >
+                      {situacao === 'Procedimento agendado'
+                        ? 'Orientações Pré-Procedimento (serão enviadas no lembrete de 24h)'
+                        : 'Orientações Prévias ao Paciente (serão enviadas no lembrete de 24h)'}
+                    </label>
+                    <input
+                      id="textarea-agendamento-orientacoes"
+                      type="text"
+                      value={observacoesAgendamento}
+                      onChange={(e) => setObservacoesAgendamento(e.target.value)}
+                      placeholder={situacao === 'Procedimento agendado' ? 'Ex: Chegar 15 minutos antes. Seguir orientações de cuidados prévios.' : 'Ex: Chegar 15 minutos antes. Vir sem maquiagem facial ou protetor solar com cor.'}
+                      className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden placeholder:text-[#8F887E]"
+                    />
+                  </div>
+
+                  {/* -------------------------------------------------------------------
+                      SUB-BLOCO: ETAPA DO LEMBRETE DE 24 HORAS ANTES (SECRETÁRIA)
+                     ------------------------------------------------------------------- */}
+                  <div
+                    id="subbloco-lembrete-24h"
+                    className="p-3.5 sm:p-4 rounded-sm bg-white border border-[#D9D6D0] space-y-3"
+                  >
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-[#D9D6D0] pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <Send className="w-4 h-4 text-emerald-700" />
+                        <div>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-[#1A1A1A] flex items-center gap-2">
+                            <span>Etapa: Mensagem de Lembrete 24h Antes</span>
+                            {lembrete24hEnviado ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm bg-emerald-100 text-emerald-900 border border-emerald-300">
+                                ✓ Enviado
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm bg-amber-100 text-amber-900 border border-amber-300">
+                                ⏰ Pendente de Envio
+                              </span>
+                            )}
+                          </h4>
+                          <p className="text-[10px] text-[#6E6E6E]">
+                            {lembrete24hEnviado && dataEnvioLembrete24h
+                              ? `Disparado em ${dataEnvioLembrete24h} por ${mensagemLembrete24hEnviadaPor || 'Secretária'}`
+                              : 'A secretária deve enviar a confirmação para a paciente 24 horas antes do horário marcado.'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
                         <button
+                          id="btn-disparar-whatsapp-24h-ficha"
                           type="button"
-                          onClick={handleMarcarLembrete24hEnviadoModal}
-                          className="px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A] bg-[#F2EFEA] hover:bg-[#E5E2DC] border border-[#D9D6D0] rounded-sm transition-colors cursor-pointer"
+                          onClick={handleDispararWhatsApp24hModal}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs uppercase tracking-wider shadow-xs transition-all cursor-pointer"
+                          title="Abrir WhatsApp com o texto pronto do lembrete e marcar como enviado"
                         >
-                          Marcar como Enviado
+                          <MessageCircle className="w-3.5 h-3.5 text-white" />
+                          <span>Disparar WhatsApp 24h</span>
                         </button>
-                      ) : (
+
+                        {!lembrete24hEnviado ? (
+                          <button
+                            type="button"
+                            onClick={handleMarcarLembrete24hEnviadoModal}
+                            className="px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A] bg-[#F2EFEA] hover:bg-[#E5E2DC] border border-[#D9D6D0] rounded-sm transition-colors cursor-pointer"
+                          >
+                            Marcar como Enviado
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLembrete24hEnviado(false);
+                              setDataEnvioLembrete24h('');
+                              if (activeLeadId) {
+                                atualizarLead(activeLeadId, {
+                                  lembrete24hEnviado: false,
+                                  dataEnvioLembrete24h: '',
+                                });
+                              }
+                              dispararFeedback('Lembrete 24h resetado para pendente.');
+                            }}
+                            className="text-[10px] text-[#8F887E] hover:text-[#1A1A1A] underline cursor-pointer"
+                          >
+                            Reenviar / Resetar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Pré-visualização da Mensagem Formatada */}
+                    <div className="p-3 rounded-sm bg-[#F8F7F4] border border-[#D9D6D0] space-y-1.5">
+                      <span className="text-[10px] font-bold text-[#6E6E6E] uppercase tracking-wider block">
+                        💬 Modelo da Mensagem Oficial do WhatsApp:
+                      </span>
+                      <p className="text-xs text-[#1A1A1A] font-mono leading-relaxed whitespace-pre-line bg-white p-2.5 rounded-sm border border-[#D9D6D0]">
+                        {gerarTextoLembrete24h()}
+                      </p>
+                    </div>
+
+                    {/* Ações de Resposta Rápida da Paciente */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                      <span className="text-[11px] font-bold text-[#6E6E6E] uppercase tracking-wider">
+                        Resposta da Paciente:
+                      </span>
+                      <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => {
-                            setLembrete24hEnviado(false);
-                            setDataEnvioLembrete24h('');
+                            setStatusConfirmacaoAgendamento('Confirmada');
                             if (activeLeadId) {
                               atualizarLead(activeLeadId, {
-                                lembrete24hEnviado: false,
-                                dataEnvioLembrete24h: '',
+                                statusConfirmacaoAgendamento: 'Confirmada',
                               });
                             }
-                            dispararFeedback('Lembrete 24h resetado para pendente.');
+                            dispararFeedback('Presença confirmada pela paciente!');
                           }}
-                          className="text-[10px] text-[#8F887E] hover:text-[#1A1A1A] underline cursor-pointer"
+                          className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 transition-colors cursor-pointer"
                         >
-                          Reenviar / Resetar
+                          ✓ Paciente Confirmou
                         </button>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* Pré-visualização da Mensagem Formatada */}
-                  <div className="p-3 rounded-sm bg-[#F8F7F4] border border-[#D9D6D0] space-y-1.5">
-                    <span className="text-[10px] font-bold text-[#6E6E6E] uppercase tracking-wider block">
-                      💬 Modelo da Mensagem Oficial do WhatsApp:
-                    </span>
-                    <p className="text-xs text-[#1A1A1A] font-mono leading-relaxed whitespace-pre-line bg-white p-2.5 rounded-sm border border-[#D9D6D0]">
-                      {gerarTextoLembrete24h()}
-                    </p>
-                  </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStatusConfirmacaoAgendamento('Remarcada');
+                            if (activeLeadId) {
+                              atualizarLead(activeLeadId, {
+                                statusConfirmacaoAgendamento: 'Remarcada',
+                              });
+                            }
+                            dispararFeedback('Status atualizado para Remarcada.');
+                          }}
+                          className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 transition-colors cursor-pointer"
+                        >
+                          🔄 Pediu para Remarcar
+                        </button>
 
-                  {/* Ações de Resposta Rápida da Paciente */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                    <span className="text-[11px] font-bold text-[#6E6E6E] uppercase tracking-wider">
-                      Resposta da Paciente:
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setStatusConfirmacaoAgendamento('Confirmada');
-                          if (activeLeadId) {
-                            atualizarLead(activeLeadId, {
-                              statusConfirmacaoAgendamento: 'Confirmada',
-                            });
-                          }
-                          dispararFeedback('Presença confirmada pela paciente!');
-                        }}
-                        className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 transition-colors cursor-pointer"
-                      >
-                        ✓ Paciente Confirmou
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setStatusConfirmacaoAgendamento('Remarcada');
-                          if (activeLeadId) {
-                            atualizarLead(activeLeadId, {
-                              statusConfirmacaoAgendamento: 'Remarcada',
-                            });
-                          }
-                          dispararFeedback('Status atualizado para Remarcada.');
-                        }}
-                        className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 transition-colors cursor-pointer"
-                      >
-                        🔄 Pediu para Remarcar
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setStatusConfirmacaoAgendamento('Cancelada');
-                          if (activeLeadId) {
-                            atualizarLead(activeLeadId, {
-                              statusConfirmacaoAgendamento: 'Cancelada',
-                            });
-                          }
-                          dispararFeedback('Consulta marcada como cancelada.');
-                        }}
-                        className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm bg-rose-100 hover:bg-rose-200 text-rose-900 border border-rose-300 transition-colors cursor-pointer"
-                      >
-                        ✕ Cancelou
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStatusConfirmacaoAgendamento('Cancelada');
+                            if (activeLeadId) {
+                              atualizarLead(activeLeadId, {
+                                statusConfirmacaoAgendamento: 'Cancelada',
+                              });
+                            }
+                            dispararFeedback('Consulta marcada como cancelada.');
+                          }}
+                          className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm bg-rose-100 hover:bg-rose-200 text-rose-900 border border-rose-300 transition-colors cursor-pointer"
+                        >
+                          ✕ Cancelou
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* -------------------------------------------------------------------
                   SEÇÃO 2: FORMULÁRIO COM OS CAMPOS DA FICHALEAD (DADOS COMPLEMENTARES)

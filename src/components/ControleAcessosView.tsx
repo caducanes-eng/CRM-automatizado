@@ -610,6 +610,11 @@ export const ControleAcessosView: React.FC = () => {
                       Pós Consulta
                     </span>
                   )}
+                  {user.permissoes.podeAcessarProcedimentoAgendado && (
+                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-medium">
+                      Procedimento Agendado
+                    </span>
+                  )}
                   {user.permissoes.podeAcessarPosProcedimento && (
                     <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-medium">
                       Pós Procedimento
@@ -964,6 +969,19 @@ export const ControleAcessosView: React.FC = () => {
                     <div>
                       <p className="font-semibold text-slate-800">Pós Consulta (Cadência Avaliação)</p>
                       <p className="text-[11px] text-slate-500">Acompanhamento de orçamentos</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-2.5 p-2.5 rounded-lg border border-slate-100 bg-slate-50/60 cursor-pointer hover:bg-slate-100/70">
+                    <input
+                      type="checkbox"
+                      checked={formData.permissoes.podeAcessarProcedimentoAgendado}
+                      onChange={() => handleTogglePermissao('podeAcessarProcedimentoAgendado')}
+                      className="mt-0.5 rounded text-[#0B1F3A] focus:ring-[#0B1F3A]"
+                    />
+                    <div>
+                      <p className="font-semibold text-slate-800">Procedimento Agendado</p>
+                      <p className="text-[11px] text-slate-500">Gestão e lembretes de procedimentos</p>
                     </div>
                   </label>
 

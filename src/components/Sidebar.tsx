@@ -4,6 +4,7 @@ import {
   Flame,
   CalendarClock,
   CalendarCheck,
+  CalendarDays,
   Sparkles,
   RotateCcw,
   Sprout,
@@ -66,6 +67,12 @@ export const navigationItems: {
         label: 'Pós consulta',
         description: 'Avaliações e planos de tratamento',
         icon: CalendarCheck,
+      },
+      {
+        id: 'procedimento_agendado',
+        label: 'Procedimento agendado',
+        description: 'Agendamento de procedimentos e lembretes de 24h',
+        icon: CalendarDays,
       },
       {
         id: 'pos_procedimento',
