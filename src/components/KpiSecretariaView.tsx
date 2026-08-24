@@ -31,7 +31,13 @@ import { KpiSecretariaMensal } from '../types';
 
 export const KpiSecretariaView: React.FC = () => {
   const { empresaAtivaId } = useEmpresa();
-  const { leads, compras, dispararFeedback } = useCrm();
+  const { leads, compras } = useCrm();
+  const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+
+  const dispararFeedback = (msg: string) => {
+    setFeedbackToast(msg);
+    setTimeout(() => setFeedbackToast(null), 3500);
+  };
 
   // Mês selecionado no formato 'YYYY-MM' (Ex: '2026-08')
   const [mesAnoSelecionado, setMesAnoSelecionado] = useState<string>(
@@ -431,7 +437,7 @@ export const KpiSecretariaView: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-xs font-bold text-slate-800">1. Captação</span>
-                <p className="text-[10px] text-slate-400">Consultas no período</p>
+                <p className="text-[10px] text-slate-400">Consultas com status "Realizada"</p>
               </div>
               <span className="p-1 rounded bg-slate-100 text-slate-600">
                 <CalendarCheck className="w-3.5 h-3.5" />
@@ -439,7 +445,7 @@ export const KpiSecretariaView: React.FC = () => {
             </div>
             <div>
               <div className="text-xl font-bold text-slate-900">
-                {kpiAtual.consultasRealizadas} <span className="text-xs font-normal text-slate-500">consultas</span>
+                {kpiAtual.consultasRealizadas} <span className="text-xs font-normal text-slate-500">de {kpiAtual.totalAgendamentos} agendadas</span>
               </div>
               <p className="text-[11px] text-slate-500">
                 {kpiAtual.travaComparecimentoOk
@@ -460,7 +466,7 @@ export const KpiSecretariaView: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-xs font-bold text-slate-800">2. Comparecimento</span>
-                <p className="text-[10px] text-slate-400">Procedimentos s/ no-show</p>
+                <p className="text-[10px] text-slate-400">Realizadas vs. Total Agendadas</p>
               </div>
               <span className="p-1 rounded bg-slate-100 text-slate-600">
                 <Users className="w-3.5 h-3.5" />
@@ -471,7 +477,7 @@ export const KpiSecretariaView: React.FC = () => {
                 {kpiAtual.taxaComparecimento}%
               </div>
               <p className="text-[11px] text-slate-500">
-                Bônus: {formatarMoeda(kpiAtual.bonusComparecimento)}
+                {kpiAtual.consultasRealizadas} de {kpiAtual.totalAgendamentos} ({kpiAtual.travaComparecimentoOk ? `Bônus: ${formatarMoeda(kpiAtual.bonusComparecimento)}` : 'Trava <75%'})
               </p>
             </div>
             <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
@@ -604,7 +610,7 @@ export const KpiSecretariaView: React.FC = () => {
                     <div>
                       <span className="text-slate-500 block">Consultas Realizadas</span>
                       <strong className="text-slate-900 text-sm">{kpiAtual.consultasRealizadas}</strong>
-                      <span className="text-[10px] text-slate-400 block">Volume apurado no período</span>
+                      <span className="text-[10px] text-slate-400 block">Status "Realizada" na página Consultas</span>
                     </div>
                     <div>
                       <span className="text-slate-500 block">Bônus Captação</span>
@@ -614,12 +620,12 @@ export const KpiSecretariaView: React.FC = () => {
                     <div>
                       <span className="text-slate-500 block">Taxa de Comparecimento</span>
                       <strong className="text-slate-900 text-sm">{kpiAtual.taxaComparecimento}%</strong>
-                      <span className="text-[10px] text-slate-400 block">({kpiAtual.procedimentosRealizados || kpiAtual.consultasRealizadas} de {kpiAtual.procedimentosAgendados || kpiAtual.totalAgendamentos} procedimentos)</span>
+                      <span className="text-[10px] text-slate-400 block">({kpiAtual.consultasRealizadas} realizadas de {kpiAtual.totalAgendamentos} agendadas)</span>
                     </div>
                     <div>
                       <span className="text-slate-500 block">Bônus Comparecimento</span>
                       <strong className="text-slate-900 text-sm">{formatarMoeda(kpiAtual.bonusComparecimento)}</strong>
-                      <span className="text-[10px] text-slate-400 block">Sem no-show (exclui consultas)</span>
+                      <span className="text-[10px] text-slate-400 block">{kpiAtual.taxaComparecimento > 95 ? '> 95% (R$ 700)' : kpiAtual.taxaComparecimento >= 86 ? '86% a 95% (R$ 500)' : kpiAtual.taxaComparecimento >= 75 ? '75% a 85% (R$ 300)' : 'Abaixo de 75%'}</span>
                     </div>
                   </div>
                 </div>
@@ -794,19 +800,19 @@ export const KpiSecretariaView: React.FC = () => {
                 <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 font-bold text-slate-900 flex justify-between items-center">
                   <div>
                     <span className="block font-bold">Comparecimento</span>
-                    <span className="text-[10px] text-slate-500 font-normal">% procedimentos s/ no-show (exclui consultas)</span>
+                    <span className="text-[10px] text-slate-500 font-normal">% consultas com status Realizada vs. total agendadas</span>
                   </div>
                   <span className="text-[10px] text-amber-800 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">Trava de Segurança</span>
                 </div>
                 <table className="w-full text-left">
                   <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                     <tr>
-                      <th className="p-2">TAXA DE COMPARECIMENTO</th>
+                      <th className="p-2">TAXA DE COMPARECIMENTO (REALIZADAS / AGENDADAS)</th>
                       <th className="p-2 text-right">BÔNUS</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    <tr><td className="p-2 text-rose-600 font-semibold">Abaixo de 75%</td><td className="p-2 text-right text-rose-600 font-bold">Sem bônus</td></tr>
+                    <tr><td className="p-2 text-rose-600 font-semibold">Abaixo de 75%</td><td className="p-2 text-right text-rose-600 font-bold">Sem bônus (Bloqueia Captação)</td></tr>
                     <tr><td className="p-2 font-medium text-slate-800">75% a 85%</td><td className="p-2 text-right font-bold text-slate-900">R$ 300</td></tr>
                     <tr><td className="p-2 font-medium text-slate-800">86% a 95%</td><td className="p-2 text-right font-bold text-slate-900">R$ 500</td></tr>
                     <tr><td className="p-2 font-bold text-slate-900">Acima de 95%</td><td className="p-2 text-right font-bold text-amber-900">R$ 700</td></tr>
@@ -1080,6 +1086,17 @@ export const KpiSecretariaView: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {feedbackToast && (
+        <div
+          id="toast-kpi-feedback"
+          className="fixed bottom-5 right-5 z-50 bg-[#1A1A1A] text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-3 border border-[#5C3A22]/40 text-xs animate-fade-in"
+        >
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="font-medium">{feedbackToast}</span>
         </div>
       )}
     </div>

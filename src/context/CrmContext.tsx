@@ -160,22 +160,86 @@ const CrmContext = createContext<CrmContextType>({} as CrmContextType);
 
 export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { user, usuarios } = useAuth();
-  const { config } = useEmpresa();
+  const { config, empresaAtivaId } = useEmpresa();
 
-  const empresaIdEfetiva = config?.nomeEmpresa ? ID_EMPRESA_PADRAO : ID_EMPRESA_PADRAO;
+  const empresaIdEfetiva = empresaAtivaId || ID_EMPRESA_PADRAO;
 
-  // Estados principais
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [fichas, setFichas] = useState<FichaLead[]>([]);
-  const [compras, setCompras] = useState<Compra[]>([]);
-  const [procedimentos, setProcedimentos] = useState<ProcedimentoClinica[]>([]);
+  // Estados principais brutos (todas as clínicas carregadas na memória)
+  const [todosLeadsRaw, setTodosLeadsRaw] = useState<Lead[]>([]);
+  const [todasFichasRaw, setTodasFichasRaw] = useState<FichaLead[]>([]);
+  const [todasComprasRaw, setTodasComprasRaw] = useState<Compra[]>([]);
+  const [todosProcedimentosRaw, setTodosProcedimentosRaw] = useState<ProcedimentoClinica[]>([]);
   const [usuariosState, setUsuariosState] = useState<UsuarioColaborador[]>([]);
-  const [responsaveis, setResponsaveis] = useState<string[]>(SEED_RESPONSAVEIS);
+  const [responsaveisCustom, setResponsaveisCustom] = useState<string[]>(SEED_RESPONSAVEIS);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Connection flags
   const [isFirestoreConnected, setIsFirestoreConnected] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  // Verificador estrito de pertencimento à clínica ativa
+  const pertenceAEmpresaAtiva = useCallback(
+    (itemEmpresaId?: string) => {
+      if (itemEmpresaId) return itemEmpresaId === empresaIdEfetiva;
+      return empresaIdEfetiva === ID_EMPRESA_PADRAO;
+    },
+    [empresaIdEfetiva]
+  );
+
+  // Dados isolados e filtrados exclusivamente para a clínica ativa
+  const leads = useMemo(
+    () =>
+      todosLeadsRaw.filter(
+        (l) => !l.deleted_at && pertenceAEmpresaAtiva(l.empresaId || (l as any).empresa_id)
+      ),
+    [todosLeadsRaw, pertenceAEmpresaAtiva]
+  );
+
+  const fichas = useMemo(
+    () =>
+      todasFichasRaw.filter(
+        (f) => !f.deleted_at && pertenceAEmpresaAtiva(f.empresaId || (f as any).empresa_id)
+      ),
+    [todasFichasRaw, pertenceAEmpresaAtiva]
+  );
+
+  const compras = useMemo(
+    () =>
+      todasComprasRaw.filter(
+        (c) => !c.deleted_at && pertenceAEmpresaAtiva(c.empresaId || (c as any).empresa_id)
+      ),
+    [todasComprasRaw, pertenceAEmpresaAtiva]
+  );
+
+  const procedimentos = useMemo(
+    () =>
+      todosProcedimentosRaw.filter(
+        (p) => !p.deleted_at && pertenceAEmpresaAtiva(p.empresaId || (p as any).empresa_id)
+      ),
+    [todosProcedimentosRaw, pertenceAEmpresaAtiva]
+  );
+
+  // Colaboradores da clínica ativa
+  const colaboradoresClinicaAtiva = useMemo(() => {
+    const list = usuariosState.length > 0 ? usuariosState : (usuarios || []);
+    return list.filter((u) => {
+      if (u.deleted_at || u.ativo === false) return false;
+      const empId = u.empresaId || (u as any).empresa_id;
+      if (empId) return empId === empresaIdEfetiva;
+      return empresaIdEfetiva === ID_EMPRESA_PADRAO;
+    });
+  }, [usuariosState, usuarios, empresaIdEfetiva]);
+
+  // Lista de responsáveis exclusivos da clínica ativa
+  const responsaveis = useMemo(() => {
+    if (colaboradoresClinicaAtiva.length > 0) {
+      return colaboradoresClinicaAtiva.map((u) => u.nome);
+    }
+    if (empresaIdEfetiva === ID_EMPRESA_PADRAO) {
+      return responsaveisCustom;
+    }
+    return ['Gestão Geral'];
+  }, [colaboradoresClinicaAtiva, empresaIdEfetiva, responsaveisCustom]);
 
   // Ficha Lead Modal Controls
   const [leadFichaAbertoId, setLeadFichaAbertoId] = useState<string | null>(null);
@@ -185,9 +249,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const abrirFichaLead = useCallback((leadId: string) => {
     setLeadFichaAbertoId(leadId);
     setIsFichaLeadOpen(true);
-    const target = leads.find((l) => l.id === leadId);
+    const target = leads.find((l) => l.id === leadId) || todosLeadsRaw.find((l) => l.id === leadId);
     if (target) setLeadSelecionadoModal(target);
-  }, [leads]);
+  }, [leads, todosLeadsRaw]);
 
   const fecharFichaLead = useCallback(() => {
     setIsFichaLeadOpen(false);
@@ -211,14 +275,14 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setIsLoading(true);
       const dados = await supabaseService.carregarDadosCompletos();
       if (dados) {
-        setLeads(dados.leads || []);
-        setFichas(dados.fichas || []);
-        setCompras(dados.compras || []);
-        setProcedimentos(dados.procedimentos || []);
+        setTodosLeadsRaw(dados.leads || []);
+        setTodasFichasRaw(dados.fichas || []);
+        setTodasComprasRaw(dados.compras || []);
+        setTodosProcedimentosRaw(dados.procedimentos || []);
         setUsuariosState(dados.usuarios || []);
         if (dados.usuarios && dados.usuarios.length > 0) {
           const nomes = dados.usuarios.filter((u) => !u.deleted_at && u.ativo !== false).map((u) => u.nome);
-          if (nomes.length > 0) setResponsaveis(nomes);
+          if (nomes.length > 0) setResponsaveisCustom(nomes);
         }
         setRealtimeStatus('CONECTADO');
       } else {
@@ -298,10 +362,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               if (newRow && !newRow.deleted_at) {
                 carregarDadosCompletos();
               } else if (newRow && newRow.deleted_at) {
-                setLeads((prev) => prev.filter((l) => l.id !== newRow.id));
+                setTodosLeadsRaw((prev) => prev.filter((l) => l.id !== newRow.id));
               }
             } else if (payload.eventType === 'DELETE' && oldRow?.id) {
-              setLeads((prev) => prev.filter((l) => l.id !== oldRow.id));
+              setTodosLeadsRaw((prev) => prev.filter((l) => l.id !== oldRow.id));
             }
           }
         )
@@ -388,7 +452,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (usuarios && usuarios.length > 0) {
       const nomes = usuarios.filter((u) => !u.deleted_at && u.ativo !== false).map((u) => u.nome);
       if (nomes.length > 0) {
-        setResponsaveis(nomes);
+        setResponsaveisCustom(nomes);
       }
     }
   }, [usuarios]);
@@ -467,8 +531,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       };
 
       // Atualização otimista
-      setLeads((prev) => [novoLead, ...prev]);
-      setFichas((prev) => [novaFicha, ...prev]);
+      setTodosLeadsRaw((prev) => [novoLead, ...prev]);
+      setTodasFichasRaw((prev) => [novaFicha, ...prev]);
 
       try {
         await supabaseService.salvarLead(novoLead, empresaIdEfetiva);
@@ -501,7 +565,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const timestamp = new Date().toISOString();
       const hoje = timestamp.split('T')[0];
 
-      setLeads((prev) =>
+      setTodosLeadsRaw((prev) =>
         prev.map((lead) => {
           if (lead.id !== leadId) return lead;
 
@@ -557,7 +621,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       );
 
       if (dados.motivoPerda !== undefined || dados.dataPerda !== undefined || dados.statusVenda === 'Perdido') {
-        setFichas((prev) =>
+        setTodasFichasRaw((prev) =>
           prev.map((f) => {
             if (f.leadId !== leadId) return f;
             fichaAtualizada = {
@@ -612,9 +676,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const excluirLead = useCallback(
     async (leadId: string, hardDelete = false): Promise<boolean> => {
-      setLeads((prev) => prev.filter((l) => l.id !== leadId));
-      setFichas((prev) => prev.filter((f) => f.leadId !== leadId));
-      setCompras((prev) => prev.filter((c) => c.leadId !== leadId));
+      setTodosLeadsRaw((prev) => prev.filter((l) => l.id !== leadId));
+      setTodasFichasRaw((prev) => prev.filter((f) => f.leadId !== leadId));
+      setTodasComprasRaw((prev) => prev.filter((c) => c.leadId !== leadId));
 
       try {
         await supabaseService.softDeleteLead(leadId);
@@ -659,7 +723,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const atualizarFichaLead = useCallback(
     async (leadId: string, dados: AtualizarFichaPayload): Promise<FichaLead | null> => {
       const timestamp = new Date().toISOString();
-      const fichaExistente = fichas.find((f) => f.leadId === leadId);
+      const fichaExistente = fichas.find((f) => f.leadId === leadId) || todasFichasRaw.find((f) => f.leadId === leadId);
 
       let fichaAtualizada: FichaLead;
       if (fichaExistente) {
@@ -687,7 +751,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         };
       }
 
-      setFichas((prev) => {
+      setTodasFichasRaw((prev) => {
         const existe = prev.some((f) => f.leadId === leadId);
         if (existe) {
           return prev.map((f) => (f.leadId === leadId ? fichaAtualizada : f));
@@ -703,7 +767,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       return fichaAtualizada;
     },
-    [fichas, empresaIdEfetiva]
+    [fichas, todasFichasRaw, empresaIdEfetiva]
   );
 
   const salvarFichaExtra = useCallback(
@@ -733,7 +797,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         version: 1,
       };
 
-      setCompras((prev) => [novaCompra, ...prev]);
+      setTodasComprasRaw((prev) => [novaCompra, ...prev]);
 
       // Ao lançar compra, muda o statusVenda do lead para 'Venda feita'
       await atualizarLead(payload.leadId, { statusVenda: 'Venda feita' });
@@ -763,7 +827,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const removerCompra = useCallback(
     async (compraId: string): Promise<boolean> => {
-      setCompras((prev) => prev.filter((c) => c.id !== compraId));
+      setTodasComprasRaw((prev) => prev.filter((c) => c.id !== compraId));
       try {
         await supabaseService.softDeleteCompra(compraId);
         return true;
@@ -795,7 +859,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         version: 1,
       };
 
-      setProcedimentos((prev) => [...prev, novoProc]);
+      setTodosProcedimentosRaw((prev) => [...prev, novoProc]);
 
       try {
         await supabaseService.salvarProcedimento(novoProc, empresaIdEfetiva);
@@ -825,7 +889,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       let procAtualizado: ProcedimentoClinica | null = null;
       const timestamp = new Date().toISOString();
 
-      setProcedimentos((prev) =>
+      setTodosProcedimentosRaw((prev) =>
         prev.map((p) => {
           if (p.id !== id) return p;
           procAtualizado = {
@@ -857,7 +921,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const excluirProcedimento = useCallback(
     async (id: string): Promise<boolean> => {
-      setProcedimentos((prev) => prev.filter((p) => p.id !== id));
+      setTodosProcedimentosRaw((prev) => prev.filter((p) => p.id !== id));
       try {
         await supabaseService.softDeleteProcedimento(id);
         return true;
@@ -909,11 +973,11 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const adicionarResponsavel = useCallback((nome: string) => {
     const limpo = nome.trim();
     if (!limpo) return;
-    setResponsaveis((prev) => (prev.includes(limpo) ? prev : [...prev, limpo]));
+    setResponsaveisCustom((prev) => (prev.includes(limpo) ? prev : [...prev, limpo]));
   }, []);
 
   const removerResponsavel = useCallback((nome: string) => {
-    setResponsaveis((prev) => prev.filter((r) => r !== nome));
+    setResponsaveisCustom((prev) => prev.filter((r) => r !== nome));
   }, []);
 
   // Importação em Lote
@@ -1072,9 +1136,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         obterProcedimentoPorNomeOuInteresse,
         obterEtapaAtual,
 
-        todosLeads: leads,
-        todasCompras: compras,
-        todosProcedimentos: procedimentos,
+        todosLeads: todosLeadsRaw,
+        todasCompras: todasComprasRaw,
+        todosProcedimentos: todosProcedimentosRaw,
         estatisticasProcedimentos,
 
         carregarDadosCompletos,

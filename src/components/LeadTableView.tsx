@@ -141,6 +141,8 @@ export function getSituacaoEstilo(situacao: SituacaoLead | string) {
   switch (situacao) {
     case 'Em captação':
       return 'bg-[#FAF2EB] text-[#6B3E1F] border-[#E4D0BF]';
+    case 'Em negociação':
+      return 'bg-[#FDF6ED] text-[#7A4B1D] border-[#E8D4BE]';
     case 'Consulta agendada':
       return 'bg-[#EEF4F7] text-[#1E4A5C] border-[#C4D8E2]';
     case 'Pós consulta':

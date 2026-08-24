@@ -25,9 +25,11 @@ import {
   SEED_EMPRESAS,
   SEED_EMPRESA_MEMBROS,
   SEED_PLATAFORMA_ADMINS,
+  SEED_USUARIOS,
 } from '../data/seedData';
 import { obterCoresSidebarCompletas, aplicarVariaveisCss } from '../utils/estetica';
 import { supabaseService, supabaseMapper } from '../services/supabaseService';
+import { firestoreService } from '../services/firestoreService';
 import { isSupabaseConfigured, getSupabaseClient } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 
@@ -156,7 +158,11 @@ export const EmpresaProvider: React.FC<{
       const salvo = localStorage.getItem(STORAGE_KEYS.EMPRESAS);
       if (salvo) {
         const parsed = JSON.parse(salvo);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existentesIds = new Set(parsed.map((e: Empresa) => e.id));
+          const faltantes = SEED_EMPRESAS.filter((s) => !existentesIds.has(s.id));
+          return [...parsed, ...faltantes];
+        }
       }
     } catch (e) {
       console.warn('Erro ao carregar empresas do storage:', e);
@@ -170,7 +176,11 @@ export const EmpresaProvider: React.FC<{
       const salvo = localStorage.getItem(STORAGE_KEYS.MEMBROS);
       if (salvo) {
         const parsed = JSON.parse(salvo);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existentesIds = new Set(parsed.map((m: EmpresaMembro) => m.id));
+          const faltantes = SEED_EMPRESA_MEMBROS.filter((s) => !existentesIds.has(s.id));
+          return [...parsed, ...faltantes];
+        }
       }
     } catch (e) {
       console.warn('Erro ao carregar membros do storage:', e);
@@ -184,7 +194,11 @@ export const EmpresaProvider: React.FC<{
       const salvo = localStorage.getItem(STORAGE_KEYS.PLATAFORMA_ADMINS);
       if (salvo) {
         const parsed = JSON.parse(salvo);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existentesIds = new Set(parsed.map((p: PlataformaAdmin) => p.id));
+          const faltantes = SEED_PLATAFORMA_ADMINS.filter((s) => !existentesIds.has(s.id));
+          return [...parsed, ...faltantes];
+        }
       }
     } catch (e) {
       console.warn('Erro ao carregar admins da plataforma do storage:', e);
@@ -307,12 +321,13 @@ export const EmpresaProvider: React.FC<{
     };
   }, [carregarEmpresasSupabase]);
 
-  // Verificar se o usuário autenticado é Gestor Geral da Plataforma
+  // Verificar se o usuário autenticado é Gestor Geral da Plataforma (Super Admin)
+  // Apenas o Gestor Master Cadu Canes (caducanes@gmail.com) tem acesso irrestrito a todas as empresas
   const isPlataformaAdmin = useMemo<boolean>(() => {
     const emailLimpo = (authUserEmail || '').trim().toLowerCase();
     const idLimpo = (authUserId || '').trim();
 
-    if (emailLimpo === 'caducanes@gmail.com') return true;
+    if (emailLimpo === 'caducanes@gmail.com' || idLimpo === 'user-cadu') return true;
 
     const estaNaLista = plataformaAdmins.some(
       (p) =>
@@ -320,8 +335,6 @@ export const EmpresaProvider: React.FC<{
         (p.userId && p.userId === idLimpo && idLimpo !== '')
     );
     if (estaNaLista) return true;
-
-    if (emailLimpo === 'gestao@agdarodrigues.med.br') return true;
 
     return false;
   }, [authUserEmail, authUserId, plataformaAdmins]);
@@ -341,12 +354,53 @@ export const EmpresaProvider: React.FC<{
     return membro || null;
   }, [authUserEmail, authUserId, empresaMembros]);
 
-  // Se o usuário não for admin da plataforma e pertencer a uma empresa, fixa a empresa ativa nele
-  useEffect(() => {
-    if (!isPlataformaAdmin && membroAtual && membroAtual.empresaId) {
-      setEmpresaAtivaId(membroAtual.empresaId);
+  // Tenta obter o ID da empresa do usuário autenticado por múltiplas fontes confiáveis
+  const userEmpresaIdResolvido = useMemo<string | null>(() => {
+    if (authEmpresaId) return authEmpresaId;
+    if (membroAtual?.empresaId) return membroAtual.empresaId;
+
+    const emailLimpo = (authUserEmail || '').trim().toLowerCase();
+    const idLimpo = (authUserId || '').trim();
+
+    const membro = empresaMembros.find(
+      (m) =>
+        (m.usuarioEmail && m.usuarioEmail.trim().toLowerCase() === emailLimpo && emailLimpo !== '') ||
+        m.userId === idLimpo
+    );
+    if (membro?.empresaId) return membro.empresaId;
+
+    const seedU = SEED_USUARIOS.find(
+      (u) =>
+        (u.email && u.email.trim().toLowerCase() === emailLimpo && emailLimpo !== '') ||
+        u.id === idLimpo
+    );
+    if (seedU?.empresaId || (seedU as any)?.empresa_id) {
+      return seedU.empresaId || (seedU as any).empresa_id;
     }
-  }, [isPlataformaAdmin, membroAtual]);
+    return null;
+  }, [authEmpresaId, membroAtual, authUserEmail, authUserId, empresaMembros]);
+
+  // Se o usuário NÃO for o Gestor Master da plataforma, força imediatamente o roteamento para a sua empresa respectiva
+  useEffect(() => {
+    if (!isPlataformaAdmin && userEmpresaIdResolvido && empresaAtivaId !== userEmpresaIdResolvido) {
+      setEmpresaAtivaId(userEmpresaIdResolvido);
+    }
+  }, [isPlataformaAdmin, userEmpresaIdResolvido, empresaAtivaId]);
+
+  // Função controlada para alternar entre empresas (Apenas o Gestor Master tem esse poder)
+  const definirEmpresaAtivaId = useCallback(
+    (id: string) => {
+      if (!isPlataformaAdmin) {
+        console.warn('Acesso negado: Apenas o Gestor Master possui autorização para alternar entre empresas.');
+        return;
+      }
+      setEmpresaAtivaId(id);
+      try {
+        localStorage.setItem(STORAGE_KEYS.EMPRESA_ATIVA_ID, id);
+      } catch (e) {}
+    },
+    [isPlataformaAdmin]
+  );
 
   // Empresa ativa atual
   const empresaAtiva = useMemo<Empresa | null>(() => {
@@ -428,7 +482,11 @@ export const EmpresaProvider: React.FC<{
 
   // OPERAÇÕES DE GESTÃO DA PLATAFORMA (SUPER ADMIN)
   const criarEmpresa = useCallback(
-    async (payload: CriarEmpresaPayload): Promise<Empresa> => {
+    async (payload: CriarEmpresaPayload): Promise<Empresa | null> => {
+      if (!isPlataformaAdmin) {
+        console.warn('Acesso negado: Apenas o Gestor Master possui autorização para cadastrar novas empresas.');
+        return null;
+      }
       const timestamp = new Date().toISOString();
       const id = generateId('empresa');
       const iniciais =
@@ -465,6 +523,9 @@ export const EmpresaProvider: React.FC<{
 
       setEmpresas((prev) => [novaEmpresa, ...prev]);
 
+      // Salva no Firestore
+      firestoreService.salvarEmpresa(novaEmpresa).catch(() => {});
+
       if (isSupabaseConfigured()) {
         try {
           await supabaseService.salvarEmpresa(novaEmpresa);
@@ -473,88 +534,161 @@ export const EmpresaProvider: React.FC<{
         }
       }
 
+      // Se informou e-mail de admin inicial da empresa, cria o vínculo de membro
+      if (payload.adminEmail && payload.adminEmail.trim()) {
+        const adminEmail = payload.adminEmail.trim().toLowerCase();
+        const membroAdmin: EmpresaMembro = {
+          id: generateId('membro'),
+          userId: `user-adm-${Date.now()}`,
+          empresaId: id,
+          papel: 'admin',
+          ativo: true,
+          usuarioNome: payload.adminNome?.trim() || adminEmail.split('@')[0],
+          usuarioEmail: adminEmail,
+          usuarioCargo: payload.adminCargo?.trim() || 'Gestor Master',
+          created_at: timestamp,
+          updated_at: timestamp,
+          version: 1,
+        };
+        setEmpresaMembros((prev) => [membroAdmin, ...prev]);
+        firestoreService.salvarEmpresaMembro(membroAdmin).catch(() => {});
+        if (isSupabaseConfigured()) {
+          supabaseService.salvarEmpresaMembro(membroAdmin).catch(() => {});
+        }
+      }
+
       return novaEmpresa;
     },
-    []
+    [isPlataformaAdmin]
   );
 
   const atualizarEmpresa = useCallback(
     async (empresaId: string, payload: AtualizarEmpresaPayload): Promise<Empresa | null> => {
+      if (!isPlataformaAdmin && empresaId !== empresaAtivaId) {
+        console.warn('Acesso negado: Apenas o Gestor Master possui autorização para editar outras empresas da plataforma.');
+        return null;
+      }
       const timestamp = new Date().toISOString();
-      let atualizada: Empresa | null = null;
 
-      setEmpresas((prev) =>
-        prev.map((e) => {
-          if (e.id !== empresaId) return e;
+      const empresaBase =
+        empresas.find((e) => e.id === empresaId) ||
+        (empresaId === empresaAtivaId && empresaAtiva ? empresaAtiva : null) || {
+          id: empresaId,
+          nome: 'Dra. Agda Rodrigues',
+          subtitulo: 'Harmonização Facial & Estética Avançada',
+          cnpj: '',
+          registroProfissional: 'CRBM 12345',
+          telefone: '(11) 98765-4321',
+          email: 'contato@agdarodrigues.com.br',
+          endereco: 'Av. Paulista, 1000 - Bela Vista, São Paulo - SP',
+          horarioFuncionamento: 'Seg a Sex: 08h às 19h | Sáb: 08h às 13h',
+          unidadePadrao: 'Consultório Principal',
+          status: 'ativa' as StatusEmpresa,
+          tipoLogo: 'monograma' as const,
+          monogramaIniciais: 'AR',
+          logoAltura: 'padrao' as const,
+          logoAjusteLateral: 'total' as const,
+          logoFundoHeader: 'integrado' as const,
+          estetica: ESTETICAS_PRESET[0],
+          esteticasSalvas: ESTETICAS_PRESET,
+          created_at: timestamp,
+          updated_at: timestamp,
+          deleted_at: null,
+          version: 1,
+        };
 
-          atualizada = {
-            ...e,
-            nome: payload.nome !== undefined ? payload.nome.trim() : e.nome,
-            subtitulo: payload.subtitulo !== undefined ? payload.subtitulo.trim() : e.subtitulo,
-            cnpj: payload.cnpj !== undefined ? payload.cnpj.trim() : e.cnpj,
-            registroProfissional:
-              payload.registroProfissional !== undefined ? payload.registroProfissional.trim() : e.registroProfissional,
-            telefone: payload.telefone !== undefined ? payload.telefone.trim() : e.telefone,
-            email: payload.email !== undefined ? payload.email.trim().toLowerCase() : e.email,
-            endereco: payload.endereco !== undefined ? payload.endereco.trim() : e.endereco,
-            horarioFuncionamento:
-              payload.horarioFuncionamento !== undefined ? payload.horarioFuncionamento.trim() : e.horarioFuncionamento,
-            unidadePadrao: payload.unidadePadrao !== undefined ? payload.unidadePadrao.trim() : e.unidadePadrao,
-            status: payload.status !== undefined ? payload.status : e.status,
-            tipoLogo: payload.tipoLogo !== undefined ? payload.tipoLogo : e.tipoLogo,
-            logoUrl: payload.logoUrl !== undefined ? payload.logoUrl : e.logoUrl,
-            monogramaIniciais:
-              payload.monogramaIniciais !== undefined ? payload.monogramaIniciais.trim().toUpperCase() : e.monogramaIniciais,
-            logoAltura: payload.logoAltura !== undefined ? payload.logoAltura : e.logoAltura,
-            logoAjusteLateral: payload.logoAjusteLateral !== undefined ? payload.logoAjusteLateral : e.logoAjusteLateral,
-            logoFundoHeader: payload.logoFundoHeader !== undefined ? payload.logoFundoHeader : e.logoFundoHeader,
-            estetica: payload.estetica !== undefined ? payload.estetica : e.estetica,
-            esteticasSalvas: payload.esteticasSalvas !== undefined ? payload.esteticasSalvas : e.esteticasSalvas,
-            updated_at: timestamp,
-            version: e.version + 1,
-          };
-          return atualizada;
-        })
-      );
+      const empresaAtualizada: Empresa = {
+        ...empresaBase,
+        nome: payload.nome !== undefined ? payload.nome.trim() : empresaBase.nome,
+        subtitulo: payload.subtitulo !== undefined ? payload.subtitulo.trim() : empresaBase.subtitulo,
+        cnpj: payload.cnpj !== undefined ? payload.cnpj.trim() : empresaBase.cnpj,
+        registroProfissional:
+          payload.registroProfissional !== undefined ? payload.registroProfissional.trim() : empresaBase.registroProfissional,
+        telefone: payload.telefone !== undefined ? payload.telefone.trim() : empresaBase.telefone,
+        email: payload.email !== undefined ? payload.email.trim().toLowerCase() : empresaBase.email,
+        endereco: payload.endereco !== undefined ? payload.endereco.trim() : empresaBase.endereco,
+        horarioFuncionamento:
+          payload.horarioFuncionamento !== undefined ? payload.horarioFuncionamento.trim() : empresaBase.horarioFuncionamento,
+        unidadePadrao: payload.unidadePadrao !== undefined ? payload.unidadePadrao.trim() : empresaBase.unidadePadrao,
+        status: payload.status !== undefined ? payload.status : empresaBase.status,
+        tipoLogo: payload.tipoLogo !== undefined ? payload.tipoLogo : empresaBase.tipoLogo,
+        logoUrl: payload.logoUrl !== undefined ? payload.logoUrl : empresaBase.logoUrl,
+        monogramaIniciais:
+          payload.monogramaIniciais !== undefined ? payload.monogramaIniciais.trim().toUpperCase() : empresaBase.monogramaIniciais,
+        logoAltura: payload.logoAltura !== undefined ? payload.logoAltura : empresaBase.logoAltura,
+        logoAjusteLateral: payload.logoAjusteLateral !== undefined ? payload.logoAjusteLateral : empresaBase.logoAjusteLateral,
+        logoFundoHeader: payload.logoFundoHeader !== undefined ? payload.logoFundoHeader : empresaBase.logoFundoHeader,
+        estetica: payload.estetica !== undefined ? payload.estetica : empresaBase.estetica,
+        esteticasSalvas: payload.esteticasSalvas !== undefined ? payload.esteticasSalvas : empresaBase.esteticasSalvas,
+        updated_at: timestamp,
+        version: (empresaBase.version || 1) + 1,
+      };
 
-      if (atualizada && isSupabaseConfigured()) {
+      // Atualiza o estado das empresas imediatamente
+      setEmpresas((prev) => {
+        const existe = prev.some((e) => e.id === empresaId);
+        if (existe) {
+          return prev.map((e) => (e.id === empresaId ? empresaAtualizada : e));
+        }
+        return [empresaAtualizada, ...prev];
+      });
+
+      // Persistência assíncrona no Firestore
+      firestoreService.salvarEmpresa(empresaAtualizada).catch((err) => {
+        console.warn('Erro ao salvar empresa no Firestore:', err);
+      });
+
+      // Persistência no Supabase com isolamento multi-tenant
+      if (isSupabaseConfigured()) {
         try {
-          await supabaseService.salvarEmpresa(atualizada);
+          await supabaseService.salvarEmpresa(empresaAtualizada);
         } catch (e) {
           console.warn('Erro ao atualizar empresa no Supabase:', e);
         }
       }
 
-      return atualizada;
+      return empresaAtualizada;
     },
-    []
+    [isPlataformaAdmin, empresaAtivaId, empresas, empresaAtiva]
   );
 
   const suspenderEmpresa = useCallback(
     async (empresaId: string): Promise<boolean> => {
+      if (!isPlataformaAdmin) {
+        console.warn('Acesso negado: Apenas o Gestor Master pode desligar/suspender empresas.');
+        return false;
+      }
       const res = await atualizarEmpresa(empresaId, { status: 'suspensa' });
       return res !== null;
     },
-    [atualizarEmpresa]
+    [atualizarEmpresa, isPlataformaAdmin]
   );
 
   const reativarEmpresa = useCallback(
     async (empresaId: string): Promise<boolean> => {
+      if (!isPlataformaAdmin) {
+        console.warn('Acesso negado: Apenas o Gestor Master pode reativar empresas.');
+        return false;
+      }
       const res = await atualizarEmpresa(empresaId, { status: 'ativa' });
       return res !== null;
     },
-    [atualizarEmpresa]
+    [atualizarEmpresa, isPlataformaAdmin]
   );
 
   const excluirEmpresa = useCallback(
     async (empresaId: string): Promise<boolean> => {
+      if (!isPlataformaAdmin) {
+        console.warn('Acesso negado: Apenas o Gestor Master pode excluir empresas.');
+        return false;
+      }
       setEmpresas((prev) => prev.filter((e) => e.id !== empresaId));
       if (empresaAtivaId === empresaId) {
         setEmpresaAtivaId(ID_EMPRESA_PADRAO);
       }
       return true;
     },
-    [empresaAtivaId]
+    [empresaAtivaId, isPlataformaAdmin]
   );
 
   // VÍNCULOS E MEMBROS
@@ -583,6 +717,10 @@ export const EmpresaProvider: React.FC<{
       };
 
       setEmpresaMembros((prev) => [novoMembro, ...prev]);
+      firestoreService.salvarEmpresaMembro(novoMembro).catch(() => {});
+      if (isSupabaseConfigured()) {
+        supabaseService.salvarEmpresaMembro(novoMembro).catch(() => {});
+      }
       return novoMembro;
     },
     []
@@ -594,13 +732,15 @@ export const EmpresaProvider: React.FC<{
       setEmpresaMembros((prev) =>
         prev.map((m) => {
           if (m.userId !== userId) return m;
-          return {
+          const atualizado = {
             ...m,
             empresaId: novaEmpresaId,
             papel: novoPapel || m.papel,
             updated_at: timestamp,
             version: m.version + 1,
           };
+          firestoreService.salvarEmpresaMembro(atualizado).catch(() => {});
+          return atualizado;
         })
       );
       return true;
@@ -614,12 +754,14 @@ export const EmpresaProvider: React.FC<{
       setEmpresaMembros((prev) =>
         prev.map((m) => {
           if (m.id !== membroId) return m;
-          return {
+          const atualizado = {
             ...m,
             papel: novoPapel,
             updated_at: timestamp,
             version: m.version + 1,
           };
+          firestoreService.salvarEmpresaMembro(atualizado).catch(() => {});
+          return atualizado;
         })
       );
       return true;
@@ -647,6 +789,7 @@ export const EmpresaProvider: React.FC<{
         version: 1,
       };
       setPlataformaAdmins((prev) => [novoAdmin, ...prev]);
+      firestoreService.salvarPlataformaAdmin(novoAdmin).catch(() => {});
       return true;
     },
     []
@@ -718,9 +861,7 @@ export const EmpresaProvider: React.FC<{
           novaLista = [...esteticasAtuais, novaEstetica];
         }
 
-        if (empresaAtivaId) {
-          await atualizarEmpresa(empresaAtivaId, { estetica: novaEstetica });
-        }
+        aplicarVariaveisCss(novaEstetica);
 
         return await atualizarConfig({
           estetica: novaEstetica,
@@ -731,7 +872,7 @@ export const EmpresaProvider: React.FC<{
         return false;
       }
     },
-    [config.esteticasSalvas, empresaAtivaId, atualizarEmpresa, atualizarConfig]
+    [config.esteticasSalvas, atualizarConfig]
   );
 
   const removerEsteticaSalva = useCallback(
@@ -743,13 +884,18 @@ export const EmpresaProvider: React.FC<{
         }
 
         const novaLista = esteticasAtuais.filter((e) => e.idPreset !== idPreset);
-        return await atualizarConfig({ esteticasSalvas: novaLista });
+        const payload: Partial<ConfiguracoesEmpresa> = { esteticasSalvas: novaLista };
+        if (config.estetica?.idPreset === idPreset) {
+          payload.estetica = ESTETICAS_PRESET[0];
+          aplicarVariaveisCss(ESTETICAS_PRESET[0]);
+        }
+        return await atualizarConfig(payload);
       } catch (e) {
         console.error('Erro ao remover estética:', e);
         return false;
       }
     },
-    [config.esteticasSalvas, atualizarConfig]
+    [config.esteticasSalvas, config.estetica, atualizarConfig]
   );
 
   const uploadLogoArquivo = useCallback(
@@ -809,7 +955,7 @@ export const EmpresaProvider: React.FC<{
         plataformaAdmins,
         empresaAtivaId,
         empresaAtiva,
-        definirEmpresaAtivaId: setEmpresaAtivaId,
+        definirEmpresaAtivaId,
         isPlataformaAdmin,
         membroAtual,
         statusAcesso,

@@ -58,6 +58,11 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
     resetarConfiguracoes,
     uploadLogoArquivo,
     isCarregandoConfig,
+    empresaAtiva,
+    empresaAtivaId,
+    empresas,
+    definirEmpresaAtivaId,
+    isPlataformaAdmin,
   } = useEmpresa();
   const { isGestor } = useAuth();
   const { limparTodosLeads, leads } = useCrm();
@@ -251,13 +256,31 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
     // Aplicação visual instantânea via variáveis CSS no DOM (0ms de latência)
     aplicarVariaveisCss(nova);
 
-    // Debounce na persistência do Firestore para não floodar chamadas
+    // Debounce na persistência do banco para não floodar chamadas
     if (debounceEsteticaRef.current) {
       clearTimeout(debounceEsteticaRef.current);
     }
     debounceEsteticaRef.current = setTimeout(() => {
       aplicarEstetica(nova);
     }, 250);
+  };
+
+  // Salvar explicitamente todas as alterações de cores manuais no banco
+  const handleSalvarCoresManuais = async () => {
+    if (debounceEsteticaRef.current) {
+      clearTimeout(debounceEsteticaRef.current);
+    }
+    const nova: EsteticaPlataforma = {
+      ...coresCustomizadas,
+      isPersonalizado: true,
+    };
+    aplicarVariaveisCss(nova);
+    const ok = await aplicarEstetica(nova);
+    if (ok) {
+      mostrarMensagem('sucesso', 'Características estéticas e cores salvas no banco com sucesso!');
+    } else {
+      mostrarMensagem('erro', 'Erro ao salvar características estéticas no banco.');
+    }
   };
 
   // Ajustar contraste inteligente e harmônico para o bloco inferior
@@ -360,6 +383,46 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
           <span>{mensagemStatus.texto}</span>
         </div>
       )}
+
+      {/* Banner de Ambiente Multi-Tenant */}
+      <div className="bg-white border border-[#D9D6D0] rounded-sm p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-sm bg-[#5C3A22]/10 border border-[#5C3A22]/20 flex items-center justify-center text-[#5C3A22] font-black text-sm">
+            {config.monogramaIniciais || 'CL'}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-[#1A1A1A]">
+                {empresaAtiva?.nome || config.nomeEmpresa || 'Clínica Ativa'}
+              </h2>
+              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800">
+                Multi-Tenant Isolado
+              </span>
+            </div>
+            <p className="text-xs text-[#6E6E6E]">
+              As configurações de identidade, cores e dados abaixo aplicam-se exclusivamente a esta unidade.
+            </p>
+          </div>
+        </div>
+
+        {isPlataformaAdmin && empresas.length > 1 && (
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 bg-[#F2EFEA] p-2 rounded-sm border border-[#D9D6D0]">
+            <span className="text-xs text-[#1A1A1A] font-bold">Unidade:</span>
+            <select
+              id="select-configuracoes-empresa-ativa"
+              value={empresaAtivaId}
+              onChange={(e) => definirEmpresaAtivaId(e.target.value)}
+              className="text-xs bg-white border border-[#D9D6D0] rounded-sm px-2 py-1 text-[#1A1A1A] font-semibold focus:outline-hidden focus:border-[#5C3A22] cursor-pointer"
+            >
+              {empresas.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
 
       {/* ABAS DE NAVEGAÇÃO */}
       <div className="flex border-b border-[#D9D6D0] bg-white rounded-t-sm px-2 sm:px-4 pt-2 gap-1 overflow-x-auto">
@@ -1178,14 +1241,25 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
 
             {/* SELETOR DE CORES GERAIS DA PLATAFORMA */}
             <div className="bg-white rounded-sm p-5 sm:p-6 border border-[#D9D6D0] shadow-xs space-y-6">
-              <div>
-                <h2 className="text-sm font-bold text-[#1A1A1A] uppercase tracking-wider flex items-center gap-2">
-                  <Sliders className="w-4 h-4 text-[#5C3A22]" />
-                  <span>Cores Gerais da Plataforma & Conteúdo</span>
-                </h2>
-                <p className="text-xs text-[#6E6E6E] mt-0.5">
-                  Acentos de botões, destaques de relatórios, divisórias e tipografia do conteúdo principal.
-                </p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#D9D6D0]">
+                <div>
+                  <h2 className="text-sm font-bold text-[#1A1A1A] uppercase tracking-wider flex items-center gap-2">
+                    <Sliders className="w-4 h-4 text-[#5C3A22]" />
+                    <span>Cores Gerais da Plataforma & Conteúdo</span>
+                  </h2>
+                  <p className="text-xs text-[#6E6E6E] mt-0.5">
+                    Acentos de botões, destaques de relatórios, divisórias e tipografia do conteúdo principal.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSalvarCoresManuais}
+                  className="h-9 px-4 rounded-sm bg-[#5C3A22] hover:bg-[#8A6142] text-white text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-2 shadow-xs shrink-0 self-start sm:self-auto"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Salvar Cores no Banco</span>
+                </button>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1349,14 +1423,25 @@ export const ConfiguracoesEmpresaView: React.FC = () => {
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleAjustarContrasteAutomatico}
-                  className="h-9 px-3.5 rounded-sm bg-[#1A1A1A] hover:bg-[#5C3A22] text-white text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-2 shadow-xs shrink-0 self-start sm:self-auto"
-                >
-                  <Contrast className="w-4 h-4 text-[#C8C3BC]" />
-                  <span>Ajustar Contraste Inteligente</span>
-                </button>
+                <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={handleAjustarContrasteAutomatico}
+                    className="h-9 px-3.5 rounded-sm bg-[#1A1A1A] hover:bg-[#333333] text-white text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-2 shadow-xs"
+                  >
+                    <Contrast className="w-4 h-4 text-[#C8C3BC]" />
+                    <span>Contraste Automático</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSalvarCoresManuais}
+                    className="h-9 px-4 rounded-sm bg-[#5C3A22] hover:bg-[#8A6142] text-white text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-2 shadow-xs"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Salvar Cores</span>
+                  </button>
+                </div>
               </div>
 
               {/* Layout em 2 Colunas: Controles de Cor à Esquerda + Simulador Interativo à Direita */}

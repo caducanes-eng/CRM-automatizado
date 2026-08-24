@@ -49,7 +49,7 @@ import {
   StatusConfirmacaoAgendamento,
   TODOS_STATUS_CONFIRMACAO_AGENDAMENTO,
 } from '../types';
-import { SEED_USUARIOS } from '../data/seedData';
+import { SEED_USUARIOS, ID_EMPRESA_PADRAO } from '../data/seedData';
 import { formatarMoeda, formatarDataBR, obterDataHoje } from '../utils/formatters';
 import {
   obterProximaEtapa,
@@ -113,23 +113,34 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
     obterProcedimentoPorNomeOuInteresse,
   } = useCrm();
 
-  const { config } = useEmpresa();
-  const { usuarios } = useAuth();
+  const { config, empresaAtivaId } = useEmpresa();
+  const { usuarios, responsavelAtivo } = useAuth();
 
-  // Colaboradores cadastrados ativos pelo Gestor
+  // Colaboradores cadastrados ativos exclusivos da clínica ativa
   const colaboradoresAtivos = useMemo(() => {
     if (usuarios && usuarios.length > 0) {
-      return usuarios.filter((u) => !u.deleted_at && u.ativo !== false);
+      return usuarios.filter((u) => {
+        if (u.deleted_at || u.ativo === false) return false;
+        const empId = u.empresaId || u.empresa_id;
+        if (empId) return empId === empresaAtivaId;
+        return empresaAtivaId === ID_EMPRESA_PADRAO;
+      });
     }
     return [];
-  }, [usuarios]);
+  }, [usuarios, empresaAtivaId]);
 
   const listaNomesResponsaveis = useMemo(() => {
     if (colaboradoresAtivos.length > 0) {
       return colaboradoresAtivos.map((u) => u.nome);
     }
-    return SEED_USUARIOS.map((u) => u.nome);
-  }, [colaboradoresAtivos]);
+    if (responsavelAtivo?.nome) {
+      return [responsavelAtivo.nome];
+    }
+    if (empresaAtivaId === ID_EMPRESA_PADRAO) {
+      return SEED_USUARIOS.map((u) => u.nome);
+    }
+    return ['Gestão Geral'];
+  }, [colaboradoresAtivos, responsavelAtivo, empresaAtivaId]);
 
   const corPrimaria = config.estetica?.corPrimaria || '#5C3A22';
   const corSecundaria = config.estetica?.corSecundaria || '#8A6142';

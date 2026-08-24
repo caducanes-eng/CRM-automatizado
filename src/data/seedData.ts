@@ -14,27 +14,18 @@ import {
 } from '../types';
 
 export const ID_EMPRESA_PADRAO = '00000000-0000-0000-0000-000000000001';
+export const ID_EMPRESA_LUMINA = '00000000-0000-0000-0000-000000000002';
 
 // =========================================================================
 // GESTORES GLOBAIS DA PLATAFORMA (SUPER ADMINS)
+// Apenas o Gestor Master Cadu Canes tem acesso irrestrito a todas as empresas
 // =========================================================================
 export const SEED_PLATAFORMA_ADMINS: PlataformaAdmin[] = [
   {
     id: 'admin-plat-caducanes',
     userId: 'user-cadu',
     email: 'caducanes@gmail.com',
-    nome: 'Cadu Canes (Gestor Geral da Plataforma)',
-    criadoPor: 'Sistema',
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 365).toISOString(),
-    updated_at: new Date().toISOString(),
-    deleted_at: null,
-    version: 1,
-  },
-  {
-    id: 'admin-plat-gestao',
-    userId: 'user-gestao',
-    email: 'gestao@agdarodrigues.med.br',
-    nome: 'Gestão da Plataforma',
+    nome: 'Cadu Canes (Gestor Master da Plataforma)',
     criadoPor: 'Sistema',
     created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 365).toISOString(),
     updated_at: new Date().toISOString(),
@@ -44,7 +35,7 @@ export const SEED_PLATAFORMA_ADMINS: PlataformaAdmin[] = [
 ];
 
 // =========================================================================
-// EMPRESAS CADASTRADAS NO SISTEMA
+// EMPRESAS CADASTRADAS NO SISTEMA (MULTI-TENANT)
 // =========================================================================
 export const SEED_EMPRESAS: Empresa[] = [
   {
@@ -70,6 +61,58 @@ export const SEED_EMPRESAS: Empresa[] = [
     totalUsuarios: 5,
     totalPacientes: 0,
     created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 180).toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    version: 1,
+  },
+  {
+    id: ID_EMPRESA_LUMINA,
+    nome: 'Clínica Lumina Estética Avançada',
+    subtitulo: 'Dermatologia & Procedimentos Estéticos de Alta Precisão',
+    cnpj: '12.345.678/0001-90',
+    registroProfissional: 'CRM/SP 210.555 - RQE 99.123',
+    telefone: '(11) 97777-2000',
+    email: 'contato@clinicalumina.com.br',
+    endereco: 'Av. Paulista, 1000 - 8º andar, Bela Vista - São Paulo/SP',
+    horarioFuncionamento: 'Segunda a Sexta: 09h às 19h | Sábado: 09h às 13h',
+    unidadePadrao: 'Unidade Jardins - Sala 801',
+    status: 'ativa',
+    tipoLogo: 'monograma',
+    monogramaIniciais: 'CL',
+    logoAltura: 'padrao',
+    logoAjusteLateral: 'padrao',
+    logoFundoHeader: 'integrado',
+    estetica: {
+      idPreset: 'preset_lumina_emerald',
+      nomePreset: 'Esmeralda & Ardósia Luxury',
+      descricao: 'Paleta nobre de esmeralda escuro e ardósia para dermatologia avançada',
+      corPrimaria: '#047857',
+      corSecundaria: '#10B981',
+      corFundoDestaque: '#F0FDF4',
+      corBorda: '#D1FAE5',
+      corTexto: '#064E3B',
+      corSidebar: '#064E3B',
+      corSidebarTexto: '#FFFFFF',
+      corNavCategoriaTexto: '#6EE7B7',
+      corNavTextoInativo: '#A7F3D0',
+      corNavTextoHover: '#FFFFFF',
+      corNavHoverBg: 'rgba(255, 255, 255, 0.08)',
+      corNavAtivoBg: '#047857',
+      corNavAtivoTexto: '#FFFFFF',
+      corNavAtivoBorda: '#10B981',
+      corNavBadgeBg: '#065F46',
+      corNavBadgeTexto: '#A7F3D0',
+      corNavFooterBg: '#022C22',
+      corNavFooterTextoPrincipal: '#FFFFFF',
+      corNavFooterTextoSecundario: '#6EE7B7',
+      corNavFooterIcone: '#34D399',
+    },
+    adminPrincipalId: 'user-lumina-medica',
+    adminPrincipalEmail: 'dra.juliana@clinicalumina.com.br',
+    adminPrincipalNome: 'Dra. Juliana Mendes',
+    totalUsuarios: 2,
+    totalPacientes: 0,
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 120).toISOString(),
     updated_at: new Date().toISOString(),
     deleted_at: null,
     version: 1,
@@ -166,6 +209,36 @@ export const SEED_EMPRESA_MEMBROS: EmpresaMembro[] = [
     usuarioCargo: 'Acompanhamento & Pós-Procedimento',
     ultimoAcesso: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
     created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 50).toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    version: 1,
+  },
+  {
+    id: 'membro-lumina-01',
+    userId: 'user-lumina-medica',
+    empresaId: ID_EMPRESA_LUMINA,
+    papel: 'admin',
+    ativo: true,
+    usuarioNome: 'Dra. Juliana Mendes',
+    usuarioEmail: 'dra.juliana@clinicalumina.com.br',
+    usuarioCargo: 'Médica Dermatologista & Resp. Técnica',
+    ultimoAcesso: new Date().toISOString(),
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 90).toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    version: 1,
+  },
+  {
+    id: 'membro-lumina-02',
+    userId: 'user-lumina-sec',
+    empresaId: ID_EMPRESA_LUMINA,
+    papel: 'recepcao',
+    ativo: true,
+    usuarioNome: 'Mariana Costa (Recepção Lumina)',
+    usuarioEmail: 'recepcao@clinicalumina.com.br',
+    usuarioCargo: 'Atendimento & Pré-Vendas Lumina',
+    ultimoAcesso: new Date().toISOString(),
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 60).toISOString(),
     updated_at: new Date().toISOString(),
     deleted_at: null,
     version: 1,
@@ -305,6 +378,50 @@ export const SEED_USUARIOS: UsuarioColaborador[] = [
     deleted_at: null,
     version: 1,
   },
+  {
+    id: 'user-lumina-medica',
+    empresaId: ID_EMPRESA_LUMINA,
+    nome: 'Dra. Juliana Mendes (Resp. Lumina)',
+    email: 'dra.juliana@clinicalumina.com.br',
+    login: 'juliana',
+    senhaPadrao: 'Agda@2026',
+    cargo: 'Médica Dermatologista & Resp. Técnica',
+    role: 'MEDICO',
+    permissoes: PERMISSOES_PRESET_MEDICO,
+    iniciais: 'JM',
+    corBadge: 'bg-[#047857] text-white',
+    telefone: '(11) 97777-2001',
+    ativo: true,
+    ultimoAcesso: new Date().toISOString(),
+    criadoPor: 'Sistema / Gestor Master',
+    observacoes: 'Dermatologia avançada e lasers de alta tecnologia',
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 90).toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    version: 1,
+  },
+  {
+    id: 'user-lumina-sec',
+    empresaId: ID_EMPRESA_LUMINA,
+    nome: 'Mariana Costa (Recepção Lumina)',
+    email: 'recepcao@clinicalumina.com.br',
+    login: 'marilumina',
+    senhaPadrao: 'Agda@2026',
+    cargo: 'Atendimento & Pré-Vendas Lumina',
+    role: 'RECEPCAO_COMERCIAL',
+    permissoes: PERMISSOES_PRESET_RECEPCAO,
+    iniciais: 'MC',
+    corBadge: 'bg-[#065F46] text-white',
+    telefone: '(11) 97777-2002',
+    ativo: true,
+    ultimoAcesso: new Date().toISOString(),
+    criadoPor: 'Dra. Juliana Mendes',
+    observacoes: 'Atendimento comercial exclusivo Clínica Lumina',
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 60).toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    version: 1,
+  },
 ];
 
 export const SEED_RESPONSAVEIS: string[] = SEED_USUARIOS.map((u) => u.nome);
@@ -317,9 +434,25 @@ export const SEED_FICHAS: FichaLead[] = [];
 export const SEED_COMPRAS: Compra[] = [];
 
 // =========================================================================
-// CATÁLOGO OFICIAL DE PROCEDIMENTOS DA CLÍNICA
+// CATÁLOGO OFICIAL DE PROCEDIMENTOS DAS CLÍNICAS (MULTI-TENANT)
 // =========================================================================
 export const SEED_PROCEDIMENTOS: ProcedimentoClinica[] = [
+  {
+    id: 'proc-lumina-laser-01',
+    empresaId: ID_EMPRESA_LUMINA,
+    nome: 'Laser Lavieen - Rejuvenescimento Facial Glow',
+    categoria: 'Tecnologias & Lasers',
+    valor: 1600,
+    formatosPagamento: 'À vista via Pix com 5% de desconto (R$ 1.520,00) ou até 6x no cartão sem juros.',
+    duracaoDias: 90,
+    descricao: 'Tratamento com laser de Thulium para poros dilatados, manchas solares e textura de pele.',
+    orientacoes: 'Usar protetor solar FPS 50+ e evitar exposição solar direta por 7 dias.',
+    ativo: true,
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 60).toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    version: 1,
+  },
   {
     id: 'proc-toxina-botulinica-01',
     empresaId: ID_EMPRESA_PADRAO,

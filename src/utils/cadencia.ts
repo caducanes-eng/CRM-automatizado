@@ -61,6 +61,7 @@ export function obterOpcoesCadenciaPorSituacao(situacao: SituacaoLead): string[]
   }
   if (
     situacao === 'Em captação' ||
+    situacao === 'Em negociação' ||
     situacao === 'Pós consulta' ||
     situacao === 'Reativação'
   ) {
@@ -244,7 +245,7 @@ export function calcularEtapaEsperada(situacao: SituacaoLead, diasCorridos: numb
     return 'Fluxo de conteúdo 1 (Cuidados)';
   }
 
-  // "Em captação", "Pós consulta", "Reativação" (e padrão)
+  // "Em captação", "Em negociação", "Pós consulta", "Reativação" (e padrão)
   if (diasCorridos >= 17) return 'Contato 5 (dia 17)';
   if (diasCorridos >= 9) return 'Contato 4 (dia 9)';
   if (diasCorridos >= 5) return 'Contato 3 (dia 5)';

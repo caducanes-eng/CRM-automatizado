@@ -445,11 +445,13 @@ export const supabaseMapper = {
   // USUARIO
   usuarioToDb: (usuario: UsuarioColaborador, empresaId: string = ID_EMPRESA_PADRAO) => {
     const eId = usuario.empresaId || (usuario as any).empresa_id || empresaId;
+    const senha = usuario.senhaPadrao || (usuario as any).senha || (usuario as any).senha_hash || 'Agda@2026';
     return {
       id: normalizarUuid(usuario.id),
       empresa_id: normalizarUuid(eId),
       nome: usuario.nome,
       email: usuario.email,
+      senha_hash: senha,
       cargo: usuario.cargo || 'Colaborador',
       role: usuario.role || 'RECEPCAO_COMERCIAL',
       permissoes: usuario.permissoes || {},
@@ -473,7 +475,11 @@ export const supabaseMapper = {
     empresa_id: row.empresa_id,
     nome: row.nome,
     email: row.email,
-    senhaPadrao: '******',
+    senhaPadrao:
+      row.senha_hash ||
+      row.senha_padrao ||
+      row.senha ||
+      (row.senhaPadrao && row.senhaPadrao !== '******' ? row.senhaPadrao : 'Agda@2026'),
     cargo: row.cargo,
     role: row.role,
     permissoes: row.permissoes || {},
@@ -1000,19 +1006,122 @@ export const supabaseService = {
     empresa: Partial<Empresa> | Partial<ConfiguracoesEmpresa>,
     idCustom?: string
   ): Promise<boolean> {
-    if (empresa && (empresa as any).id) {
-      firestoreService.salvarEmpresa(empresa as Empresa).catch(() => {});
-    }
-    const client = getSupabaseClient();
-    if (!client) return false;
+    const idEfetivo = normalizarUuid(idCustom || (empresa as any).id || ID_EMPRESA_PADRAO);
+    
+    // Sempre espelha no Firestore garantindo persistência imediata
+    const empresaFormatada: Empresa = {
+      id: idEfetivo,
+      nome: (empresa as any).nome || (empresa as any).nomeEmpresa || 'Dra. Agda Rodrigues',
+      subtitulo: empresa.subtitulo,
+      cnpj: empresa.cnpj,
+      registroProfissional: (empresa as any).registroProfissional || (empresa as any).registro_profissional,
+      telefone: empresa.telefone,
+      email: empresa.email,
+      endereco: empresa.endereco,
+      horarioFuncionamento: (empresa as any).horarioFuncionamento || (empresa as any).horario_funcionamento,
+      unidadePadrao: (empresa as any).unidadePadrao || (empresa as any).unidade_padrao || 'Consultório Principal',
+      status: (empresa as any).status || 'ativa',
+      tipoLogo: (empresa as any).tipoLogo || 'monograma',
+      logoUrl: empresa.logoUrl,
+      monogramaIniciais: empresa.monogramaIniciais || 'AR',
+      logoAltura: (empresa as any).logoAltura || 'padrao',
+      logoAjusteLateral: (empresa as any).logoAjusteLateral || 'total',
+      logoFundoHeader: (empresa as any).logoFundoHeader || 'integrado',
+      estetica: (empresa as any).estetica || (empresa as any).estetica_config || {},
+      esteticasSalvas: (empresa as any).esteticasSalvas || (empresa as any).esteticas_salvas || [],
+      created_at: (empresa as any).created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      deleted_at: null,
+      version: Number((empresa as any).version || 1),
+    };
 
-    const row = supabaseMapper.empresaToDb(empresa, idCustom);
-    const { error } = await client.from('empresas').upsert(row, { onConflict: 'id' });
-    if (error) {
-      console.error('Erro ao salvar empresa no Supabase:', error);
-      throw error;
+    firestoreService.salvarEmpresa(empresaFormatada).catch((err) => {
+      console.warn('Erro ao espelhar empresa no Firestore:', err);
+    });
+
+    const client = getSupabaseClient();
+    if (!client) return true;
+
+    try {
+      const row = supabaseMapper.empresaToDb(empresa, idCustom);
+      const { error } = await client.from('empresas').upsert(row, { onConflict: 'id' });
+      if (!error) return true;
+
+      console.warn('Erro com payload completo de empresa no Supabase, tentando com fallback de estética:', error.message);
+      
+      // Tentativa 2: Payload seguro contendo configurações estéticas e cadastrais
+      const rowFallbackEstetica = {
+        id: idEfetivo,
+        nome: row.nome,
+        subtitulo: row.subtitulo,
+        cnpj: row.cnpj,
+        telefone: row.telefone,
+        email: row.email,
+        endereco: row.endereco,
+        unidade_padrao: row.unidade_padrao,
+        status: row.status,
+        tipo_logo: row.tipo_logo,
+        logo_url: row.logo_url,
+        monograma_iniciais: row.monograma_iniciais,
+        estetica_config: row.estetica_config,
+        esteticas_salvas: row.esteticas_salvas,
+        ativa: row.ativa,
+        updated_at: row.updated_at,
+      };
+
+      const res2 = await client.from('empresas').upsert(rowFallbackEstetica, { onConflict: 'id' });
+      if (!res2.error) return true;
+
+      // Tentativa 3: Se esteticas_salvas não existir na tabela, tenta apenas estetica_config
+      console.warn('Tentando fallback apenas com estetica_config:', res2.error.message);
+      const rowFallbackEsteticaConfig = {
+        id: idEfetivo,
+        nome: row.nome,
+        subtitulo: row.subtitulo,
+        cnpj: row.cnpj,
+        telefone: row.telefone,
+        email: row.email,
+        endereco: row.endereco,
+        unidade_padrao: row.unidade_padrao,
+        status: row.status,
+        tipo_logo: row.tipo_logo,
+        logo_url: row.logo_url,
+        monograma_iniciais: row.monograma_iniciais,
+        estetica_config: row.estetica_config,
+        ativa: row.ativa,
+        updated_at: row.updated_at,
+      };
+
+      const res3 = await client.from('empresas').upsert(rowFallbackEsteticaConfig, { onConflict: 'id' });
+      if (!res3.error) return true;
+
+      console.warn('Tentando fallback básico cadastral:', res3.error.message);
+      const rowFallbackBasico = {
+        id: idEfetivo,
+        nome: row.nome,
+        subtitulo: row.subtitulo,
+        cnpj: row.cnpj,
+        telefone: row.telefone,
+        email: row.email,
+        endereco: row.endereco,
+        unidade_padrao: row.unidade_padrao,
+        status: row.status,
+        tipo_logo: row.tipo_logo,
+        logo_url: row.logo_url,
+        monograma_iniciais: row.monograma_iniciais,
+        ativa: row.ativa,
+        updated_at: row.updated_at,
+      };
+      const res4 = await client.from('empresas').upsert(rowFallbackBasico, { onConflict: 'id' });
+      if (res4.error) {
+        console.error('Erro ao salvar empresa no Supabase (fallback básico):', res4.error);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error('Exceção ao salvar empresa no Supabase:', e);
+      return false;
     }
-    return true;
   },
 
   /**
@@ -1067,6 +1176,13 @@ export const supabaseService = {
       throw error;
     }
     return true;
+  },
+
+  /**
+   * Alias para salvar membro de empresa
+   */
+  async salvarEmpresaMembro(membro: EmpresaMembro): Promise<boolean> {
+    return this.salvarMembroEmpresa(membro);
   },
 
   /**
@@ -1166,8 +1282,22 @@ export const supabaseService = {
     if (!client) return true;
 
     const row = supabaseMapper.usuarioToDb(usuario, empresaId);
-    const { error } = await client.from('usuarios').upsert(row, { onConflict: 'id' });
+    let { error } = await client.from('usuarios').upsert(row, { onConflict: 'id' });
     if (error) {
+      // Caso a coluna senha_hash não exista na tabela do banco, tenta com fallback sem a coluna
+      if (
+        error.message?.includes('senha_hash') ||
+        error.code === 'PGRST204' ||
+        error.message?.includes('column "senha_hash"')
+      ) {
+        const { senha_hash, ...rowSemHash } = row;
+        const resFallback = await client.from('usuarios').upsert(rowSemHash, { onConflict: 'id' });
+        if (resFallback.error) {
+          console.error('Erro ao salvar Usuário no Supabase (fallback):', resFallback.error);
+          throw resFallback.error;
+        }
+        return true;
+      }
       console.error('Erro ao salvar Usuário no Supabase:', error);
       throw error;
     }
@@ -1627,32 +1757,34 @@ export interface ResultadoCalculoKpi {
 
 /**
  * Função utilitária que aplica rigorosamente as regras de negócio da Política Formal BON-001
- * Métricas: Captação (Consultas), Comparecimento (Procedimentos), Fechamento (Follow-up) e Faturamento (Meta Mensal)
+ * Métricas: Captação (Consultas Realizadas), Comparecimento (Realizadas vs. Agendadas no período), Fechamento (Follow-up) e Faturamento (Meta Mensal)
  */
 export function calcularRegraComissao(params: ParametrosCalculoKpi): ResultadoCalculoKpi {
   const metaFaturamento = params.metaFaturamento || 80000;
-  const consultasRealizadas = Math.max(0, params.consultasRealizadas || 0);
   const totalAgendamentos = Math.max(0, params.totalAgendamentos || 0);
+  const consultasRealizadas = Math.max(0, params.consultasRealizadas || 0);
 
-  // Procedimentos agendados (exclui consultas) e procedimentos realizados (não viraram no-show)
-  const procedimentosAgendados = Math.max(0, params.procedimentosAgendados ?? (totalAgendamentos > consultasRealizadas ? totalAgendamentos - consultasRealizadas : totalAgendamentos));
-  const procedimentosRealizados = Math.max(0, params.procedimentosRealizados ?? procedimentosAgendados);
+  // Procedimentos agendados e realizados
+  const procedimentosAgendados = Math.max(0, params.procedimentosAgendados ?? totalAgendamentos);
+  const procedimentosRealizados = Math.max(0, params.procedimentosRealizados ?? consultasRealizadas);
 
   const leadsPosConsulta = Math.max(0, params.leadsPosConsulta || 0);
   const leadsVendaFeita = Math.max(0, params.leadsVendaFeita || 0);
   const faturamentoRealizado = Math.max(0, params.faturamentoRealizado || 0);
 
-  // 1. KPI 2 & Trava: Taxa de Comparecimento (% de procedimentos agendados que não viram no-show)
-  let taxaComparecimento = procedimentosAgendados > 0
-    ? (procedimentosRealizados / procedimentosAgendados) * 100
-    : (totalAgendamentos > 0 ? (consultasRealizadas / totalAgendamentos) * 100 : 100);
+  // 1. KPI 2 & Trava: Taxa de Comparecimento
+  // Compara fielmente as consultas agendadas, no total, com as que estão com status como realizadas no período:
+  // Taxa (%) = (consultasRealizadas / totalAgendamentos) * 100
+  let taxaComparecimento = totalAgendamentos > 0
+    ? (consultasRealizadas / totalAgendamentos) * 100
+    : 0;
   taxaComparecimento = Number(taxaComparecimento.toFixed(1));
 
   // TRAVA CRÍTICA DE SEGURANÇA: Comparecimento >= 75%
   const travaComparecimentoOk = taxaComparecimento >= 75;
 
-  // 2. BÔNUS 1: CAPTAÇÃO (Volume de consultas realizadas no mês - Exige Comparecimento >= 75%)
-  // 30 consultas: R$ 300 | 40 consultas: R$ 400 | 50+ consultas: R$ 500
+  // 2. BÔNUS 1: CAPTAÇÃO (Volume de consultas com status Realizada no período - Exige Trava de Comparecimento >= 75%)
+  // < 30 consultas: R$ 0 | 30 a 39 consultas: R$ 300 | 40 a 49 consultas: R$ 400 | 50+ consultas: R$ 500
   let bonusCaptacao = 0;
   if (travaComparecimentoOk) {
     if (consultasRealizadas >= 50) {
@@ -1668,8 +1800,8 @@ export function calcularRegraComissao(params: ParametrosCalculoKpi): ResultadoCa
     bonusCaptacao = 0; // Bloqueado pela trava de comparecimento (< 75%)
   }
 
-  // 3. BÔNUS 2: COMPARECIMENTO (% de procedimentos agendados que não viram no-show)
-  // < 75%: Sem bônus | 75% a 85%: R$ 300 | 86% a 95%: R$ 500 | > 95%: R$ 700
+  // 3. BÔNUS 2: COMPARECIMENTO (Taxa % de consultas que compareceram / realizadas vs. total agendadas)
+  // < 75%: Sem bônus (trava ativada) | 75% a 85%: R$ 300 | 86% a 95%: R$ 500 | > 95%: R$ 700
   let bonusComparecimento = 0;
   if (taxaComparecimento > 95) {
     bonusComparecimento = 700;
@@ -1796,109 +1928,67 @@ export async function fetchKpisMesAtual(
 
   if (client) {
     try {
-      // 1. KPI 1 & 2: Agendamentos, Consultas Realizadas e Procedimentos Agendados vs. Comparecidos
-      const { data: agendData, error: errAgend } = await client
-        .from('vw_agendamentos')
-        .select('*')
-        .eq('empresa_id', empUuid);
-
-      if (!errAgend && agendData && agendData.length > 0) {
-        agendData.forEach((item: any) => {
-          const dt = item.data_agendamento || item.created_at || '';
-          const dtIso = dt.slice(0, 10);
-          const dentroMes = dt.startsWith(mesAno);
-          const atendeCorte = !dataInicioCorte || dtIso >= dataInicioCorte;
-
-          if (dentroMes && atendeCorte) {
-            totalAgendamentos++;
-            const st = (item.status_confirmacao_agendamento || item.status_confirmacao || item.status || '').toLowerCase();
-            const servicoTxt = `${item.tipo_servico || ''} ${item.procedimento || ''} ${item.procedimento_interesse || ''} ${item.servico || ''} ${item.tipo || ''}`.toLowerCase();
-            const ehConsulta = servicoTxt.includes('consulta') || servicoTxt.includes('avalia') || servicoTxt.includes('retorno');
-            const compareceu = st.includes('atendido') || st.includes('realizado') || st.includes('concluido') || st.includes('compareceu');
-
-            if (ehConsulta) {
-              if (compareceu) {
-                consultasRealizadas++;
-              }
-            } else {
-              procedimentosAgendados++;
-              if (compareceu || (!st.includes('cancelado') && !st.includes('no-show') && !st.includes('faltou') && !st.includes('falta'))) {
-                procedimentosRealizados++;
-              }
-            }
-          }
-        });
-      } else {
-        // Fallback para tabela leads
-        const { data: leadsData } = await client
-          .from('leads')
-          .select('*')
-          .eq('empresa_id', empUuid);
-
-        if (leadsData) {
-          leadsData.forEach((lead: any) => {
-            const metaAgend = lead.etapa_por_situacao?._agendamento || {};
-            const dtAgend = metaAgend.dataAgendamento || lead.data_agendamento || lead.created_at || '';
-            const dtIso = dtAgend.slice(0, 10);
-            const dentroMes = dtAgend.startsWith(mesAno);
-            const atendeCorte = !dataInicioCorte || dtIso >= dataInicioCorte;
-
-            if (dentroMes && atendeCorte) {
-              totalAgendamentos++;
-              const st = (metaAgend.statusConfirmacaoAgendamento || lead.status_confirmacao_agendamento || '').toLowerCase();
-              const servicoTxt = `${metaAgend.procedimento || ''} ${lead.procedimento_interesse || ''} ${lead.procedimento || ''}`.toLowerCase();
-              const ehConsulta = servicoTxt.includes('consulta') || servicoTxt.includes('avalia') || servicoTxt.includes('retorno') || lead.situacao === 'Em captação';
-              const compareceu = st.includes('atendido') || st.includes('realizado') || lead.situacao === 'Pós consulta' || lead.situacao === 'Pós procedimento';
-
-              if (ehConsulta) {
-                if (compareceu) {
-                  consultasRealizadas++;
-                }
-              } else {
-                procedimentosAgendados++;
-                if (compareceu || (!st.includes('cancelado') && !st.includes('no-show') && !st.includes('faltou'))) {
-                  procedimentosRealizados++;
-                }
-              }
-            }
-          });
-        }
-      }
-
-      // 2. KPI 3: Fechamento (Follow-up Pós-Consulta)
-      const { data: leadsFech } = await client
+      // 1. KPI 1 & 2: Consultas Agendadas vs. Consultas Realizadas
+      const { data: leadsData } = await client
         .from('leads')
         .select('*')
-        .eq('empresa_id', empUuid);
+        .eq('empresa_id', empUuid)
+        .is('deleted_at', null);
 
-      if (leadsFech) {
-        leadsFech.forEach((lead: any) => {
-          const dtLead = lead.updated_at || lead.created_at || '';
-          const dtIso = dtLead.slice(0, 10);
+      if (leadsData && leadsData.length > 0) {
+        leadsData.forEach((lead: any) => {
+          const metaAgend = lead.etapa_por_situacao?._agendamento || {};
+          const dtAgend = lead.data_agendamento || metaAgend.dataAgendamento || lead.data_entrada || lead.created_at || '';
+          const dtIso = dtAgend.slice(0, 10);
+          const dentroMes = dtIso.startsWith(mesAno);
           const atendeCorte = !dataInicioCorte || dtIso >= dataInicioCorte;
 
-          if (atendeCorte) {
+          const ehConsulta = lead.situacao === 'Consulta agendada' || Boolean(lead.data_agendamento) || Boolean(metaAgend.dataAgendamento);
+
+          if (ehConsulta && dentroMes && atendeCorte) {
+            totalAgendamentos++;
+            const stConf = (lead.status_confirmacao_agendamento || metaAgend.statusConfirmacaoAgendamento || '').toLowerCase().trim();
+            const ehRealizada = stConf === 'realizada' || stConf === 'atendida' || stConf === 'concluida' || lead.situacao === 'Pós consulta' || lead.situacao === 'Pós procedimento';
+
+            if (ehRealizada) {
+              consultasRealizadas++;
+            }
+          }
+
+          if (lead.situacao === 'Procedimento agendado' && dentroMes && atendeCorte) {
+            procedimentosAgendados++;
+            const stConfProc = (lead.status_confirmacao_agendamento || '').toLowerCase().trim();
+            if (stConfProc === 'realizada' || lead.situacao === 'Pós procedimento') {
+              procedimentosRealizados++;
+            }
+          }
+
+          // KPI 3: Fechamento (Follow-up Pós-Consulta)
+          const dtLead = lead.updated_at || lead.created_at || '';
+          const dtLeadIso = dtLead.slice(0, 10);
+          if (!dataInicioCorte || dtLeadIso >= dataInicioCorte) {
             if (lead.situacao === 'Pós consulta' || lead.situacao === 'Pós procedimento' || lead.status_venda === 'Venda feita') {
               leadsPosConsulta++;
             }
-            if (lead.status_venda === 'Venda feita' || lead.situacao === 'Pós procedimento') {
+            if (lead.status_venda === 'Venda feita') {
               leadsVendaFeita++;
             }
           }
         });
       }
 
-      // 3. KPI 4: Faturamento Mensal
+      // 2. KPI 4: Faturamento Mensal
       const { data: comprasData } = await client
         .from('historico_compras')
         .select('*')
-        .eq('empresa_id', empUuid);
+        .eq('empresa_id', empUuid)
+        .is('deleted_at', null);
 
       if (comprasData && comprasData.length > 0) {
         comprasData.forEach((c: any) => {
           const dt = c.data || c.created_at || '';
           const dtIso = dt.slice(0, 10);
-          const dentroMes = dt.startsWith(mesAno);
+          const dentroMes = dtIso.startsWith(mesAno);
           const atendeCorte = !dataInicioCorte || dtIso >= dataInicioCorte;
 
           if (dentroMes && atendeCorte) {
@@ -1906,17 +1996,17 @@ export async function fetchKpisMesAtual(
           }
         });
       } else {
-        // Fallback tabela 'compras'
         const { data: cAlt } = await client
           .from('compras')
           .select('*')
-          .eq('empresa_id', empUuid);
+          .eq('empresa_id', empUuid)
+          .is('deleted_at', null);
 
         if (cAlt) {
           cAlt.forEach((c: any) => {
             const dt = c.data || c.created_at || '';
             const dtIso = dt.slice(0, 10);
-            const dentroMes = dt.startsWith(mesAno);
+            const dentroMes = dtIso.startsWith(mesAno);
             const atendeCorte = !dataInicioCorte || dtIso >= dataInicioCorte;
 
             if (dentroMes && atendeCorte) {
@@ -1926,14 +2016,14 @@ export async function fetchKpisMesAtual(
         }
       }
     } catch (e) {
-      console.warn('Erro ao consultar KPIs em tempo real no Supabase, usando valores estimados:', e);
+      console.warn('Erro ao consultar KPIs em tempo real no Supabase:', e);
     }
   }
 
-  // Integração com dados locais do CRM quando fornecidos
+  // Integração com dados locais do CRM quando fornecidos (garante fidelidade imediata a qualquer edição em tela)
   if (opcoes?.leadsLocais && opcoes.leadsLocais.length > 0) {
-    let localConsultas = 0;
-    let localTotalAgend = 0;
+    let localConsultasRealizadas = 0;
+    let localTotalAgendadas = 0;
     let localProcAgend = 0;
     let localProcRealizados = 0;
     let localPosConsulta = 0;
@@ -1941,47 +2031,53 @@ export async function fetchKpisMesAtual(
 
     opcoes.leadsLocais.forEach((lead) => {
       if (lead.deleted_at) return;
-      const dt = lead.dataAgendamento || (lead.etapaPorSituacao as any)?._agendamento?.dataAgendamento || lead.created_at || '';
-      const dtIso = dt.slice(0, 10);
-      const dentroMes = dt.startsWith(mesAno);
+
+      const dtAgend = lead.dataAgendamento || (lead.etapaPorSituacao as any)?._agendamento?.dataAgendamento || lead.dataEntrada || lead.created_at || '';
+      const dtIso = dtAgend.slice(0, 10);
+      const dentroMes = dtIso.startsWith(mesAno);
       const atendeCorte = !dataInicioCorte || dtIso >= dataInicioCorte;
 
-      if (dentroMes && atendeCorte) {
-        localTotalAgend++;
-        const servicoTxt = `${lead.procedimentoInteresse || ''} ${(lead.etapaPorSituacao as any)?._agendamento?.procedimento || ''}`.toLowerCase();
-        const ehConsulta = servicoTxt.includes('consulta') || servicoTxt.includes('avalia') || servicoTxt.includes('retorno') || lead.situacao === 'Consulta agendada';
-        const compareceu = lead.situacao === 'Pós consulta' || lead.situacao === 'Pós procedimento' || lead.statusVenda === 'Venda feita';
+      // Status na página de Consultas (ConsultasAgendadasView com tipo="consulta")
+      const temAgendamentoConsulta = lead.situacao === 'Consulta agendada' || (Boolean(lead.dataAgendamento) && lead.situacao !== 'Procedimento agendado');
 
-        if (ehConsulta) {
-          if (compareceu) localConsultas++;
-        } else {
-          localProcAgend++;
-          if (compareceu || lead.situacao === 'Procedimento agendado') {
-            localProcRealizados++;
-          }
+      if (temAgendamentoConsulta && dentroMes && atendeCorte) {
+        localTotalAgendadas++;
+
+        const statusConf = (lead.statusConfirmacaoAgendamento || (lead.etapaPorSituacao as any)?._agendamento?.statusConfirmacaoAgendamento || '').toLowerCase().trim();
+        const statusRealizada = statusConf === 'realizada' || statusConf === 'atendida' || statusConf === 'concluida' || lead.situacao === 'Pós consulta' || lead.situacao === 'Pós procedimento';
+
+        if (statusRealizada) {
+          localConsultasRealizadas++;
         }
       }
 
+      if (lead.situacao === 'Procedimento agendado' && dentroMes && atendeCorte) {
+        localProcAgend++;
+        const stConfProc = (lead.statusConfirmacaoAgendamento || '').toLowerCase().trim();
+        if (stConfProc === 'realizada' || lead.situacao === 'Pós procedimento') {
+          localProcRealizados++;
+        }
+      }
+
+      // KPI 3: Fechamento (Follow-up Pós-Consulta)
       const dtLead = lead.updated_at || lead.created_at || '';
       const dtLeadIso = dtLead.slice(0, 10);
       if (!dataInicioCorte || dtLeadIso >= dataInicioCorte) {
         if (lead.situacao === 'Pós consulta' || lead.situacao === 'Pós procedimento' || lead.statusVenda === 'Venda feita') {
           localPosConsulta++;
         }
-        if (lead.statusVenda === 'Venda feita' || lead.situacao === 'Pós procedimento') {
+        if (lead.statusVenda === 'Venda feita') {
           localVendaFeita++;
         }
       }
     });
 
-    if (localTotalAgend > 0 || localPosConsulta > 0) {
-      consultasRealizadas = Math.max(consultasRealizadas, localConsultas);
-      totalAgendamentos = Math.max(totalAgendamentos, localTotalAgend);
-      procedimentosAgendados = Math.max(procedimentosAgendados, localProcAgend);
-      procedimentosRealizados = Math.max(procedimentosRealizados, localProcRealizados);
-      leadsPosConsulta = Math.max(leadsPosConsulta, localPosConsulta);
-      leadsVendaFeita = Math.max(leadsVendaFeita, localVendaFeita);
-    }
+    consultasRealizadas = localConsultasRealizadas;
+    totalAgendamentos = localTotalAgendadas;
+    procedimentosAgendados = localProcAgend;
+    procedimentosRealizados = localProcRealizados;
+    leadsPosConsulta = localPosConsulta;
+    leadsVendaFeita = localVendaFeita;
   }
 
   if (opcoes?.comprasLocais && opcoes.comprasLocais.length > 0) {
@@ -1990,28 +2086,14 @@ export async function fetchKpisMesAtual(
       if (c.deleted_at) return;
       const dt = c.data || c.created_at || '';
       const dtIso = dt.slice(0, 10);
-      const dentroMes = dt.startsWith(mesAno);
+      const dentroMes = dtIso.startsWith(mesAno);
       const atendeCorte = !dataInicioCorte || dtIso >= dataInicioCorte;
 
       if (dentroMes && atendeCorte) {
         localFat += Number(c.valor || c.valorTotal || 0);
       }
     });
-    if (localFat > 0) {
-      faturamentoRealizado = Math.max(faturamentoRealizado, localFat);
-    }
-  }
-
-  // Se nenhum dado for retornado no Supabase ou localmente no mês selecionado, providenciar dados base demonstrativos calibrados ao período
-  if (totalAgendamentos === 0 && faturamentoRealizado === 0) {
-    const fatorTempo = diasConsiderados / totalDiasMes;
-    consultasRealizadas = Math.round(42 * fatorTempo);
-    totalAgendamentos = Math.round(68 * fatorTempo);
-    procedimentosAgendados = Math.round(34 * fatorTempo);
-    procedimentosRealizados = Math.round(31 * fatorTempo);
-    leadsPosConsulta = Math.round(36 * fatorTempo);
-    leadsVendaFeita = Math.round(18 * fatorTempo);
-    faturamentoRealizado = Math.round(84000 * fatorTempo);
+    faturamentoRealizado = localFat;
   }
 
   const resultado = calcularRegraComissao({
@@ -2287,6 +2369,11 @@ export async function salvarSnapshotKpi(
       console.warn('Erro ao salvar snapshot em kpis_secretaria_mensal no Supabase:', e);
     }
   }
+
+  // Espelhamento resiliente no Firestore
+  try {
+    await firestoreService.salvarSnapshotKpi(payload);
+  } catch (e) {}
 
   try {
     const key = `${STORAGE_KEY_KPIS_HISTORICO}_${empUuid}`;

@@ -167,6 +167,20 @@
         "deleted_at": { "type": "string" },
         "version": { "type": "number" }
       }
+    },
+    "KpiSecretariaMensal": {
+      "collection": "kpis_secretaria_mensal",
+      "fields": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "mesAno": { "type": "string" },
+        "taxaConversao": { "type": "number" },
+        "totalAgendados": { "type": "number" },
+        "totalRealizados": { "type": "number" },
+        "totalNovosLeads": { "type": "number" },
+        "totalFaturamento": { "type": "number" },
+        "updated_at": { "type": "string" }
+      }
     }
   }
 }

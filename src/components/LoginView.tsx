@@ -30,12 +30,11 @@ export const LoginView: React.FC = () => {
     limparErro();
 
     try {
-      // Tenta efetuar o login com Supabase Auth / credenciais
+      // Tenta efetuar o login com credenciais
       const fnLogin = login || loginComEmailSenha;
-      await fnLogin(loginInput, senhaInput);
+      await fnLogin(loginInput.trim(), senhaInput);
     } catch (err: any) {
       console.error('Falha de autenticação no login:', err);
-      // O erro foi capturado, registrado em erroAuth e a navegação foi impedida
     }
   };
 
@@ -44,17 +43,17 @@ export const LoginView: React.FC = () => {
       id="tela-login-crm"
       className="min-h-screen bg-[#F8F9FA] flex flex-col justify-center items-center p-4 sm:p-6 text-[#1A1A1A] relative font-sans"
     >
-      <div className="w-full max-w-lg relative z-10 space-y-5 animate-in fade-in duration-200">
+      <div className="w-full max-w-md relative z-10 space-y-4 animate-in fade-in duration-200">
         {/* Cabeçalho Neutro do Sistema */}
-        <div className="text-center space-y-3">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-[#E2E8F0] text-[#0F172A] text-xs font-semibold tracking-wide shadow-2xs">
+        <div className="text-center space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-[#E2E8F0] text-[#0F172A] text-xs font-semibold tracking-wide shadow-2xs">
             <ShieldCheck className="w-4 h-4 text-[#0F172A]" />
             <span className="uppercase text-[11px] tracking-wider font-bold">Acesso ao Sistema • CRM</span>
           </div>
 
-          <div className="flex flex-col items-center justify-center gap-2 pt-1">
-            <div className="w-14 h-14 rounded-xl bg-[#0F172A] text-white flex items-center justify-center shadow-md">
-              <Building2 className="w-7 h-7 text-white" />
+          <div className="flex flex-col items-center justify-center gap-1.5 pt-1">
+            <div className="w-12 h-12 rounded-xl bg-[#0F172A] text-white flex items-center justify-center shadow-md">
+              <Building2 className="w-6 h-6 text-white" />
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#0F172A] uppercase">
@@ -67,52 +66,51 @@ export const LoginView: React.FC = () => {
           </div>
         </div>
 
-        {/* Linha Divisória Neutra */}
-        <div className="h-[2px] w-12 mx-auto bg-[#0F172A]/20 rounded-full" />
-
         {/* Card Principal de Autenticação */}
         <div className="bg-white text-[#0F172A] rounded-xl shadow-sm border border-[#E2E8F0] overflow-hidden">
-          <div className="p-5 sm:p-7 space-y-5">
+          <div className="p-5 sm:p-6 space-y-4">
             <div className="space-y-1">
               <h2 className="text-sm font-bold text-[#0F172A] uppercase tracking-wide flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-[#0F172A]" />
                 <span>Identificação de Usuário</span>
               </h2>
               <p className="text-xs text-[#64748B] leading-relaxed">
-                Informe seu e-mail e senha cadastrados para acessar seu painel personalizado.
+                Informe seu e-mail e senha para acessar o painel do sistema.
               </p>
             </div>
 
-            {/* Mensagem de Erro de Autenticação */}
+            {/* Mensagem de Erro de Autenticação Segura */}
             {erroAuth && (
               <div
                 id="alerta-erro-auth"
-                className="p-3.5 rounded-lg bg-rose-50 border-l-4 border-rose-600 text-rose-900 text-xs font-medium flex items-start gap-2.5 shadow-2xs animate-in fade-in"
+                className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-900 text-xs font-medium space-y-1 shadow-2xs animate-in fade-in"
               >
-                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                <div className="space-y-1 leading-snug">
-                  <span className="font-semibold text-rose-950">{erroAuth}</span>
-                  <div className="text-[11px] text-rose-700 pt-0.5">
-                    Verifique se os dados digitados estão corretos.
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5 leading-snug">
+                    <span className="font-semibold text-rose-950">Falha na Autenticação</span>
+                    <div className="text-[11px] text-rose-700">
+                      {erroAuth || 'Credenciais inválidas. Verifique seu e-mail e senha e tente novamente.'}
+                    </div>
                   </div>
                 </div>
               </div>
             )}
 
             {/* Formulário de Login */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1.5">
+            <form onSubmit={handleSubmit} className="space-y-3.5">
+              <div className="space-y-1">
                 <label
                   htmlFor="input-login"
-                  className="text-xs font-bold text-[#0F172A] uppercase tracking-wider flex items-center justify-between"
+                  className="text-xs font-bold text-[#0F172A] uppercase tracking-wider block"
                 >
-                  <span>E-mail / Usuário:</span>
+                  E-mail:
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-[#94A3B8] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     id="input-login"
-                    type="text"
+                    type="email"
                     required
                     autoComplete="username"
                     value={loginInput}
@@ -120,21 +118,19 @@ export const LoginView: React.FC = () => {
                       setLoginInput(e.target.value);
                       if (erroAuth) limparErro();
                     }}
-                    placeholder="Digite seu e-mail ou login..."
-                    className="w-full h-11 pl-10 pr-3.5 text-xs sm:text-sm rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] text-[#0F172A] focus:bg-white focus:border-[#0F172A] focus:outline-hidden transition-all placeholder:text-[#94A3B8]"
+                    placeholder="seu.email@clinica.com.br"
+                    className="w-full h-10 pl-10 pr-3.5 text-xs sm:text-sm rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] text-[#0F172A] focus:bg-white focus:border-[#0F172A] focus:outline-hidden transition-all placeholder:text-[#94A3B8]"
                   />
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label
-                    htmlFor="input-senha"
-                    className="text-xs font-bold text-[#0F172A] uppercase tracking-wider"
-                  >
-                    Senha:
-                  </label>
-                </div>
+              <div className="space-y-1">
+                <label
+                  htmlFor="input-senha"
+                  className="text-xs font-bold text-[#0F172A] uppercase tracking-wider block"
+                >
+                  Senha:
+                </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-[#94A3B8] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
@@ -148,7 +144,7 @@ export const LoginView: React.FC = () => {
                       if (erroAuth) limparErro();
                     }}
                     placeholder="••••••••"
-                    className="w-full h-11 pl-10 pr-10 text-xs sm:text-sm rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] text-[#0F172A] focus:bg-white focus:border-[#0F172A] focus:outline-hidden transition-all placeholder:text-[#94A3B8]"
+                    className="w-full h-10 pl-10 pr-10 text-xs sm:text-sm rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] text-[#0F172A] focus:bg-white focus:border-[#0F172A] focus:outline-hidden transition-all placeholder:text-[#94A3B8]"
                   />
                   <button
                     type="button"
@@ -170,7 +166,7 @@ export const LoginView: React.FC = () => {
                 id="btn-submeter-login"
                 type="submit"
                 disabled={isLoading || !loginInput.trim() || !senhaInput}
-                className="w-full h-11 mt-3 rounded-lg bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
+                className="w-full h-10 mt-2 rounded-lg bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
               >
                 {isLoading ? (
                   <>
@@ -188,9 +184,10 @@ export const LoginView: React.FC = () => {
           </div>
 
           {/* Rodapé do Card */}
-          <div className="bg-[#F8FAFC] border-t border-[#E2E8F0] px-6 py-2.5 flex items-center justify-between text-[11px] text-[#64748B]">
-            <span className="font-medium text-[#0F172A]">
-              Sistema de Gestão & CRM Integrado
+          <div className="bg-[#F8FAFC] border-t border-[#E2E8F0] px-5 py-2.5 flex items-center justify-between text-[11px] text-[#64748B]">
+            <span className="font-medium text-[#0F172A] flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#0F172A]" />
+              <span>Ambiente Seguro & Criptografado</span>
             </span>
             <span className="font-semibold text-[#0F172A]">v2.5</span>
           </div>
@@ -198,7 +195,7 @@ export const LoginView: React.FC = () => {
 
         {/* Rodapé Institucional */}
         <div className="text-center text-[11px] text-[#64748B] leading-relaxed">
-          Plataforma de Gestão de Pacientes • Controle de Acessos & Módulos
+          Plataforma de Gestão Integrada • Controle de Acessos & Módulos
         </div>
       </div>
     </div>

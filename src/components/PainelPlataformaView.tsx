@@ -209,6 +209,33 @@ export const PainelPlataformaView: React.FC = () => {
     };
   }, [empresas, todosLeads, todasCompras, usuarios]);
 
+  // Se o usuário não for o Gestor Master da plataforma, bloqueia estritamente o acesso
+  if (!isPlataformaAdmin) {
+    return (
+      <div id="painel-plataforma-view" className="p-6 sm:p-10 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-200">
+        <div className="p-8 bg-white border border-[#D9D6D0] rounded-sm shadow-2xs text-center space-y-4">
+          <div className="w-14 h-14 bg-amber-50 text-amber-800 rounded-full flex items-center justify-center mx-auto border border-amber-200 shadow-2xs">
+            <Crown className="w-7 h-7" />
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="text-lg sm:text-xl font-bold text-[#1A1A1A] uppercase tracking-wide">
+              Acesso Exclusivo do Gestor Master
+            </h2>
+            <p className="text-xs sm:text-sm text-[#6E6E6E] max-w-lg mx-auto leading-relaxed">
+              As funções de visualizar, editar dados cadastrais, alternar espaços ou desligar/suspender o acesso de clínicas são privativas e estritamente cabíveis ao Gestor Master da plataforma.
+            </p>
+          </div>
+          <div className="pt-3">
+            <span className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-[#F8F7F4] border border-[#D9D6D0] rounded-full text-xs font-semibold text-[#1A1A1A]">
+              <Shield className="w-4 h-4 text-amber-700" />
+              Controle Centralizado e Isolamento Multi-Tenant
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div id="painel-plataforma-view" className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       {/* Cabeçalho do Painel */}
@@ -294,7 +321,7 @@ export const PainelPlataformaView: React.FC = () => {
             <span className="text-[11px] font-bold uppercase tracking-wider">Super Admins</span>
             <Shield className="w-4 h-4 text-indigo-700" />
           </div>
-          <p className="text-2xl font-black text-[#1A1A1A]">{plataformaAdmins.length + 2}</p>
+          <p className="text-2xl font-black text-[#1A1A1A]">{plataformaAdmins.length}</p>
           <p className="text-[10px] text-[#6E6E6E]">Gestores com controle master irrestrito</p>
         </div>
       </div>
@@ -321,7 +348,7 @@ export const PainelPlataformaView: React.FC = () => {
               : 'border-transparent text-[#6E6E6E] hover:text-[#1A1A1A]'
           }`}
         >
-          Super Administradores ({plataformaAdmins.length + 2})
+          Super Administradores ({plataformaAdmins.length})
         </button>
       </div>
 
@@ -493,11 +520,12 @@ export const PainelPlataformaView: React.FC = () => {
 
                           <td className="py-3.5 px-4 text-right">
                             <div className="inline-flex items-center gap-1.5">
-                              {/* Botão Entrar / Alternar Espaço */}
+                              {/* Botão Entrar / Alternar Espaço (Privativo do Gestor Master) */}
                               <button
+                                id={`btn-acessar-clinica-${emp.id}`}
                                 type="button"
                                 onClick={() => definirEmpresaAtivaId(emp.id)}
-                                title="Abrir e gerenciar esta clínica"
+                                title="Acesso do Gestor Master: Abrir e gerenciar esta clínica"
                                 className={`px-2.5 py-1 rounded-sm text-[11px] font-bold transition-colors cursor-pointer ${
                                   isAtivaAtual
                                     ? 'bg-amber-600 text-white hover:bg-amber-700'
@@ -507,31 +535,34 @@ export const PainelPlataformaView: React.FC = () => {
                                 {isAtivaAtual ? 'Ativa' : 'Acessar'}
                               </button>
 
-                              {/* Editar */}
+                              {/* Editar (Privativo do Gestor Master) */}
                               <button
+                                id={`btn-editar-clinica-${emp.id}`}
                                 type="button"
                                 onClick={() => abrirModalEditar(emp)}
-                                title="Editar dados da clínica"
+                                title="Acesso do Gestor Master: Editar dados da clínica"
                                 className="p-1.5 rounded-sm border border-[#D9D6D0] hover:bg-[#F2EFEA] text-[#1A1A1A] transition-colors cursor-pointer"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
 
-                              {/* Suspender / Reativar */}
+                              {/* Suspender / Desligar / Reativar (Privativo do Gestor Master) */}
                               {emp.status === 'suspensa' ? (
                                 <button
+                                  id={`btn-reativar-clinica-${emp.id}`}
                                   type="button"
                                   onClick={() => reativarEmpresa(emp.id)}
-                                  title="Reativar acesso da clínica"
+                                  title="Acesso do Gestor Master: Reativar acesso da clínica"
                                   className="p-1.5 rounded-sm bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 text-emerald-800 transition-colors cursor-pointer"
                                 >
                                   <Power className="w-3.5 h-3.5" />
                                 </button>
                               ) : (
                                 <button
+                                  id={`btn-desligar-clinica-${emp.id}`}
                                   type="button"
                                   onClick={() => suspenderEmpresa(emp.id)}
-                                  title="Suspender acesso desta clínica"
+                                  title="Acesso do Gestor Master: Desligar/Suspender acesso desta clínica"
                                   className="p-1.5 rounded-sm border border-rose-200 hover:bg-rose-50 text-rose-700 transition-colors cursor-pointer"
                                 >
                                   <PowerOff className="w-3.5 h-3.5" />
@@ -575,63 +606,47 @@ export const PainelPlataformaView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#D9D6D0]/60">
-                {/* Master principal */}
-                <tr className="bg-[#F8F7F4]/30">
-                  <td className="py-3 px-4 font-bold text-[#1A1A1A] flex items-center gap-2">
-                    <Crown className="w-3.5 h-3.5 text-amber-600" />
-                    Cadu Canes
-                  </td>
-                  <td className="py-3 px-4 font-mono text-[11px] text-[#6E6E6E]">caducanes@gmail.com</td>
-                  <td className="py-3 px-4">
-                    <span className="px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-amber-100 text-amber-900">
-                      Master Plataforma
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-right text-[10px] text-[#6E6E6E] font-medium italic">
-                    Protegido
-                  </td>
-                </tr>
-
-                <tr className="bg-[#F8F7F4]/30">
-                  <td className="py-3 px-4 font-bold text-[#1A1A1A] flex items-center gap-2">
-                    <Crown className="w-3.5 h-3.5 text-amber-600" />
-                    Dra. Agda Rodrigues
-                  </td>
-                  <td className="py-3 px-4 font-mono text-[11px] text-[#6E6E6E]">gestao@agdarodrigues.med.br</td>
-                  <td className="py-3 px-4">
-                    <span className="px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-amber-100 text-amber-900">
-                      Master Plataforma
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-right text-[10px] text-[#6E6E6E] font-medium italic">
-                    Protegido
-                  </td>
-                </tr>
-
-                {plataformaAdmins.map((adm) => (
-                  <tr key={adm.id} className="hover:bg-[#F8F7F4]/50">
-                    <td className="py-3 px-4 font-bold text-[#1A1A1A] flex items-center gap-2">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
-                      {adm.nome || 'Administrador'}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-[11px] text-[#6E6E6E]">{adm.email}</td>
-                    <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-100 text-emerald-900">
-                        Admin Adicionado
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => removerAdminPlataforma(adm.userId)}
-                        className="p-1 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-sm transition-colors cursor-pointer"
-                        title="Remover privilégios de Super Admin"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {plataformaAdmins.map((adm) => {
+                  const isMaster = adm.email.toLowerCase() === 'caducanes@gmail.com' || adm.userId === 'user-cadu';
+                  return (
+                    <tr key={adm.id} className="hover:bg-[#F8F7F4]/50">
+                      <td className="py-3 px-4 font-bold text-[#1A1A1A] flex items-center gap-2">
+                        {isMaster ? (
+                          <Crown className="w-3.5 h-3.5 text-amber-600" />
+                        ) : (
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
+                        )}
+                        {adm.nome || 'Administrador'}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-[11px] text-[#6E6E6E]">{adm.email}</td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[9.5px] font-bold ${
+                            isMaster
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                              : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                          }`}
+                        >
+                          {isMaster ? 'Master Geral' : 'Admin Plataforma'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        {isMaster ? (
+                          <span className="text-[10px] text-[#6E6E6E] font-medium italic">Protegido</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => removerAdminPlataforma(adm.userId)}
+                            className="p-1 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-sm transition-colors cursor-pointer"
+                            title="Remover privilégios de Super Admin"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   UserPlus,
   Flame,
+  Handshake,
   CalendarClock,
   CalendarCheck,
   CalendarDays,
@@ -55,6 +56,12 @@ export const navigationItems: {
         label: 'Em captação',
         description: 'Novos contatos e primeiros retornos',
         icon: Flame,
+      },
+      {
+        id: 'em_negociacao',
+        label: 'Em negociação',
+        description: 'Negociações em andamento e propostas',
+        icon: Handshake,
       },
       {
         id: 'consulta_agendada',
@@ -136,6 +143,14 @@ export const navigationItems: {
         icon: SlidersHorizontal,
         restritoGestor: true,
         badge: 'Gestor',
+      },
+      {
+        id: 'painel_plataforma',
+        label: 'Painel da plataforma',
+        description: 'Gestão multi-clínicas, empresas e administradores globais',
+        icon: Building2,
+        restritoGestor: true,
+        badge: 'Multi-Clínicas',
       },
     ],
   },
@@ -242,10 +257,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* NAVEGAÇÃO PRINCIPAL (COMPACTA, SEM SCROLL) */}
+        {/* NAVEGAÇÃO PRINCIPAL (RESPONSIVA E ROLÁVEL SE NECESSÁRIO) */}
         <div
           id="sidebar-nav-container"
-          className="flex-1 flex flex-col justify-start overflow-hidden px-2.5 py-2.5 space-y-2.5"
+          className="flex-1 flex flex-col justify-start overflow-y-auto overflow-x-hidden px-2.5 py-2 space-y-2"
         >
           {navigationItems.map((group, groupIdx) => {
             const itensVisiveis = group.items.filter((item) => {

@@ -22,6 +22,7 @@ import { FunilConversaoView } from './components/FunilConversaoView';
 import { KpiSecretariaView } from './components/KpiSecretariaView';
 import { ControleAcessosView } from './components/ControleAcessosView';
 import { ConfiguracoesEmpresaView } from './components/ConfiguracoesEmpresaView';
+import { PainelPlataformaView } from './components/PainelPlataformaView';
 import { FichaLeadModal } from './components/FichaLeadModal';
 
 // Helper to look up active item meta
@@ -93,6 +94,15 @@ export default function App() {
           />
         );
 
+      case 'em_negociacao':
+        return (
+          <CadenciaView
+            situacao="Em negociação"
+            titulo="Em negociação"
+            subtitulo="Acompanhamento da cadência de orçamentos, propostas e negociações em andamento"
+          />
+        );
+
       case 'consulta_agendada':
         return <ConsultasAgendadasView tipo="consulta" />;
 
@@ -147,6 +157,9 @@ export default function App() {
       case 'configuracoes':
         return <ConfiguracoesEmpresaView />;
 
+      case 'painel_plataforma':
+        return <PainelPlataformaView />;
+
       default:
         return (
           <PlaceholderView
@@ -175,6 +188,7 @@ export default function App() {
           activeDescription={activeMeta.description}
           onOpenMobileSidebar={() => setIsOpenMobile(true)}
           isQuickRegistration={activeSection === 'cadastro_rapido'}
+          onNavigateToSection={(id) => setActiveSection(id)}
         />
 
         <main id="main-content-scroll" className="flex-1 overflow-y-auto bg-[#F8F7F4]/40">

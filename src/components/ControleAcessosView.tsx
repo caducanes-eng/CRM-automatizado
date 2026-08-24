@@ -28,8 +28,11 @@ import {
   HelpCircle,
   ChevronRight,
   UserCheck,
+  Building2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useEmpresa } from '../context/EmpresaContext';
+import { ID_EMPRESA_PADRAO } from '../data/seedData';
 import {
   UsuarioColaborador,
   NivelAcesso,
@@ -56,6 +59,15 @@ export const ControleAcessosView: React.FC = () => {
     resetarUsuariosPadrao,
     loginComResponsavel,
   } = useAuth();
+
+  const {
+    empresaAtivaId,
+    empresaAtiva,
+    empresas,
+    definirEmpresaAtivaId,
+    isPlataformaAdmin,
+    config,
+  } = useEmpresa();
 
   // Estados de Filtro & Busca
   const [busca, setBusca] = useState('');
@@ -222,8 +234,9 @@ export const ControleAcessosView: React.FC = () => {
         });
         dispararFeedback(`Colaborador "${formData.nome}" atualizado com sucesso!`);
       } else {
-        // Criação
+        // Criação vinculada estritamente à clínica ativa selecionada
         await criarColaborador({
+          empresaId: empresaAtivaId,
           nome: formData.nome,
           email: formData.email,
           login: loginFinal,
@@ -270,9 +283,22 @@ export const ControleAcessosView: React.FC = () => {
     }
   };
 
-  // Filtragem de Usuários
-  const usuariosFiltrados = useMemo(() => {
+  // Colaboradores Exclusivos da Clínica Ativa
+  const usuariosDaClinica = useMemo(() => {
     return usuarios.filter((u) => {
+      if (u.deleted_at) return false;
+      const empId = u.empresaId || u.empresa_id;
+      if (empId) {
+        return empId === empresaAtivaId;
+      }
+      // Se não possui empresaId (usuários legados/iniciais), pertence à clínica padrão
+      return empresaAtivaId === ID_EMPRESA_PADRAO;
+    });
+  }, [usuarios, empresaAtivaId]);
+
+  // Filtragem de Usuários da Clínica Ativa
+  const usuariosFiltrados = useMemo(() => {
+    return usuariosDaClinica.filter((u) => {
       // Busca
       const termo = busca.toLowerCase().trim();
       const matchBusca =
@@ -293,13 +319,13 @@ export const ControleAcessosView: React.FC = () => {
 
       return matchBusca && matchRole && matchStatus;
     });
-  }, [usuarios, busca, filtroRole, filtroStatus]);
+  }, [usuariosDaClinica, busca, filtroRole, filtroStatus]);
 
-  // Estatísticas Rápidas
-  const totalAtivos = usuarios.filter((u) => u.ativo).length;
-  const totalGestores = usuarios.filter((u) => u.role === 'GESTOR' && u.ativo).length;
-  const totalMedicos = usuarios.filter((u) => u.role === 'MEDICO' && u.ativo).length;
-  const totalRecepcao = usuarios.filter((u) => (u.role === 'RECEPCAO_COMERCIAL' || u.role === 'POS_VENDA') && u.ativo).length;
+  // Estatísticas Rápidas da Equipe desta Clínica
+  const totalAtivos = usuariosDaClinica.filter((u) => u.ativo).length;
+  const totalGestores = usuariosDaClinica.filter((u) => u.role === 'GESTOR' && u.ativo).length;
+  const totalMedicos = usuariosDaClinica.filter((u) => u.role === 'MEDICO' && u.ativo).length;
+  const totalRecepcao = usuariosDaClinica.filter((u) => (u.role === 'RECEPCAO_COMERCIAL' || u.role === 'POS_VENDA') && u.ativo).length;
 
   // ----------------------------------------------------
   // TELA DE RESTRIÇÃO SE NÃO FOR GESTOR
@@ -342,22 +368,65 @@ export const ControleAcessosView: React.FC = () => {
 
       {/* Header Principal do Módulo do Gestor */}
       <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-6">
-        <div className="flex items-center justify-end">
-          <button
-            id="btn-criar-colaborador"
-            type="button"
-            onClick={handleAbrirCriar}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#0B1F3A] hover:bg-[#152e52] text-white font-semibold text-sm rounded-xl shadow-md transition-colors cursor-pointer border border-[#B8960C]/30"
-          >
-            <UserPlus className="w-4 h-4 text-[#B8960C]" />
-            <span>Novo Colaborador</span>
-          </button>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Identificação da Clínica Ativa */}
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm text-white shrink-0 shadow-xs"
+              style={{ backgroundColor: config.estetica?.corPrimaria || '#5C3A22' }}
+            >
+              {empresaAtiva?.monogramaIniciais || config.monogramaIniciais || 'AR'}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-[#0B1F3A]">
+                  Equipe & Acessos — {empresaAtiva?.nome || config.nomeEmpresa}
+                </h2>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200">
+                  Unidade Exclusiva
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Os colaboradores abaixo possuem acesso restrito aos dados e pacientes desta clínica.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {isPlataformaAdmin && empresas.length > 1 && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-slate-500 font-medium hidden md:inline">Clínica:</span>
+                <select
+                  id="select-controle-acessos-empresa-ativa"
+                  value={empresaAtivaId}
+                  onChange={(e) => definirEmpresaAtivaId(e.target.value)}
+                  className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800 font-bold focus:outline-hidden focus:border-[#0B1F3A] cursor-pointer"
+                >
+                  {empresas.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <button
+              id="btn-criar-colaborador"
+              type="button"
+              onClick={handleAbrirCriar}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#0B1F3A] hover:bg-[#152e52] text-white font-semibold text-sm rounded-xl shadow-md transition-colors cursor-pointer border border-[#B8960C]/30"
+            >
+              <UserPlus className="w-4 h-4 text-[#B8960C]" />
+              <span>Novo Colaborador</span>
+            </button>
+          </div>
         </div>
 
-        {/* Métricas e Resumo Rápido */}
+        {/* Métricas e Resumo Rápido da Clínica Ativa */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-100">
           <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100">
-            <p className="text-xs font-medium text-slate-500">Colaboradores Ativos</p>
+            <p className="text-xs font-medium text-slate-500">Colaboradores da Unidade</p>
             <p className="text-xl font-bold text-[#0B1F3A] mt-0.5">{totalAtivos}</p>
           </div>
 
@@ -372,7 +441,7 @@ export const ControleAcessosView: React.FC = () => {
           </div>
 
           <div className="p-3.5 bg-slate-900 text-white rounded-xl border border-slate-800">
-            <p className="text-xs font-medium text-slate-400">Gestores com Acesso Total</p>
+            <p className="text-xs font-medium text-slate-400">Gestores Locais</p>
             <p className="text-xl font-bold text-[#B8960C] mt-0.5">{totalGestores}</p>
           </div>
         </div>
@@ -679,7 +748,7 @@ export const ControleAcessosView: React.FC = () => {
                     id={`btn-redefinir-senha-${user.id}`}
                     type="button"
                     onClick={() => {
-                      setNovaSenhaTemp(`Lumina@${new Date().getFullYear()}`);
+                      setNovaSenhaTemp(user.senhaPadrao || 'Agda@2026');
                       setUsuarioRedefinirSenha(user);
                     }}
                     className="p-1.5 text-slate-600 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
@@ -707,24 +776,46 @@ export const ControleAcessosView: React.FC = () => {
       </div>
 
       {usuariosFiltrados.length === 0 && (
-        <div className="bg-white rounded-2xl p-12 border border-slate-200 text-center space-y-3">
-          <Users className="w-12 h-12 text-slate-300 mx-auto" />
-          <h3 className="text-base font-bold text-[#0B1F3A]">Nenhum colaborador encontrado</h3>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            Não foram encontrados colaboradores com os termos de busca ou filtros selecionados.
-          </p>
-          <button
-            id="btn-limpar-filtros-busca"
-            type="button"
-            onClick={() => {
-              setBusca('');
-              setFiltroRole('TODOS');
-              setFiltroStatus('TODOS');
-            }}
-            className="px-3.5 py-1.5 text-xs font-semibold text-[#0B1F3A] bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer"
-          >
-            Limpar Filtros
-          </button>
+        <div className="bg-white rounded-2xl p-12 border border-slate-200 text-center space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-800 flex items-center justify-center mx-auto border border-amber-200">
+            <Users className="w-7 h-7 text-amber-700" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-base font-bold text-[#0B1F3A]">
+              {usuariosDaClinica.length === 0
+                ? `Nenhum colaborador cadastrado para ${empresaAtiva?.nome || 'esta clínica'}`
+                : 'Nenhum colaborador encontrado com os filtros atuais'}
+            </h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              {usuariosDaClinica.length === 0
+                ? `Esta unidade opera com isolamento total de dados. Clique no botão "+ Novo Colaborador" acima para cadastrar médicas, biomédicas, recepcionistas e gestores exclusivos para esta clínica.`
+                : 'Tente alterar os termos de busca ou remover os filtros de cargo e status.'}
+            </p>
+          </div>
+          {usuariosDaClinica.length === 0 ? (
+            <button
+              id="btn-empty-criar-colaborador"
+              type="button"
+              onClick={handleAbrirCriar}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[#0B1F3A] hover:bg-[#152e52] text-white text-xs font-semibold rounded-xl shadow-xs cursor-pointer border border-[#B8960C]/30"
+            >
+              <UserPlus className="w-4 h-4 text-[#B8960C]" />
+              <span>Cadastrar Primeiro Colaborador Desta Unidade</span>
+            </button>
+          ) : (
+            <button
+              id="btn-limpar-filtros-busca"
+              type="button"
+              onClick={() => {
+                setBusca('');
+                setFiltroRole('TODOS');
+                setFiltroStatus('TODOS');
+              }}
+              className="px-3.5 py-1.5 text-xs font-semibold text-[#0B1F3A] bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer"
+            >
+              Limpar Filtros
+            </button>
+          )}
         </div>
       )}
 

@@ -32,6 +32,9 @@ service cloud.firestore {
     match /configuracoes_sistema/{docId} {
       allow read, write: if true;
     }
+    match /kpis_secretaria_mensal/{kpiId} {
+      allow read, write: if true;
+    }
   }
 }
 

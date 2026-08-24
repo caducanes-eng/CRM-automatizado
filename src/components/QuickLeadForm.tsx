@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { UserPlus, ArrowRight } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
 import { useAuth } from '../context/AuthContext';
+import { useEmpresa } from '../context/EmpresaContext';
+import { ID_EMPRESA_PADRAO } from '../data/seedData';
 import { SituacaoLead, TODAS_SITUACOES, Lead, ProcedimentoClinica } from '../types';
 
 interface QuickLeadFormProps {
@@ -11,22 +13,31 @@ interface QuickLeadFormProps {
 
 export const QuickLeadForm: React.FC<QuickLeadFormProps> = ({ onLeadCreated, onOpenImportExport }) => {
   const { criarLead, responsaveis, procedimentos } = useCrm();
-  const { usuarios } = useAuth();
+  const { usuarios, responsavelAtivo } = useAuth();
+  const { empresaAtivaId } = useEmpresa();
 
-  // Colaboradores cadastrados ativos pelo Gestor
+  // Colaboradores cadastrados ativos exclusivos da clínica ativa
   const colaboradoresAtivos = useMemo(() => {
     if (usuarios && usuarios.length > 0) {
-      return usuarios.filter((u) => !u.deleted_at && u.ativo !== false);
+      return usuarios.filter((u) => {
+        if (u.deleted_at || u.ativo === false) return false;
+        const empId = u.empresaId || u.empresa_id;
+        if (empId) return empId === empresaAtivaId;
+        return empresaAtivaId === ID_EMPRESA_PADRAO;
+      });
     }
     return [];
-  }, [usuarios]);
+  }, [usuarios, empresaAtivaId]);
 
   const listaNomesResponsaveis = useMemo(() => {
     if (colaboradoresAtivos.length > 0) {
       return colaboradoresAtivos.map((u) => u.nome);
     }
+    if (responsavelAtivo?.nome) {
+      return [responsavelAtivo.nome];
+    }
     return responsaveis || [];
-  }, [colaboradoresAtivos, responsaveis]);
+  }, [colaboradoresAtivos, responsavelAtivo, responsaveis]);
 
   const [nome, setNome] = useState('');
   const [situacao, setSituacao] = useState<SituacaoLead>('Em captação');
@@ -34,7 +45,7 @@ export const QuickLeadForm: React.FC<QuickLeadFormProps> = ({ onLeadCreated, onO
   const [isCustomInteresse, setIsCustomInteresse] = useState(false);
   const [possivelValor, setPossivelValor] = useState<string>('');
   const [responsavel, setResponsavel] = useState(
-    colaboradoresAtivos[0]?.nome || responsaveis[0] || 'Gestão Geral'
+    colaboradoresAtivos[0]?.nome || responsavelAtivo?.nome || responsaveis[0] || 'Gestão Geral'
   );
   const [erroNome, setErroNome] = useState(false);
 

@@ -43,7 +43,7 @@ const ETAPAS_FUNIL_METAS: EtapaFunilMeta[] = [
     titulo: '1. Em captação',
     subtitulo: 'Primeiro contato e qualificação do paciente',
     icone: Flame,
-    situacoesAssociadas: ['Em captação'],
+    situacoesAssociadas: ['Em captação', 'Em negociação'],
     corBadge: 'bg-[#F4EFEA] text-[#5C3A22] border-[#D9CBBF]',
     corBorda: 'border-[#5C3A22]',
     corBarra: 'bg-[#5C3A22]',

@@ -37,7 +37,7 @@ import {
   TODOS_STATUS_CONFIRMACAO_AGENDAMENTO,
   StatusVenda,
 } from '../types';
-import { SEED_USUARIOS } from '../data/seedData';
+import { SEED_USUARIOS, ID_EMPRESA_PADRAO } from '../data/seedData';
 import {
   formatarDataBR,
   obterDataHoje,
@@ -75,8 +75,21 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
     responsaveis,
   } = useCrm();
 
-  const { responsavelNome, usuarios } = useAuth();
-  const { config } = useEmpresa();
+  const { responsavelNome, responsavelAtivo, usuarios } = useAuth();
+  const { config, empresaAtivaId } = useEmpresa();
+
+  // Colaboradores cadastrados ativos exclusivos da clínica ativa
+  const colaboradoresClinica = useMemo(() => {
+    if (usuarios && usuarios.length > 0) {
+      return usuarios.filter((u) => {
+        if (u.deleted_at || u.ativo === false) return false;
+        const empId = u.empresaId || u.empresa_id;
+        if (empId) return empId === empresaAtivaId;
+        return empresaAtivaId === ID_EMPRESA_PADRAO;
+      });
+    }
+    return [];
+  }, [usuarios, empresaAtivaId]);
 
   const corPrimaria = config.estetica?.corPrimaria || '#5C3A22';
   const corSecundaria = config.estetica?.corSecundaria || '#8A6142';
@@ -216,10 +229,13 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
     const consultasAmanha = leadsProcessados.filter((l) => l.isAmanha).length;
     const consultasHoje = leadsProcessados.filter((l) => l.isHoje).length;
     const confirmadas = leadsProcessados.filter((l) => l.statusConfirmacao === 'Confirmada').length;
+    const realizadas = leadsProcessados.filter((l) => l.statusConfirmacao === 'Realizada' || l.situacao === 'Pós consulta' || l.situacao === 'Pós procedimento').length;
     const lembretesEnviados = leadsProcessados.filter((l) => l.lembrete24hEnviado).length;
 
     const taxaConfirmacao =
       total > 0 ? Math.round((confirmadas / total) * 100) : 0;
+    const taxaComparecimento =
+      total > 0 ? Number(((realizadas / total) * 100).toFixed(1)) : 0;
 
     return {
       total,
@@ -227,8 +243,10 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
       consultasAmanha,
       consultasHoje,
       confirmadas,
+      realizadas,
       lembretesEnviados,
       taxaConfirmacao,
+      taxaComparecimento,
     };
   }, [leadsProcessados]);
 
@@ -267,7 +285,7 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
           case 'canceladas':
             return lead.statusConfirmacao === 'Cancelada';
           case 'realizadas':
-            return lead.statusConfirmacao === 'Realizada';
+            return lead.statusConfirmacao === 'Realizada' || lead.situacao === 'Pós consulta' || lead.situacao === 'Pós procedimento';
           case 'todos':
           default:
             return true;
@@ -385,10 +403,10 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
     setFormDataAgendamento(amanhaStr);
     setFormHorarioAgendamento('14:00');
     const especialistaPadrao =
-      usuarios?.find((u) => u.role === 'MEDICO' && u.ativo && !u.deleted_at)?.nome ||
-      usuarios?.find((u) => u.ativo && !u.deleted_at)?.nome ||
-      SEED_USUARIOS.find((u) => u.role === 'MEDICO')?.nome ||
-      SEED_USUARIOS[0]?.nome ||
+      colaboradoresClinica.find((u) => u.role === 'MEDICO' && u.ativo)?.nome ||
+      colaboradoresClinica.find((u) => u.ativo)?.nome ||
+      responsavelAtivo?.nome ||
+      (empresaAtivaId === ID_EMPRESA_PADRAO ? SEED_USUARIOS.find((u) => u.role === 'MEDICO')?.nome : '') ||
       '';
     setFormProfissional(especialistaPadrao);
     setFormUnidade('Consultório Principal');
@@ -595,7 +613,7 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
       {/* =========================================================================
           CARDS DE RESUMO & LEMBRETES 24H URGENTES
          ========================================================================= */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Card 1: ⚠️ Lembretes 24h Pendentes Hoje (Alerta Vermelho Destaque) */}
         <button
           id="card-filtro-lembretes-pendentes"
@@ -710,7 +728,32 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
           </p>
         </button>
 
-        {/* Card 5: Total Ativos */}
+        {/* Card 5: Realizadas & Taxa de Comparecimento */}
+        <button
+          id="card-filtro-consultas-realizadas"
+          type="button"
+          onClick={() => setFiltro(filtro === 'realizadas' ? 'todos' : 'realizadas')}
+          className={`p-3.5 rounded-sm border text-left transition-all cursor-pointer ${
+            filtro === 'realizadas'
+              ? 'bg-amber-50 border-amber-800 ring-1 ring-amber-800 shadow-xs'
+              : 'bg-[#5C3A22]/5 border-[#5C3A22]/20 hover:bg-[#5C3A22]/10'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wider">
+              Realizadas
+            </span>
+            <CheckCircle2 className="w-4 h-4 text-amber-800" />
+          </div>
+          <p className="text-2xl font-black text-slate-900 mt-1 font-mono">
+            {metricas.realizadas}
+          </p>
+          <p className="text-[10px] text-amber-900 font-semibold mt-0.5">
+            {metricas.taxaComparecimento}% comparecimento
+          </p>
+        </button>
+
+        {/* Card 6: Total Ativos */}
         <button
           id="card-filtro-todos-agendamentos"
           type="button"
@@ -781,10 +824,10 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
             <option value="amanha">Consultas de Amanhã ({metricas.consultasAmanha})</option>
             <option value="hoje">Consultas de Hoje ({metricas.consultasHoje})</option>
             <option value="confirmadas">Confirmadas ({metricas.confirmadas})</option>
+            <option value="realizadas">Realizadas ({metricas.realizadas}) - {metricas.taxaComparecimento}% Comparecimento</option>
             <option value="proximos_7_dias">Próximos 7 dias</option>
             <option value="remarcadas">Remarcadas</option>
             <option value="canceladas">Canceladas</option>
-            <option value="realizadas">Realizadas</option>
           </select>
         </div>
       </div>
@@ -1220,19 +1263,23 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
                     onChange={(e) => setFormProfissional(e.target.value)}
                     className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer"
                   >
-                    {usuarios && usuarios.length > 0
-                      ? usuarios
-                          .filter((u) => !u.deleted_at && u.ativo !== false)
-                          .map((u) => (
-                            <option key={u.id} value={u.nome}>
-                              {u.nome} {u.cargo ? `— ${u.cargo}` : ''}
-                            </option>
-                          ))
-                      : SEED_USUARIOS.map((u) => (
-                          <option key={u.id} value={u.nome}>
-                            {u.nome} {u.cargo ? `— ${u.cargo}` : ''}
-                          </option>
-                        ))}
+                    {colaboradoresClinica.length > 0 ? (
+                      colaboradoresClinica.map((u) => (
+                        <option key={u.id} value={u.nome}>
+                          {u.nome} {u.cargo ? `— ${u.cargo}` : ''}
+                        </option>
+                      ))
+                    ) : empresaAtivaId === ID_EMPRESA_PADRAO ? (
+                      SEED_USUARIOS.map((u) => (
+                        <option key={u.id} value={u.nome}>
+                          {u.nome} {u.cargo ? `— ${u.cargo}` : ''}
+                        </option>
+                      ))
+                    ) : (
+                      <option value={responsavelAtivo?.nome || 'Gestão Geral'}>
+                        {responsavelAtivo?.nome || 'Gestão Geral'} (Responsável)
+                      </option>
+                    )}
                   </select>
                 </div>
 

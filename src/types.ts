@@ -1,6 +1,7 @@
 export type SectionId =
   | 'cadastro_rapido'
   | 'em_captacao'
+  | 'em_negociacao'
   | 'consulta_agendada'
   | 'pos_consulta'
   | 'procedimento_agendado'
@@ -12,7 +13,8 @@ export type SectionId =
   | 'funil_conversao'
   | 'kpis_comissao'
   | 'controle_acessos'
-  | 'configuracoes';
+  | 'configuracoes'
+  | 'painel_plataforma';
 
 export interface NavigationItem {
   id: SectionId;
@@ -136,6 +138,7 @@ export type NivelAcesso =
 export interface PermissoesUsuario {
   podeCadastrarLeads: boolean;
   podeAcessarEmCaptacao: boolean;
+  podeAcessarEmNegociacao?: boolean;
   podeAcessarConsultaAgendada?: boolean;
   podeAcessarPosConsulta: boolean;
   podeAcessarProcedimentoAgendado?: boolean;
@@ -148,6 +151,7 @@ export interface PermissoesUsuario {
   podeAcessarKpisComissao?: boolean;
   podeAcessarControleAcessos: boolean;
   podeAcessarConfiguracoes: boolean;
+  podeAcessarPainelPlataforma?: boolean;
   podeExcluirRegistros: boolean;
   podeExportarRelatorios: boolean;
   podeVisualizarValores: boolean;
@@ -157,6 +161,7 @@ export interface PermissoesUsuario {
 export const PERMISSOES_PRESET_GESTOR: PermissoesUsuario = {
   podeCadastrarLeads: true,
   podeAcessarEmCaptacao: true,
+  podeAcessarEmNegociacao: true,
   podeAcessarConsultaAgendada: true,
   podeAcessarPosConsulta: true,
   podeAcessarProcedimentoAgendado: true,
@@ -169,6 +174,7 @@ export const PERMISSOES_PRESET_GESTOR: PermissoesUsuario = {
   podeAcessarKpisComissao: true,
   podeAcessarControleAcessos: true,
   podeAcessarConfiguracoes: true,
+  podeAcessarPainelPlataforma: true,
   podeExcluirRegistros: true,
   podeExportarRelatorios: true,
   podeVisualizarValores: true,
@@ -178,6 +184,7 @@ export const PERMISSOES_PRESET_GESTOR: PermissoesUsuario = {
 export const PERMISSOES_PRESET_MEDICO: PermissoesUsuario = {
   podeCadastrarLeads: true,
   podeAcessarEmCaptacao: false,
+  podeAcessarEmNegociacao: false,
   podeAcessarConsultaAgendada: true,
   podeAcessarPosConsulta: true,
   podeAcessarProcedimentoAgendado: true,
@@ -199,6 +206,7 @@ export const PERMISSOES_PRESET_MEDICO: PermissoesUsuario = {
 export const PERMISSOES_PRESET_RECEPCAO: PermissoesUsuario = {
   podeCadastrarLeads: true,
   podeAcessarEmCaptacao: true,
+  podeAcessarEmNegociacao: true,
   podeAcessarConsultaAgendada: true,
   podeAcessarPosConsulta: true,
   podeAcessarProcedimentoAgendado: true,
@@ -220,6 +228,7 @@ export const PERMISSOES_PRESET_RECEPCAO: PermissoesUsuario = {
 export const PERMISSOES_PRESET_POS_VENDA: PermissoesUsuario = {
   podeCadastrarLeads: false,
   podeAcessarEmCaptacao: false,
+  podeAcessarEmNegociacao: true,
   podeAcessarConsultaAgendada: false,
   podeAcessarPosConsulta: true,
   podeAcessarProcedimentoAgendado: true,
@@ -481,6 +490,7 @@ export interface AtualizarUsuarioPayload {
 
 export type SituacaoLead =
   | 'Em captação'
+  | 'Em negociação'
   | 'Consulta agendada'
   | 'Pós consulta'
   | 'Procedimento agendado'
@@ -490,6 +500,7 @@ export type SituacaoLead =
 
 export const TODAS_SITUACOES: SituacaoLead[] = [
   'Em captação',
+  'Em negociação',
   'Consulta agendada',
   'Pós consulta',
   'Procedimento agendado',
