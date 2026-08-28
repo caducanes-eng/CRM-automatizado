@@ -62,11 +62,12 @@ export const CONFIGURACOES_PADRAO_EMPRESA: ConfiguracoesEmpresa = {
 
 export const CONFIGURACOES_PADRAO = CONFIGURACOES_PADRAO_EMPRESA;
 
-function generateId(prefix: string): string {
+function generateId(_prefix?: string): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return `${prefix}-${crypto.randomUUID()}`;
+    return crypto.randomUUID();
   }
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`;
+  const s4 = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+  return `${s4()}${s4()}-${s4()}-4${s4().substr(0, 3)}-${s4()}-${s4()}${s4()}${s4()}`;
 }
 
 interface EmpresaContextType {

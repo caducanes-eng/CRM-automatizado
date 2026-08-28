@@ -23,9 +23,16 @@ export const CADENCIA_POS_PROCEDIMENTO_4_CONTATOS = [
 
 // Cadência de 3 contatos para: Nutrição
 export const CADENCIA_NUTRICAO_3_CONTATOS = [
-  'Fluxo de conteúdo 1 (Cuidados)',
-  'Fluxo de conteúdo 2 (Novidades)',
-  'Convite para evento / Botox Day',
+  'Contato 1 (dia 0)',
+  'Contato 2 (dia 3)',
+  'Contato 3 (dia 6)',
+  'Contato 4 (dia 10)',
+  'Contato 5 (dia 15)',
+  'Contato 6 (dia 21)',
+  'Contato 7 (dia 28)',
+  'Contato 8 (dia 36)',
+  'Contato 9 (dia 45)',
+  'Contato 10 (dia 60)',
 ] as const;
 
 export const ETAPAS_CONCLUIDAS_LABEL = 'Todas as etapas concluídas';
@@ -240,9 +247,16 @@ export function calcularEtapaEsperada(situacao: SituacaoLead, diasCorridos: numb
   }
 
   if (situacao === 'Nutrição') {
-    if (diasCorridos >= 30) return 'Convite para evento / Botox Day';
-    if (diasCorridos >= 15) return 'Fluxo de conteúdo 2 (Novidades)';
-    return 'Fluxo de conteúdo 1 (Cuidados)';
+    if (diasCorridos >= 60) return 'Contato 10 (dia 60)';
+    if (diasCorridos >= 45) return 'Contato 9 (dia 45)';
+    if (diasCorridos >= 36) return 'Contato 8 (dia 36)';
+    if (diasCorridos >= 28) return 'Contato 7 (dia 28)';
+    if (diasCorridos >= 21) return 'Contato 6 (dia 21)';
+    if (diasCorridos >= 15) return 'Contato 5 (dia 15)';
+    if (diasCorridos >= 10) return 'Contato 4 (dia 10)';
+    if (diasCorridos >= 6) return 'Contato 3 (dia 6)';
+    if (diasCorridos >= 3) return 'Contato 2 (dia 3)';
+    return 'Contato 1 (dia 0)';
   }
 
   // "Em captação", "Em negociação", "Pós consulta", "Reativação" (e padrão)
@@ -363,6 +377,11 @@ export function verificarSeDeveContatarHoje(
   if (situacao === 'Pós procedimento') {
     const diasContato = [0, 1, 7, 15, 29];
     return diasContato.includes(diasCorridos);
+  }
+
+  if (situacao === 'Nutrição') {
+    const diasContatoNutricao = [0, 3, 6, 10, 15, 21, 28, 36, 45, 60];
+    return diasContatoNutricao.includes(diasCorridos);
   }
 
   if (

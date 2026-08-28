@@ -32,6 +32,7 @@ import {
   ChevronDown,
   ChevronUp,
   Info,
+  Edit3,
 } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
 import { useEmpresa } from '../context/EmpresaContext';
@@ -50,6 +51,7 @@ import {
   calcularStatusCadencia,
   verificarSeDeveContatarHoje,
   StatusCadencia,
+  obterOpcoesCadenciaPorSituacao,
   obterProximaEtapa,
   avancarProximaEtapa,
   reiniciarCadencia,
@@ -166,6 +168,8 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
 
   // Modal de confirmação de etapa realizada: "Etapa realizada? Concluída ou cancelar"
   const [modalEtapaLead, setModalEtapaLead] = useState<Lead | null>(null);
+  const [abaModalEtapa, setAbaModalEtapa] = useState<'avanco' | 'manual'>('avanco');
+  const [etapaManualSelecionada, setEtapaManualSelecionada] = useState<string>('');
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
   const [copiadoMensagem, setCopiadoMensagem] = useState<boolean>(false);
   const [mostrarGuiaCompleto, setMostrarGuiaCompleto] = useState<boolean>(false);
@@ -187,6 +191,9 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
       lead.situacao === 'Consulta agendada' || lead.situacao === 'Procedimento agendado';
     if (isSemAcompanhamento) return;
     setModalEtapaLead(lead);
+    const etapaAtual = lead.etapaPorSituacao?.[lead.situacao] || obterProximaEtapa(lead.situacao, lead.etapaPorSituacao?.[lead.situacao]);
+    setEtapaManualSelecionada(etapaAtual);
+    setAbaModalEtapa('avanco');
   };
 
   // Concluir etapa da paciente e avançar automaticamente
@@ -203,6 +210,17 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
         ? `Todas as etapas da cadência concluídas para ${leadAtual.nome}!`
         : `Etapa concluída para ${leadAtual.nome}! Próximo passo: ${res.proximaEtapa}`
     );
+    setTimeout(() => setFeedbackToast(null), 3200);
+  };
+
+  // Salvar etapa selecionada manualmente pelo usuário
+  const handleSalvarEtapaManualLead = async () => {
+    if (!modalEtapaLead || !etapaManualSelecionada) return;
+    const leadAtual = leads.find((l) => l.id === modalEtapaLead.id) || modalEtapaLead;
+    const situacao = leadAtual.situacao;
+    await definirEtapaPorSituacao(leadAtual.id, situacao, etapaManualSelecionada);
+    setModalEtapaLead(null);
+    setFeedbackToast(`Etapa de ${leadAtual.nome} alterada para: ${etapaManualSelecionada}`);
     setTimeout(() => setFeedbackToast(null), 3200);
   };
 
@@ -1079,7 +1097,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-[#C9A882]" />
                 <h3 className="text-sm font-bold uppercase tracking-wider text-white">
-                  Atualizar Etapa
+                  Gerenciar Etapa do Paciente
                 </h3>
               </div>
               <button
@@ -1092,7 +1110,35 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
               </button>
             </div>
 
-            {/* Conteúdo Limpo */}
+            {/* Abas: Avanço Rápido vs Seleção Manual */}
+            <div className="px-5 pt-3 border-b border-[#D9D6D0] bg-[#F8F7F4] flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => setAbaModalEtapa('avanco')}
+                className={`pb-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  abaModalEtapa === 'avanco'
+                    ? 'border-[#5C3A22] text-[#5C3A22]'
+                    : 'border-transparent text-[#6E6E6E] hover:text-[#1A1A1A]'
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Avanço Automático</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAbaModalEtapa('manual')}
+                className={`pb-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  abaModalEtapa === 'manual'
+                    ? 'border-[#5C3A22] text-[#5C3A22]'
+                    : 'border-transparent text-[#6E6E6E] hover:text-[#1A1A1A]'
+                }`}
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Editar Manualmente</span>
+              </button>
+            </div>
+
+            {/* Conteúdo */}
             <div className="p-5 space-y-4">
               {/* Identificação do Paciente */}
               <div className="p-3 bg-[#F8F7F4] rounded-sm border border-[#D9D6D0] flex items-center justify-between gap-2">
@@ -1109,70 +1155,134 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                 </span>
               </div>
 
-              {/* Etapa Atual & Intuito/Finalidade */}
-              {(() => {
-                const situacao = modalEtapaLead.situacao;
-                const etapaArmazenada = modalEtapaLead.etapaPorSituacao?.[situacao];
-                const todasJaConcluidas = verificarSeTodasEtapasConcluidas(situacao, etapaArmazenada);
-                const etapaAtualCalculada = obterProximaEtapa(situacao, etapaArmazenada);
-                const previsaoAvanco = avancarProximaEtapa(situacao, etapaArmazenada);
-                const dadosIntencao = obterIntencaoDaEtapa(situacao, etapaAtualCalculada);
+              {abaModalEtapa === 'avanco' ? (
+                /* ABA 1: AVANÇO AUTOMÁTICO */
+                (() => {
+                  const situacao = modalEtapaLead.situacao;
+                  const etapaArmazenada = modalEtapaLead.etapaPorSituacao?.[situacao];
+                  const todasJaConcluidas = verificarSeTodasEtapasConcluidas(situacao, etapaArmazenada);
+                  const etapaAtualCalculada = obterProximaEtapa(situacao, etapaArmazenada);
+                  const previsaoAvanco = avancarProximaEtapa(situacao, etapaArmazenada);
+                  const dadosIntencao = obterIntencaoDaEtapa(situacao, etapaAtualCalculada);
 
-                if (todasJaConcluidas) {
+                  if (todasJaConcluidas) {
+                    return (
+                      <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-sm text-center space-y-2">
+                        <CheckCircle2 className="w-6 h-6 text-emerald-600 mx-auto" />
+                        <p className="text-xs font-bold text-emerald-900">
+                          Todas as etapas da cadência já foram concluídas!
+                        </p>
+                        <p className="text-[11px] text-emerald-700">
+                          Você pode reiniciar a sequência ou alternar para a aba "Editar Manualmente" para selecionar qualquer etapa.
+                        </p>
+                      </div>
+                    );
+                  }
+
                   return (
-                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-sm text-center space-y-1.5">
-                      <CheckCircle2 className="w-6 h-6 text-emerald-600 mx-auto" />
-                      <p className="text-xs font-bold text-emerald-900">
-                        Todas as etapas da cadência já foram concluídas!
-                      </p>
-                      <p className="text-[11px] text-emerald-700">
-                        Deseja reiniciar a sequência de acompanhamento?
-                      </p>
+                    <div className="space-y-3">
+                      {/* Etapa Atual */}
+                      <div className="p-3 bg-[#F2EFEA] border border-[#D9D6D0] rounded-sm">
+                        <span className="text-[10px] font-bold text-[#8A6142] uppercase tracking-wider block">
+                          Etapa a ser concluída:
+                        </span>
+                        <span className="text-sm font-bold text-[#1A1A1A] block mt-0.5">
+                          {etapaAtualCalculada}
+                        </span>
+                      </div>
+
+                      {/* Intuito e Finalidade Limpos */}
+                      <div className="p-3.5 bg-[#FAF8F5] border border-[#D9D6D0] rounded-sm space-y-2.5">
+                        <div>
+                          <span className="text-[10px] font-bold text-[#8A6142] uppercase tracking-wider block">
+                            Intuito da Mensagem
+                          </span>
+                          <p className="text-xs font-bold text-[#1A1A1A] mt-0.5">
+                            {dadosIntencao.intencao}
+                          </p>
+                        </div>
+
+                        <div className="border-t border-[#E8E5DF] pt-2">
+                          <span className="text-[10px] font-bold text-[#8F887E] uppercase tracking-wider block">
+                            Finalidade
+                          </span>
+                          <p className="text-xs text-[#4A4A4A] mt-0.5 leading-relaxed">
+                            {dadosIntencao.finalidade}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Próximo Passo */}
+                      <div className="text-[11px] text-[#6E6E6E] flex items-center justify-between p-2 rounded-sm bg-emerald-50/70 border border-emerald-200/60">
+                        <span>Próxima etapa ao concluir:</span>
+                        <strong className="text-emerald-800">{previsaoAvanco.proximaEtapa}</strong>
+                      </div>
                     </div>
                   );
-                }
+                })()
+              ) : (
+                /* ABA 2: SELEÇÃO MANUAL LIVRE */
+                (() => {
+                  const situacao = modalEtapaLead.situacao;
+                  const opcoesCadencia = obterOpcoesCadenciaPorSituacao(situacao);
+                  const dadosIntencaoManual = obterIntencaoDaEtapa(situacao, etapaManualSelecionada);
 
-                return (
-                  <div className="space-y-3">
-                    {/* Etapa Atual */}
-                    <div className="p-3 bg-[#F2EFEA] border border-[#D9D6D0] rounded-sm">
-                      <span className="text-[10px] font-bold text-[#8A6142] uppercase tracking-wider block">
-                        Etapa a ser concluída:
-                      </span>
-                      <span className="text-sm font-bold text-[#1A1A1A] block mt-0.5">
-                        {etapaAtualCalculada}
-                      </span>
-                    </div>
-
-                    {/* Intuito e Finalidade Limpos */}
-                    <div className="p-3.5 bg-[#FAF8F5] border border-[#D9D6D0] rounded-sm space-y-2.5">
-                      <div>
-                        <span className="text-[10px] font-bold text-[#8A6142] uppercase tracking-wider block">
-                          Intuito da Mensagem
-                        </span>
-                        <p className="text-xs font-bold text-[#1A1A1A] mt-0.5">
-                          {dadosIntencao.intencao}
+                  return (
+                    <div className="space-y-3.5">
+                      <div className="space-y-1.5">
+                        <label
+                          htmlFor="select-etapa-manual-lead"
+                          className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
+                        >
+                          Escolha a etapa manualmente para {situacao}:
+                        </label>
+                        <select
+                          id="select-etapa-manual-lead"
+                          value={etapaManualSelecionada}
+                          onChange={(e) => setEtapaManualSelecionada(e.target.value)}
+                          className="w-full h-10 px-3 text-xs font-semibold rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer shadow-2xs"
+                        >
+                          <option value="">Selecione uma etapa...</option>
+                          {opcoesCadencia.map((op) => (
+                            <option key={op} value={op}>
+                              {op}
+                            </option>
+                          ))}
+                          <option value={ETAPAS_CONCLUIDAS_LABEL}>
+                            {ETAPAS_CONCLUIDAS_LABEL}
+                          </option>
+                        </select>
+                        <p className="text-[10px] text-[#6E6E6E]">
+                          Define diretamente o status da cadência deste paciente sem passar por etapas intermediárias.
                         </p>
                       </div>
 
-                      <div className="border-t border-[#E8E5DF] pt-2">
-                        <span className="text-[10px] font-bold text-[#8F887E] uppercase tracking-wider block">
-                          Finalidade
-                        </span>
-                        <p className="text-xs text-[#4A4A4A] mt-0.5 leading-relaxed">
-                          {dadosIntencao.finalidade}
-                        </p>
-                      </div>
+                      {etapaManualSelecionada && (
+                        <div className="p-3.5 bg-[#FAF8F5] border border-[#D9D6D0] rounded-sm space-y-2">
+                          <div>
+                            <span className="text-[10px] font-bold text-[#8A6142] uppercase tracking-wider block">
+                              Intuito: {etapaManualSelecionada}
+                            </span>
+                            <p className="text-xs font-bold text-[#1A1A1A] mt-0.5">
+                              {dadosIntencaoManual.intencao}
+                            </p>
+                          </div>
+                          {dadosIntencaoManual.finalidade && (
+                            <div className="border-t border-[#E8E5DF] pt-1.5">
+                              <span className="text-[10px] font-bold text-[#8F887E] uppercase tracking-wider block">
+                                Finalidade
+                              </span>
+                              <p className="text-xs text-[#4A4A4A] mt-0.5 leading-relaxed">
+                                {dadosIntencaoManual.finalidade}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-
-                    {/* Próximo Passo */}
-                    <div className="text-[11px] text-[#6E6E6E] flex items-center justify-between p-2 rounded-sm bg-emerald-50/70 border border-emerald-200/60">
-                      <span>Próxima etapa ao concluir:</span>
-                      <strong className="text-emerald-800">{previsaoAvanco.proximaEtapa}</strong>
-                    </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()
+              )}
             </div>
 
             {/* Ações */}
@@ -1186,7 +1296,18 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
                 Cancelar
               </button>
 
-              {verificarSeTodasEtapasConcluidas(
+              {abaModalEtapa === 'manual' ? (
+                <button
+                  id="btn-salvar-etapa-manual"
+                  type="button"
+                  disabled={!etapaManualSelecionada}
+                  onClick={handleSalvarEtapaManualLead}
+                  className="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-sm bg-[#5C3A22] hover:bg-[#4A2E1B] disabled:opacity-50 text-white transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5 text-white" />
+                  <span>Salvar Etapa</span>
+                </button>
+              ) : verificarSeTodasEtapasConcluidas(
                 modalEtapaLead.situacao,
                 modalEtapaLead.etapaPorSituacao?.[modalEtapaLead.situacao]
               ) ? (

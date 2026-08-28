@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
-import { supabaseService, ID_EMPRESA_PADRAO } from '../services/supabaseService';
+import { supabaseService, ID_EMPRESA_PADRAO, normalizarUuid } from '../services/supabaseService';
 import {
   isSupabaseConfigured,
   getSupabaseClient,
@@ -29,12 +29,14 @@ import {
   OrigemLead,
 } from '../types';
 import { SEED_RESPONSAVEIS, SEED_PROCEDIMENTOS } from '../data/seedData';
+import { obterOpcoesCadenciaPorSituacao } from '../utils/cadencia';
 
-function generateId(prefix: string): string {
+function generateId(_prefix?: string): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return `${prefix}-${crypto.randomUUID()}`;
+    return crypto.randomUUID();
   }
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`;
+  const s4 = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+  return `${s4()}${s4()}-${s4()}-4${s4().substr(0, 3)}-${s4()}-${s4()}${s4()}${s4()}`;
 }
 
 export function casarProcedimentoComTexto(
@@ -162,7 +164,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const { user, usuarios } = useAuth();
   const { config, empresaAtivaId } = useEmpresa();
 
-  const empresaIdEfetiva = empresaAtivaId || ID_EMPRESA_PADRAO;
+  const empresaIdEfetiva = normalizarUuid(empresaAtivaId || ID_EMPRESA_PADRAO);
 
   // Estados principais brutos (todas as clínicas carregadas na memória)
   const [todosLeadsRaw, setTodosLeadsRaw] = useState<Lead[]>([]);
@@ -177,11 +179,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isFirestoreConnected, setIsFirestoreConnected] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
-  // Verificador estrito de pertencimento à clínica ativa
+  // Verificador estrito e seguro de pertencimento à clínica ativa
   const pertenceAEmpresaAtiva = useCallback(
-    (itemEmpresaId?: string) => {
-      if (itemEmpresaId) return itemEmpresaId === empresaIdEfetiva;
-      return empresaIdEfetiva === ID_EMPRESA_PADRAO;
+    (itemEmpresaId?: string | null) => {
+      const ativaNorm = normalizarUuid(empresaIdEfetiva);
+      const itemNorm = itemEmpresaId ? normalizarUuid(itemEmpresaId) : normalizarUuid(ID_EMPRESA_PADRAO);
+      return itemNorm === ativaNorm;
     },
     [empresaIdEfetiva]
   );
@@ -225,10 +228,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return list.filter((u) => {
       if (u.deleted_at || u.ativo === false) return false;
       const empId = u.empresaId || (u as any).empresa_id;
-      if (empId) return empId === empresaIdEfetiva;
-      return empresaIdEfetiva === ID_EMPRESA_PADRAO;
+      return pertenceAEmpresaAtiva(empId);
     });
-  }, [usuariosState, usuarios, empresaIdEfetiva]);
+  }, [usuariosState, usuarios, pertenceAEmpresaAtiva]);
 
   // Lista de responsáveis exclusivos da clínica ativa
   const responsaveis = useMemo(() => {
@@ -476,7 +478,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     async (payload: CriarLeadPayload): Promise<Lead> => {
       const timestamp = new Date().toISOString();
       const hoje = timestamp.split('T')[0];
-      const leadId = generateId('lead');
+      const leadId = (payload as any).id ? normalizarUuid((payload as any).id) : generateId('lead');
+      const eId = normalizarUuid((payload as any).empresaId || (payload as any).empresa_id || empresaIdEfetiva);
       const situacao: SituacaoLead = payload.situacao || 'Em captação';
 
       const statusGrupoNutricao: StatusGrupoNutricao | undefined =
@@ -486,13 +489,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       const etapaPorSituacao = payload.etapaInicial
         ? { [situacao]: payload.etapaInicial }
-        : situacao === 'Nutrição'
-        ? { 'Nutrição': statusGrupoNutricao || 'Ativo' }
         : {};
 
       const novoLead: Lead = {
         id: leadId,
-        empresaId: empresaIdEfetiva,
+        empresaId: eId,
+        empresa_id: eId,
         nome: payload.nome.trim(),
         situacao: situacao,
         etapaPorSituacao: etapaPorSituacao,
@@ -517,7 +519,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const novaFicha: FichaLead = {
         id: generateId('ficha'),
         leadId: leadId,
-        empresaId: empresaIdEfetiva,
+        empresaId: eId,
+        empresa_id: eId,
         telefone: payload.ficha?.telefone || '',
         origemLead: (payload.ficha?.origemLead as OrigemLead) || 'WhatsApp',
         dataNascimento: payload.ficha?.dataNascimento || '',
@@ -535,8 +538,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setTodasFichasRaw((prev) => [novaFicha, ...prev]);
 
       try {
-        await supabaseService.salvarLead(novoLead, empresaIdEfetiva);
-        await supabaseService.salvarFicha(novaFicha, empresaIdEfetiva);
+        await supabaseService.salvarLead(novoLead, eId);
+        await supabaseService.salvarFicha(novaFicha, eId);
       } catch (err) {
         console.error('Erro ao salvar lead no Supabase:', err);
       }
@@ -581,9 +584,6 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             ...lead.etapaPorSituacao,
             ...(dados.etapaPorSituacao || {}),
           };
-          if (statusGrupoNutricao && (dados.situacao === 'Nutrição' || lead.situacao === 'Nutrição')) {
-            etapaPorSituacao['Nutrição'] = statusGrupoNutricao;
-          }
 
           const markingPerdido = dados.statusVenda === 'Perdido' && lead.statusVenda !== 'Perdido';
           const situacaoPerda =
@@ -602,9 +602,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
           const motivoPerda = dados.motivoPerda !== undefined ? dados.motivoPerda : lead.motivoPerda;
 
+          const eId = normalizarUuid(lead.empresaId || (lead as any).empresa_id || empresaIdEfetiva);
           leadAtualizado = {
             ...lead,
             ...dados,
+            empresaId: eId,
+            empresa_id: eId,
             etapaPorSituacao,
             statusGrupoNutricao,
             situacaoPerda,
@@ -624,8 +627,11 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setTodasFichasRaw((prev) =>
           prev.map((f) => {
             if (f.leadId !== leadId) return f;
+            const fEid = normalizarUuid(f.empresaId || (f as any).empresa_id || empresaIdEfetiva);
             fichaAtualizada = {
               ...f,
+              empresaId: fEid,
+              empresa_id: fEid,
               motivoPerda: dados.motivoPerda !== undefined ? dados.motivoPerda : f.motivoPerda,
               dataPerda: dados.dataPerda !== undefined ? dados.dataPerda : f.dataPerda || hoje,
               updated_at: timestamp,
@@ -638,9 +644,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       if (leadAtualizado) {
         try {
-          await supabaseService.salvarLead(leadAtualizado, empresaIdEfetiva);
+          const leadEid = normalizarUuid((leadAtualizado as Lead).empresaId || empresaIdEfetiva);
+          await supabaseService.salvarLead(leadAtualizado, leadEid);
           if (fichaAtualizada) {
-            await supabaseService.salvarFicha(fichaAtualizada, empresaIdEfetiva);
+            await supabaseService.salvarFicha(fichaAtualizada, leadEid);
           }
         } catch (e) {
           console.error('Erro ao atualizar lead no Supabase:', e);
@@ -695,6 +702,25 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     async (leadId: string, situacao: SituacaoLead, etapa: string): Promise<Lead | null> => {
       const target = leads.find((l) => l.id === leadId);
       const mapaAtualizado = { ...(target?.etapaPorSituacao || {}), [situacao]: etapa };
+
+      // Se a etapa concluída em Nutrição for a última da cadência oficial (ou Todas as etapas concluídas),
+      // transicionar automaticamente o lead da situação 'Nutrição' para 'Reativação'
+      if (situacao === 'Nutrição') {
+        const opcoesNutricao = obterOpcoesCadenciaPorSituacao('Nutrição');
+        const ultimoContatoNutricao = opcoesNutricao.length > 0 ? opcoesNutricao[opcoesNutricao.length - 1] : null;
+
+        const isUltimoOuConcluido =
+          etapa === 'Todas as etapas concluídas' ||
+          (ultimoContatoNutricao && etapa === ultimoContatoNutricao);
+
+        if (isUltimoOuConcluido) {
+          return atualizarLead(leadId, {
+            situacao: 'Reativação',
+            etapaPorSituacao: mapaAtualizado,
+          });
+        }
+      }
+
       return atualizarLead(leadId, {
         etapaPorSituacao: mapaAtualizado,
       });
@@ -724,19 +750,23 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     async (leadId: string, dados: AtualizarFichaPayload): Promise<FichaLead | null> => {
       const timestamp = new Date().toISOString();
       const fichaExistente = fichas.find((f) => f.leadId === leadId) || todasFichasRaw.find((f) => f.leadId === leadId);
+      const eId = normalizarUuid(fichaExistente?.empresaId || (fichaExistente as any)?.empresa_id || empresaIdEfetiva);
 
       let fichaAtualizada: FichaLead;
       if (fichaExistente) {
         fichaAtualizada = {
           ...fichaExistente,
           ...dados,
+          empresaId: eId,
+          empresa_id: eId,
           updated_at: timestamp,
           version: (fichaExistente.version || 1) + 1,
         };
       } else {
         fichaAtualizada = {
           id: generateId('ficha'),
-          empresaId: empresaIdEfetiva,
+          empresaId: eId,
+          empresa_id: eId,
           leadId,
           telefone: dados.telefone || '',
           origemLead: dados.origemLead || 'WhatsApp',
@@ -760,7 +790,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       });
 
       try {
-        await supabaseService.salvarFicha(fichaAtualizada, empresaIdEfetiva);
+        await supabaseService.salvarFicha(fichaAtualizada, eId);
       } catch (e) {
         console.error('Erro ao salvar ficha no Supabase:', e);
       }
@@ -783,10 +813,13 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     async (payload: CriarCompraPayload): Promise<Compra> => {
       const timestamp = new Date().toISOString();
       const hoje = timestamp.split('T')[0];
+      const leadAssociado = todosLeadsRaw.find((l) => l.id === payload.leadId);
+      const eId = normalizarUuid((payload as any).empresaId || leadAssociado?.empresaId || empresaIdEfetiva);
 
       const novaCompra: Compra = {
         id: generateId('compra'),
-        empresaId: empresaIdEfetiva,
+        empresaId: eId,
+        empresa_id: eId,
         leadId: payload.leadId,
         data: payload.data || hoje,
         procedimento: payload.procedimento.trim(),
@@ -803,14 +836,14 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       await atualizarLead(payload.leadId, { statusVenda: 'Venda feita' });
 
       try {
-        await supabaseService.salvarCompra(novaCompra, empresaIdEfetiva);
+        await supabaseService.salvarCompra(novaCompra, eId);
       } catch (e) {
         console.error('Erro ao salvar compra no Supabase:', e);
       }
 
       return novaCompra;
     },
-    [empresaIdEfetiva, atualizarLead]
+    [empresaIdEfetiva, todosLeadsRaw, atualizarLead]
   );
 
   const registrarCompra = useCallback(
@@ -843,9 +876,11 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const criarProcedimento = useCallback(
     async (payload: CriarProcedimentoPayload): Promise<ProcedimentoClinica> => {
       const timestamp = new Date().toISOString();
+      const eId = normalizarUuid((payload as any).empresaId || empresaIdEfetiva);
       const novoProc: ProcedimentoClinica = {
         id: generateId('proc'),
-        empresaId: empresaIdEfetiva,
+        empresaId: eId,
+        empresa_id: eId,
         nome: payload.nome.trim(),
         categoria: payload.categoria?.trim() || 'Injetáveis',
         valor: Number(payload.valor) || 0,
@@ -862,7 +897,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setTodosProcedimentosRaw((prev) => [...prev, novoProc]);
 
       try {
-        await supabaseService.salvarProcedimento(novoProc, empresaIdEfetiva);
+        await supabaseService.salvarProcedimento(novoProc, eId);
       } catch (e) {
         console.error('Erro ao criar procedimento no Supabase:', e);
       }
@@ -892,9 +927,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setTodosProcedimentosRaw((prev) =>
         prev.map((p) => {
           if (p.id !== id) return p;
+          const eId = normalizarUuid(p.empresaId || (p as any).empresa_id || empresaIdEfetiva);
           procAtualizado = {
             ...p,
             ...dados,
+            empresaId: eId,
+            empresa_id: eId,
             nome: dados.nome !== undefined ? dados.nome.trim() : p.nome,
             categoria: dados.categoria !== undefined ? dados.categoria.trim() : p.categoria,
             valor: dados.valor !== undefined ? Number(dados.valor) || 0 : p.valor,
@@ -908,7 +946,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       if (procAtualizado) {
         try {
-          await supabaseService.salvarProcedimento(procAtualizado, empresaIdEfetiva);
+          const procEid = normalizarUuid((procAtualizado as ProcedimentoClinica).empresaId || empresaIdEfetiva);
+          await supabaseService.salvarProcedimento(procAtualizado, procEid);
         } catch (e) {
           console.error('Erro ao atualizar procedimento no Supabase:', e);
         }

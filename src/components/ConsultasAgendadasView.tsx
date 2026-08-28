@@ -37,7 +37,8 @@ import {
   TODOS_STATUS_CONFIRMACAO_AGENDAMENTO,
   StatusVenda,
 } from '../types';
-import { SEED_USUARIOS, ID_EMPRESA_PADRAO } from '../data/seedData';
+import { SEED_USUARIOS } from '../data/seedData';
+import { ID_EMPRESA_PADRAO, normalizarUuid } from '../services/supabaseService';
 import {
   formatarDataBR,
   obterDataHoje,
@@ -81,11 +82,12 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
   // Colaboradores cadastrados ativos exclusivos da clínica ativa
   const colaboradoresClinica = useMemo(() => {
     if (usuarios && usuarios.length > 0) {
+      const ativaNorm = normalizarUuid(empresaAtivaId || ID_EMPRESA_PADRAO);
       return usuarios.filter((u) => {
         if (u.deleted_at || u.ativo === false) return false;
-        const empId = u.empresaId || u.empresa_id;
-        if (empId) return empId === empresaAtivaId;
-        return empresaAtivaId === ID_EMPRESA_PADRAO;
+        const empId = u.empresaId || (u as any).empresa_id;
+        const uNorm = empId ? normalizarUuid(empId) : normalizarUuid(ID_EMPRESA_PADRAO);
+        return uNorm === ativaNorm;
       });
     }
     return [];
@@ -450,7 +452,9 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
     if (isNovo && (formLeadId === 'NOVO' || !formLeadId)) {
       // Criar Novo Paciente e Agendamento no Supabase
       const situacaoCriar = isProcedimento ? 'Procedimento agendado' : 'Consulta agendada';
+      const eId = normalizarUuid(empresaAtivaId || ID_EMPRESA_PADRAO);
       const novoLead = await criarLead({
+        empresaId: eId,
         nome: formNome.trim(),
         situacao: situacaoCriar,
         dataAgendamento: formDataAgendamento,

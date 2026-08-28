@@ -41,7 +41,7 @@ export const NutricaoView: React.FC = () => {
   const totalLeads = leadsNutricao.length;
   const totalAtivos = useMemo(() => {
     return leadsNutricao.filter(
-      (l) => (l.statusGrupoNutricao || l.etapaPorSituacao?.['Nutrição'] || 'Ativo') === 'Ativo'
+      (l) => (l.statusGrupoNutricao || 'Ativo') === 'Ativo'
     ).length;
   }, [leadsNutricao]);
 
@@ -53,7 +53,6 @@ export const NutricaoView: React.FC = () => {
       // 1. Filtro de status no grupo
       const statusAtual: StatusGrupoNutricao =
         (lead.statusGrupoNutricao as StatusGrupoNutricao) ||
-        (lead.etapaPorSituacao?.['Nutrição'] as StatusGrupoNutricao) ||
         'Ativo';
 
       if (filtroStatus !== 'Todos' && statusAtual !== filtroStatus) {
@@ -104,7 +103,7 @@ export const NutricaoView: React.FC = () => {
   const handleCopiarTelefonesAtivos = () => {
     const telefones: string[] = [];
     leadsNutricao.forEach((l) => {
-      const status = l.statusGrupoNutricao || l.etapaPorSituacao?.['Nutrição'] || 'Ativo';
+      const status = l.statusGrupoNutricao || 'Ativo';
       if (status === 'Ativo') {
         const f = obterFichaPorLead(l.id);
         if (f?.telefone) {
@@ -283,7 +282,6 @@ export const NutricaoView: React.FC = () => {
                 leadsFiltrados.map((lead) => {
                   const statusNoGrupo: StatusGrupoNutricao =
                     (lead.statusGrupoNutricao as StatusGrupoNutricao) ||
-                    (lead.etapaPorSituacao?.['Nutrição'] as StatusGrupoNutricao) ||
                     'Ativo';
 
                   const isAtivo = statusNoGrupo === 'Ativo';

@@ -49,9 +49,11 @@ import {
   StatusConfirmacaoAgendamento,
   TODOS_STATUS_CONFIRMACAO_AGENDAMENTO,
 } from '../types';
-import { SEED_USUARIOS, ID_EMPRESA_PADRAO } from '../data/seedData';
+import { SEED_USUARIOS } from '../data/seedData';
+import { ID_EMPRESA_PADRAO, normalizarUuid } from '../services/supabaseService';
 import { formatarMoeda, formatarDataBR, obterDataHoje } from '../utils/formatters';
 import {
+  obterOpcoesCadenciaPorSituacao,
   obterProximaEtapa,
   avancarProximaEtapa,
   reiniciarCadencia,
@@ -119,11 +121,12 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
   // Colaboradores cadastrados ativos exclusivos da clínica ativa
   const colaboradoresAtivos = useMemo(() => {
     if (usuarios && usuarios.length > 0) {
+      const ativaNorm = normalizarUuid(empresaAtivaId || ID_EMPRESA_PADRAO);
       return usuarios.filter((u) => {
         if (u.deleted_at || u.ativo === false) return false;
-        const empId = u.empresaId || u.empresa_id;
-        if (empId) return empId === empresaAtivaId;
-        return empresaAtivaId === ID_EMPRESA_PADRAO;
+        const empId = u.empresaId || (u as any).empresa_id;
+        const uNorm = empId ? normalizarUuid(empId) : normalizarUuid(ID_EMPRESA_PADRAO);
+        return uNorm === ativaNorm;
       });
     }
     return [];
@@ -407,7 +410,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
     const isSemEtapa =
       situacao === 'Consulta agendada' || situacao === 'Procedimento agendado';
     if (!isSemEtapa) {
-      definirEtapaPorSituacao(activeLeadId, situacao, etapa.trim());
+      await definirEtapaPorSituacao(activeLeadId, situacao, etapa.trim());
     }
 
     // Se mudou para Perdido e já tiver campos preenchidos, sincroniza
@@ -1006,13 +1009,29 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                         <span className="text-xs text-[#8F887E] block">-</span>
                       ) : (
                         <div className="space-y-1.5">
-                          <span
-                            className={`text-xs font-semibold block truncate ${
-                              todasConcluidas ? 'text-emerald-800' : 'text-[#1A1A1A]'
-                            }`}
+                          <select
+                            id="select-etapa-rapida-leitura"
+                            value={etapaArmazenada || proximaEtapaCalculada}
+                            onChange={async (e) => {
+                              const novaEtapa = e.target.value;
+                              if (!novaEtapa || !activeLeadId) return;
+                              setEtapa(novaEtapa);
+                              await definirEtapaPorSituacao(activeLeadId, situacao, novaEtapa);
+                              dispararFeedback(`Etapa atualizada para: ${novaEtapa}`);
+                            }}
+                            className="w-full h-7 px-1.5 text-xs font-semibold rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer shadow-2xs truncate"
+                            title="Selecione qualquer etapa da cadência para alterar manualmente"
                           >
-                            {proximaEtapaCalculada}
-                          </span>
+                            {obterOpcoesCadenciaPorSituacao(situacao).map((op) => (
+                              <option key={op} value={op}>
+                                {op}
+                              </option>
+                            ))}
+                            <option value={ETAPAS_CONCLUIDAS_LABEL}>
+                              {ETAPAS_CONCLUIDAS_LABEL}
+                            </option>
+                          </select>
+
                           {!todasConcluidas ? (
                             <button
                               id="btn-concluir-etapa-leitura"
@@ -1028,7 +1047,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                             <button
                               type="button"
                               onClick={handleReiniciarCadencia}
-                              className="text-[10px] text-[#5C3A22] hover:underline font-bold uppercase tracking-wider cursor-pointer flex items-center gap-1"
+                              className="text-[10px] text-[#5C3A22] hover:underline font-bold uppercase tracking-wider cursor-pointer flex items-center gap-1 w-full justify-center"
                               title="Reiniciar a sequência de etapas desde o primeiro contato"
                             >
                               <RotateCcw className="w-3 h-3" />
@@ -1169,9 +1188,10 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                         </select>
                       </div>
 
-                      {/* Etapa Atual da Situação (Calculada Automaticamente com Botão Concluído) */}
+                      {/* Etapa Atual da Situação (Seleção Manual ou Avanço com Botão Concluído) */}
                       <div className="space-y-1">
                         <label
+                          htmlFor="edit-lead-etapa"
                           className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]"
                         >
                           Etapa atual ({situacao})
@@ -1183,14 +1203,22 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                         ) : (
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
-                              <div className="flex-1 h-9 px-3 text-xs flex items-center justify-between bg-white text-[#1A1A1A] font-semibold rounded-sm border border-[#D9D6D0] shadow-2xs overflow-hidden">
-                                <span className="truncate">{proximaEtapaCalculada}</span>
-                                {todasConcluidas && (
-                                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded-xs shrink-0 uppercase">
-                                    Finalizada
-                                  </span>
-                                )}
-                              </div>
+                              <select
+                                id="edit-lead-etapa"
+                                value={etapa || etapaArmazenada || proximaEtapaCalculada}
+                                onChange={(e) => setEtapa(e.target.value)}
+                                className="flex-1 h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white font-semibold text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer shadow-2xs"
+                              >
+                                <option value="">Selecione a etapa...</option>
+                                {obterOpcoesCadenciaPorSituacao(situacao).map((op) => (
+                                  <option key={op} value={op}>
+                                    {op}
+                                  </option>
+                                ))}
+                                <option value={ETAPAS_CONCLUIDAS_LABEL}>
+                                  {ETAPAS_CONCLUIDAS_LABEL}
+                                </option>
+                              </select>
                               {!todasConcluidas ? (
                                 <button
                                   id="btn-concluir-etapa-edicao"
@@ -1215,7 +1243,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                               )}
                             </div>
                             <p className="text-[10px] text-[#6E6E6E]">
-                              Calculada automaticamente com base na última etapa executada.
+                              Escolha livremente qualquer etapa da cadência ou clique em Concluído para avançar.
                             </p>
                           </div>
                         )}

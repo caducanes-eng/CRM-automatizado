@@ -3,7 +3,7 @@ import { UserPlus, X, ArrowRight, Check } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
 import { useAuth } from '../context/AuthContext';
 import { useEmpresa } from '../context/EmpresaContext';
-import { ID_EMPRESA_PADRAO } from '../data/seedData';
+import { ID_EMPRESA_PADRAO, normalizarUuid } from '../services/supabaseService';
 import { SituacaoLead, TODAS_SITUACOES, Lead, ProcedimentoClinica } from '../types';
 
 interface NovoPacienteModalProps {
@@ -24,11 +24,12 @@ export const NovoPacienteModal: React.FC<NovoPacienteModalProps> = ({
   // Colaboradores cadastrados ativos exclusivos da clínica ativa
   const colaboradoresAtivos = useMemo(() => {
     if (usuarios && usuarios.length > 0) {
+      const ativaNorm = normalizarUuid(empresaAtivaId || ID_EMPRESA_PADRAO);
       return usuarios.filter((u) => {
         if (u.deleted_at || u.ativo === false) return false;
-        const empId = u.empresaId || u.empresa_id;
-        if (empId) return empId === empresaAtivaId;
-        return empresaAtivaId === ID_EMPRESA_PADRAO;
+        const empId = u.empresaId || (u as any).empresa_id;
+        const uNorm = empId ? normalizarUuid(empId) : normalizarUuid(ID_EMPRESA_PADRAO);
+        return uNorm === ativaNorm;
       });
     }
     return [];
@@ -86,8 +87,10 @@ export const NovoPacienteModal: React.FC<NovoPacienteModalProps> = ({
 
     try {
       const valorNumerico = possivelValor ? parseFloat(possivelValor.replace(',', '.')) : 0;
+      const eId = normalizarUuid(empresaAtivaId || ID_EMPRESA_PADRAO);
 
       const novoLead = await criarLead({
+        empresaId: eId,
         nome: nome.trim(),
         situacao,
         interesse: interesse.trim(),

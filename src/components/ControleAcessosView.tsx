@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useEmpresa } from '../context/EmpresaContext';
-import { ID_EMPRESA_PADRAO } from '../data/seedData';
+import { ID_EMPRESA_PADRAO, normalizarUuid } from '../services/supabaseService';
 import {
   UsuarioColaborador,
   NivelAcesso,
@@ -235,8 +235,9 @@ export const ControleAcessosView: React.FC = () => {
         dispararFeedback(`Colaborador "${formData.nome}" atualizado com sucesso!`);
       } else {
         // Criação vinculada estritamente à clínica ativa selecionada
+        const empIdNorm = normalizarUuid(empresaAtivaId || ID_EMPRESA_PADRAO);
         await criarColaborador({
-          empresaId: empresaAtivaId,
+          empresaId: empIdNorm,
           nome: formData.nome,
           email: formData.email,
           login: loginFinal,
@@ -285,14 +286,12 @@ export const ControleAcessosView: React.FC = () => {
 
   // Colaboradores Exclusivos da Clínica Ativa
   const usuariosDaClinica = useMemo(() => {
+    const ativaNorm = normalizarUuid(empresaAtivaId || ID_EMPRESA_PADRAO);
     return usuarios.filter((u) => {
       if (u.deleted_at) return false;
-      const empId = u.empresaId || u.empresa_id;
-      if (empId) {
-        return empId === empresaAtivaId;
-      }
-      // Se não possui empresaId (usuários legados/iniciais), pertence à clínica padrão
-      return empresaAtivaId === ID_EMPRESA_PADRAO;
+      const empId = u.empresaId || (u as any).empresa_id;
+      const uNorm = empId ? normalizarUuid(empId) : normalizarUuid(ID_EMPRESA_PADRAO);
+      return uNorm === ativaNorm;
     });
   }, [usuarios, empresaAtivaId]);
 
