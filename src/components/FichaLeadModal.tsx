@@ -108,6 +108,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
     excluirLead,
     atualizarFichaLead,
     definirEtapaPorSituacao,
+    registrarContatoHoje,
     lancarCompra,
     removerCompra,
     responsaveis,
@@ -1901,8 +1902,14 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                           href={`https://wa.me/55${telefone.replace(/\D/g, '')}`}
                           target="_blank"
                           rel="noreferrer"
+                          onClick={() => {
+                            if (activeLeadId) {
+                              registrarContatoHoje(activeLeadId);
+                              dispararFeedback('Contato registrado para hoje!');
+                            }
+                          }}
                           className="absolute right-2 text-emerald-700 hover:text-emerald-800 p-1"
-                          title="Abrir no WhatsApp"
+                          title="Abrir no WhatsApp e registrar contato"
                         >
                           <MessageCircle className="w-4 h-4" />
                         </a>

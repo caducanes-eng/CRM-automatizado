@@ -615,6 +615,12 @@ export interface Lead extends BaseEntity {
   motivoPerda?: string; // Motivo da perda quando statusVenda === "Perdido"
   dataPerda?: string; // Data da perda (YYYY-MM-DD)
   situacaoPerda?: SituacaoLead; // Situação em que o lead estava quando foi marcado como perdido
+
+  // Histórico de Ações & Cadência
+  dataUltimoContato?: string; // Data (YYYY-MM-DD ou ISO) da última ação / contato com a paciente
+  dataUltimoContatoPorSituacao?: Partial<Record<SituacaoLead, string>>; // Registro da data do último contato em cada situação
+  dataEntradaSituacao?: Partial<Record<SituacaoLead, string>>; // Data em que a paciente entrou em cada situação
+  dataUltimaAcao?: string; // Timestamp ISO da última alteração / interação
 }
 
 /**
@@ -666,6 +672,7 @@ export interface CriarLeadPayload {
   nome: string;
   situacao?: SituacaoLead;
   etapaInicial?: string;
+  etapaPorSituacao?: Partial<Record<SituacaoLead, string>> | Record<string, string>;
   interesse?: string;
   possivelValor?: number;
   statusVenda?: StatusVenda;
@@ -687,6 +694,10 @@ export interface CriarLeadPayload {
   motivoPerda?: string;
   dataPerda?: string;
   situacaoPerda?: SituacaoLead;
+  dataUltimoContato?: string;
+  dataUltimoContatoPorSituacao?: Partial<Record<SituacaoLead, string>>;
+  dataEntradaSituacao?: Partial<Record<SituacaoLead, string>>;
+  dataUltimaAcao?: string;
   // Ficha complementar inicial opcional
   ficha?: Partial<Omit<FichaLead, 'id' | 'leadId' | 'created_at' | 'updated_at' | 'deleted_at' | 'version'>>;
 }
@@ -716,6 +727,10 @@ export interface AtualizarLeadPayload {
   motivoPerda?: string;
   dataPerda?: string;
   situacaoPerda?: SituacaoLead;
+  dataUltimoContato?: string;
+  dataUltimoContatoPorSituacao?: Partial<Record<SituacaoLead, string>>;
+  dataEntradaSituacao?: Partial<Record<SituacaoLead, string>>;
+  dataUltimaAcao?: string;
 }
 
 export interface AtualizarFichaPayload {

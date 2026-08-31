@@ -350,20 +350,48 @@ export function calcularStatusCadencia(
 
 /**
  * Verifica se a paciente deve ser contatada no dia de hoje.
- * - Leads atrasados ou sem etapa selecionada
- * - Leads em dia que atingiram exatamente a data prevista de um marco de contato da cadência
+ * Considera:
+ * - Se a paciente JÁ recebeu contato ou ação hoje (dataUltimoContato / dataUltimaAcao === hoje) -> NÃO deve contatar de novo hoje
+ * - Situações com agendamento direto (Consulta/Procedimento agendado) não dependem de cadência diária
+ * - Leads com todas as etapas concluídas -> false
+ * - Leads atrasados que ainda NÃO foram contatados hoje -> true
+ * - Leads adiantados -> false
+ * - Leads em dia que atingiram exatamente a data prevista de um marco de contato e ainda NÃO foram contatados hoje -> true
  */
 export function verificarSeDeveContatarHoje(
   situacao: SituacaoLead,
   diasCorridos: number,
   statusCadencia: StatusCadencia,
-  etapaAtual?: string | null
+  etapaAtual?: string | null,
+  dataUltimoContato?: string | null,
+  dataUltimaAcao?: string | null
 ): boolean {
+  // Situações sem fluxo de cadência (atendimento já agendado na agenda)
+  if (situacao === 'Consulta agendada' || situacao === 'Procedimento agendado') {
+    return false;
+  }
+
+  // Se todas as etapas já foram concluídas
   if (verificarSeTodasEtapasConcluidas(situacao, etapaAtual)) {
     return false;
   }
 
-  // 1. Se o lead está atrasado, precisa de contato urgente hoje
+  // Verifica se o lead já foi contatado ou teve ação registrada no dia de HOJE
+  const hojeIso = new Date().toISOString().split('T')[0];
+  const hoje = new Date();
+  const hojeLocal = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+
+  const jaContatadoHoje = Boolean(
+    (dataUltimoContato && (dataUltimoContato.startsWith(hojeIso) || dataUltimoContato.startsWith(hojeLocal))) ||
+    (dataUltimaAcao && (dataUltimaAcao.startsWith(hojeIso) || dataUltimaAcao.startsWith(hojeLocal)))
+  );
+
+  // Se JÁ entrou em contato hoje, a paciente não deve mais figurar em "Contatar Hoje"
+  if (jaContatadoHoje) {
+    return false;
+  }
+
+  // 1. Se o lead está atrasado e ainda não foi atendido hoje, precisa de contato urgente hoje
   if (statusCadencia === 'Atrasado') {
     return true;
   }
@@ -386,6 +414,7 @@ export function verificarSeDeveContatarHoje(
 
   if (
     situacao === 'Em captação' ||
+    situacao === 'Em negociação' ||
     situacao === 'Pós consulta' ||
     situacao === 'Reativação'
   ) {

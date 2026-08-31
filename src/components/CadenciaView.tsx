@@ -143,12 +143,21 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
   // 2. Mapeamento enriquecido com cálculos de cadência para cada lead
   const leadsProcessados = useMemo(() => {
     return leadsDaSituacao.map((lead) => {
-      const diasCorridos = calcularDiasCorridos(lead.dataEntrada);
+      const dataEntradaEfetiva = lead.dataEntradaSituacao?.[situacao] || lead.dataEntrada;
+      const diasCorridos = calcularDiasCorridos(dataEntradaEfetiva);
       const etapaArmazenada = lead.etapaPorSituacao?.[situacao];
       const proximaEtapa = obterProximaEtapa(situacao, etapaArmazenada);
       const etapaEsperada = calcularEtapaEsperada(situacao, diasCorridos);
       const statusCadencia = calcularStatusCadencia(situacao, proximaEtapa, etapaEsperada);
-      const deveContatarHoje = verificarSeDeveContatarHoje(situacao, diasCorridos, statusCadencia, etapaArmazenada);
+      const dataUltimoContatoEfetiva = lead.dataUltimoContatoPorSituacao?.[situacao] || lead.dataUltimoContato;
+      const deveContatarHoje = verificarSeDeveContatarHoje(
+        situacao,
+        diasCorridos,
+        statusCadencia,
+        etapaArmazenada,
+        dataUltimoContatoEfetiva,
+        lead.dataUltimaAcao
+      );
 
       return {
         ...lead,

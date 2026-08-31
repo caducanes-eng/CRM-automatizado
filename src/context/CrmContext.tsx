@@ -133,6 +133,7 @@ interface CrmContextType {
   marcarComoPerdido: (leadId: string, motivo: string, dataPerda?: string) => Promise<Lead | null>;
   definirEtapaPorSituacao: (leadId: string, situacao: SituacaoLead, etapa: string) => Promise<Lead | null>;
   definirEtapaSituacaoAtual: (leadId: string, etapa: string) => Promise<Lead | null>;
+  registrarContatoHoje: (leadId: string) => Promise<Lead | null>;
   definirStatusGrupoNutricao: (leadId: string, status: StatusGrupoNutricao) => Promise<Lead | null>;
   atualizarFichaLead: (leadId: string, dados: AtualizarFichaPayload) => Promise<FichaLead | null>;
   salvarFichaExtra: (leadId: string, payload: AtualizarFichaPayload) => Promise<boolean>;
@@ -502,6 +503,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         possivelValor: Number(payload.possivelValor) || 0,
         statusVenda: payload.statusVenda || 'Em processo',
         dataEntrada: payload.dataEntrada || hoje,
+        dataEntradaSituacao: { [situacao]: payload.dataEntrada || hoje },
+        dataUltimoContato: payload.dataUltimoContato || (payload.etapaPorSituacao ? hoje : undefined),
+        dataUltimoContatoPorSituacao: payload.dataUltimoContatoPorSituacao || (payload.etapaPorSituacao ? { [situacao]: hoje } : {}),
+        dataUltimaAcao: timestamp,
         responsavel: payload.responsavel || responsaveis[0] || 'Secretária 1',
         dataAgendamento: payload.dataAgendamento,
         horarioAgendamento: payload.horarioAgendamento,
@@ -602,6 +607,32 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
           const motivoPerda = dados.motivoPerda !== undefined ? dados.motivoPerda : lead.motivoPerda;
 
+          // Rastreamento de entrada na situação atual
+          const changingSituation = Boolean(dados.situacao && dados.situacao !== lead.situacao);
+          const dataEntradaSituacao = {
+            ...(lead.dataEntradaSituacao || {}),
+            ...(changingSituation ? { [dados.situacao!]: hoje } : {}),
+            ...(dados.dataEntradaSituacao || {}),
+          };
+
+          // Rastreamento de data do último contato / ação
+          const stepChanged = Boolean(dados.etapaPorSituacao);
+          const dataUltimoContato =
+            dados.dataUltimoContato !== undefined
+              ? dados.dataUltimoContato
+              : stepChanged
+              ? hoje
+              : lead.dataUltimoContato;
+
+          const currentSituacao = dados.situacao || lead.situacao;
+          const dataUltimoContatoPorSituacao = {
+            ...(lead.dataUltimoContatoPorSituacao || {}),
+            ...(stepChanged || dados.dataUltimoContato ? { [currentSituacao]: hoje } : {}),
+            ...(dados.dataUltimoContatoPorSituacao || {}),
+          };
+
+          const dataUltimaAcao = dados.dataUltimaAcao || timestamp;
+
           const eId = normalizarUuid(lead.empresaId || (lead as any).empresa_id || empresaIdEfetiva);
           leadAtualizado = {
             ...lead,
@@ -613,6 +644,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             situacaoPerda,
             dataPerda,
             motivoPerda,
+            dataEntradaSituacao,
+            dataUltimoContato,
+            dataUltimoContatoPorSituacao,
+            dataUltimaAcao,
             nome: dados.nome !== undefined ? dados.nome.trim() : lead.nome,
             interesse: dados.interesse !== undefined ? dados.interesse.trim() : lead.interesse,
             possivelValor: dados.possivelValor !== undefined ? Number(dados.possivelValor) || 0 : lead.possivelValor,
@@ -702,6 +737,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     async (leadId: string, situacao: SituacaoLead, etapa: string): Promise<Lead | null> => {
       const target = leads.find((l) => l.id === leadId);
       const mapaAtualizado = { ...(target?.etapaPorSituacao || {}), [situacao]: etapa };
+      const hoje = new Date().toISOString().split('T')[0];
+      const timestamp = new Date().toISOString();
 
       // Se a etapa concluída em Nutrição for a última da cadência oficial (ou Todas as etapas concluídas),
       // transicionar automaticamente o lead da situação 'Nutrição' para 'Reativação'
@@ -717,12 +754,25 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           return atualizarLead(leadId, {
             situacao: 'Reativação',
             etapaPorSituacao: mapaAtualizado,
+            dataUltimoContato: hoje,
+            dataUltimoContatoPorSituacao: {
+              ...(target?.dataUltimoContatoPorSituacao || {}),
+              [situacao]: hoje,
+              Reativação: hoje,
+            },
+            dataUltimaAcao: timestamp,
           });
         }
       }
 
       return atualizarLead(leadId, {
         etapaPorSituacao: mapaAtualizado,
+        dataUltimoContato: hoje,
+        dataUltimoContatoPorSituacao: {
+          ...(target?.dataUltimoContatoPorSituacao || {}),
+          [situacao]: hoje,
+        },
+        dataUltimaAcao: timestamp,
       });
     },
     [leads, atualizarLead]
@@ -735,6 +785,24 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return definirEtapaPorSituacao(leadId, target.situacao, etapa);
     },
     [leads, definirEtapaPorSituacao]
+  );
+
+  const registrarContatoHoje = useCallback(
+    async (leadId: string): Promise<Lead | null> => {
+      const target = leads.find((l) => l.id === leadId);
+      if (!target) return null;
+      const hoje = new Date().toISOString().split('T')[0];
+      const timestamp = new Date().toISOString();
+      return atualizarLead(leadId, {
+        dataUltimoContato: hoje,
+        dataUltimoContatoPorSituacao: {
+          ...(target.dataUltimoContatoPorSituacao || {}),
+          [target.situacao]: hoje,
+        },
+        dataUltimaAcao: timestamp,
+      });
+    },
+    [leads, atualizarLead]
   );
 
   const definirStatusGrupoNutricao = useCallback(
@@ -1189,6 +1257,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         marcarComoPerdido,
         definirEtapaPorSituacao,
         definirEtapaSituacaoAtual,
+        registrarContatoHoje,
         definirStatusGrupoNutricao,
         atualizarFichaLead,
         salvarFichaExtra,

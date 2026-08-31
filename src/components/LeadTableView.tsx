@@ -378,15 +378,20 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
 
   const leadsComCadencia = useMemo(() => {
     return leads.map((lead) => {
-      const diasCorridos = calcularDiasCorridos(lead.dataEntrada);
+      const dataEntradaEfetiva = lead.dataEntradaSituacao?.[lead.situacao] || lead.dataEntrada;
+      const diasCorridos = calcularDiasCorridos(dataEntradaEfetiva);
       const etapaAtual = lead.etapaPorSituacao?.[lead.situacao] || '';
       const etapaEsperada = calcularEtapaEsperada(lead.situacao, diasCorridos);
       const statusCadencia = calcularStatusCadencia(lead.situacao, etapaAtual, etapaEsperada);
+      const dataUltimoContatoEfetiva =
+        lead.dataUltimoContatoPorSituacao?.[lead.situacao] || lead.dataUltimoContato;
       const deveContatarHoje = verificarSeDeveContatarHoje(
         lead.situacao,
         diasCorridos,
         statusCadencia,
-        etapaAtual
+        etapaAtual,
+        dataUltimoContatoEfetiva,
+        lead.dataUltimaAcao
       );
 
       return {
