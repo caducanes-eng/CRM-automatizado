@@ -50,6 +50,7 @@ import {
   calcularEtapaEsperada,
   calcularStatusCadencia,
   verificarSeDeveContatarHoje,
+  obterDataEntradaEfetiva,
   StatusCadencia,
   obterOpcoesCadenciaPorSituacao,
   obterProximaEtapa,
@@ -378,7 +379,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
 
   const leadsComCadencia = useMemo(() => {
     return leads.map((lead) => {
-      const dataEntradaEfetiva = lead.dataEntradaSituacao?.[lead.situacao] || lead.dataEntrada;
+      const dataEntradaEfetiva = obterDataEntradaEfetiva(lead);
       const diasCorridos = calcularDiasCorridos(dataEntradaEfetiva);
       const etapaAtual = lead.etapaPorSituacao?.[lead.situacao] || '';
       const etapaEsperada = calcularEtapaEsperada(lead.situacao, diasCorridos);

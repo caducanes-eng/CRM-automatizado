@@ -504,6 +504,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         statusVenda: payload.statusVenda || 'Em processo',
         dataEntrada: payload.dataEntrada || hoje,
         dataEntradaSituacao: { [situacao]: payload.dataEntrada || hoje },
+        dataEntradaReativacao:
+          situacao === 'Reativação'
+            ? payload.dataEntradaReativacao || payload.dataEntrada || hoje
+            : undefined,
         dataUltimoContato: payload.dataUltimoContato || (payload.etapaPorSituacao ? hoje : undefined),
         dataUltimoContatoPorSituacao: payload.dataUltimoContatoPorSituacao || (payload.etapaPorSituacao ? { [situacao]: hoje } : {}),
         dataUltimaAcao: timestamp,
@@ -615,6 +619,22 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             ...(dados.dataEntradaSituacao || {}),
           };
 
+          // Novo contador de dias para Reativação:
+          // Apenas a mudança de status inicia ou altera a contagem. A alteração de etapa NÃO zera ou reinicia.
+          const isEnteringReativacao = changingSituation && dados.situacao === 'Reativação';
+          const isLeavingReativacao = changingSituation && lead.situacao === 'Reativação' && dados.situacao !== 'Reativação';
+
+          let dataEntradaReativacao = lead.dataEntradaReativacao;
+          if (dados.dataEntradaReativacao !== undefined) {
+            dataEntradaReativacao = dados.dataEntradaReativacao;
+          } else if (isEnteringReativacao) {
+            dataEntradaReativacao = hoje;
+          } else if (isLeavingReativacao) {
+            dataEntradaReativacao = undefined;
+          } else if ((dados.situacao || lead.situacao) === 'Reativação' && !dataEntradaReativacao) {
+            dataEntradaReativacao = lead.dataEntradaSituacao?.['Reativação'] || lead.dataEntrada || hoje;
+          }
+
           // Rastreamento de data do último contato / ação
           const stepChanged = Boolean(dados.etapaPorSituacao);
           const dataUltimoContato =
@@ -645,6 +665,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             dataPerda,
             motivoPerda,
             dataEntradaSituacao,
+            dataEntradaReativacao,
             dataUltimoContato,
             dataUltimoContatoPorSituacao,
             dataUltimaAcao,

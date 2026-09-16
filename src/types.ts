@@ -609,8 +609,9 @@ export interface Lead extends BaseEntity {
   dataEnvioLembrete24h?: string; // Timestamp em que a mensagem 24h foi disparada
   mensagemLembrete24hEnviadaPor?: string; // Nome de quem realizou o disparo
   
-  // Nutrição e Perda
+  // Nutrição, Reativação e Perda
   dataEntradaNutricao?: string; // Data em que o lead entrou na situação Nutrição (YYYY-MM-DD)
+  dataEntradaReativacao?: string; // Data em que o lead entrou na situação Reativação (YYYY-MM-DD) - novo contador de dias
   statusGrupoNutricao?: StatusGrupoNutricao; // "Ativo" | "Removido" no grupo de transmissão/conteúdo
   motivoPerda?: string; // Motivo da perda quando statusVenda === "Perdido"
   dataPerda?: string; // Data da perda (YYYY-MM-DD)
@@ -690,6 +691,7 @@ export interface CriarLeadPayload {
   dataEnvioLembrete24h?: string;
   mensagemLembrete24hEnviadaPor?: string;
   dataEntradaNutricao?: string;
+  dataEntradaReativacao?: string;
   statusGrupoNutricao?: StatusGrupoNutricao;
   motivoPerda?: string;
   dataPerda?: string;
@@ -723,6 +725,7 @@ export interface AtualizarLeadPayload {
   dataEnvioLembrete24h?: string;
   mensagemLembrete24hEnviadaPor?: string;
   dataEntradaNutricao?: string;
+  dataEntradaReativacao?: string;
   statusGrupoNutricao?: StatusGrupoNutricao;
   motivoPerda?: string;
   dataPerda?: string;

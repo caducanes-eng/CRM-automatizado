@@ -206,6 +206,27 @@ export function reiniciarCadencia(situacao: SituacaoLead): string {
 }
 
 /**
+ * Retorna a data de entrada efetiva para a situação atual do lead.
+ * Para pacientes em Reativação, utiliza a data de inclusão na reativação
+ * (novo contador de dias independente da data original de cadastro).
+ */
+export function obterDataEntradaEfetiva(lead: {
+  situacao: SituacaoLead;
+  dataEntrada: string;
+  dataEntradaReativacao?: string;
+  dataEntradaSituacao?: Partial<Record<SituacaoLead, string>> | Record<string, string>;
+}): string {
+  if (lead.situacao === 'Reativação') {
+    return (
+      lead.dataEntradaReativacao ||
+      lead.dataEntradaSituacao?.['Reativação'] ||
+      lead.dataEntrada
+    );
+  }
+  return lead.dataEntradaSituacao?.[lead.situacao] || lead.dataEntrada;
+}
+
+/**
  * Calcula os dias corridos entre uma data de entrada (YYYY-MM-DD) e a data de hoje.
  * Fórmula: hoje - data de entrada
  */
@@ -237,8 +258,15 @@ export function calcularDiasCorridos(dataEntradaIso: string | undefined | null):
 /**
  * Calcula a "Etapa esperada" com base na situação do lead e nos dias corridos.
  * A etapa esperada é sempre a mais avançada cujo número de dias já foi atingido.
+ * NOTA: Para pacientes em Reativação, os dias corridos são informativos e NÃO
+ * definem uma etapa esperada calculada.
  */
 export function calcularEtapaEsperada(situacao: SituacaoLead, diasCorridos: number): string {
+  // Em Reativação, a contagem de dias é informativa e não define etapa esperada
+  if (situacao === 'Reativação') {
+    return '-';
+  }
+
   if (situacao === 'Pós procedimento') {
     if (diasCorridos >= 29) return 'Contato 4 - Confirmação do retorno (dia 29)';
     if (diasCorridos >= 15) return 'Contato 3 (dia 15)';
@@ -259,7 +287,7 @@ export function calcularEtapaEsperada(situacao: SituacaoLead, diasCorridos: numb
     return 'Contato 1 (dia 0)';
   }
 
-  // "Em captação", "Em negociação", "Pós consulta", "Reativação" (e padrão)
+  // "Em captação", "Em negociação", "Pós consulta" (e padrão)
   if (diasCorridos >= 17) return 'Contato 5 (dia 17)';
   if (diasCorridos >= 9) return 'Contato 4 (dia 9)';
   if (diasCorridos >= 5) return 'Contato 3 (dia 5)';
@@ -270,6 +298,7 @@ export function calcularEtapaEsperada(situacao: SituacaoLead, diasCorridos: numb
 /**
  * Compara a posição da Próxima Etapa do lead com a Etapa Esperada (calculada pelos dias corridos).
  * - se todas as etapas foram concluídas → Status = "Em dia"
+ * - se a situação é Reativação → Status = "Em dia" (dias não geram atraso)
  * - se a próxima etapa está ATRÁS da etapa esperada (índice menor) → Status = "Atrasado" (Em atraso)
  * - se a próxima etapa é IGUAL à etapa esperada → Status = "Em dia"
  * - se a próxima etapa está À FRENTE da etapa esperada (índice maior) → Status = "Adiantado"
@@ -280,6 +309,11 @@ export function calcularStatusCadencia(
   etapaEsperada: string
 ): StatusCadencia {
   if (verificarSeTodasEtapasConcluidas(situacao, etapaOuProximaEtapa)) {
+    return 'Em dia';
+  }
+
+  // Em Reativação, os dias corridos são puramente informativos e não penalizam com atraso
+  if (situacao === 'Reativação') {
     return 'Em dia';
   }
 
@@ -391,6 +425,11 @@ export function verificarSeDeveContatarHoje(
     return false;
   }
 
+  // Em Reativação: os dias corridos são puramente informativos e não determinam etapa esperada nem cadência rígida
+  if (situacao === 'Reativação') {
+    return diasCorridos === 0;
+  }
+
   // 1. Se o lead está atrasado e ainda não foi atendido hoje, precisa de contato urgente hoje
   if (statusCadencia === 'Atrasado') {
     return true;
@@ -415,8 +454,7 @@ export function verificarSeDeveContatarHoje(
   if (
     situacao === 'Em captação' ||
     situacao === 'Em negociação' ||
-    situacao === 'Pós consulta' ||
-    situacao === 'Reativação'
+    situacao === 'Pós consulta'
   ) {
     const diasContatoPadrao = [0, 1, 3, 5, 9, 17];
     return diasContatoPadrao.includes(diasCorridos);

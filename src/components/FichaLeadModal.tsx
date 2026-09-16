@@ -58,6 +58,8 @@ import {
   avancarProximaEtapa,
   reiniciarCadencia,
   verificarSeTodasEtapasConcluidas,
+  calcularDiasCorridos,
+  obterDataEntradaEfetiva,
   ETAPAS_CONCLUIDAS_LABEL,
 } from '../utils/cadencia';
 
@@ -980,7 +982,9 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                         </span>
                       </div>
                       <span className="text-xs text-[#6E6E6E] font-medium">
-                        Cadastrado em {formatarDataBR(lead.dataEntrada)}
+                        {lead.situacao === 'Reativação'
+                          ? `Inclusa na Reativação em ${formatarDataBR(obterDataEntradaEfetiva(lead))}`
+                          : `Cadastrado em ${formatarDataBR(lead.dataEntrada)}`}
                       </span>
                     </div>
 
@@ -989,9 +993,19 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                       <span className="text-[10px] font-bold text-[#6E6E6E] uppercase tracking-wider block">
                         Situação
                       </span>
-                      <span className="inline-block px-2 py-0.5 rounded-sm bg-white text-[#1A1A1A] border border-[#D9D6D0] text-xs font-bold">
-                        {lead.situacao}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="inline-block px-2 py-0.5 rounded-sm bg-white text-[#1A1A1A] border border-[#D9D6D0] text-xs font-bold">
+                          {lead.situacao}
+                        </span>
+                        {lead.situacao === 'Reativação' && (
+                          <span
+                            className="text-[10px] text-[#5C3A22] font-semibold bg-[#F2EFEA] px-1.5 py-0.5 rounded-xs border border-[#D9D6D0]"
+                            title="Dias corridos desde a inclusão em Reativação. Apenas a mudança de status altera ou reinicia esta contagem."
+                          >
+                            {calcularDiasCorridos(obterDataEntradaEfetiva(lead))}d na reativação
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Etapa atual */}

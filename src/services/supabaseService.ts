@@ -257,9 +257,18 @@ export const supabaseMapper = {
       mensagemLembrete24hEnviadaPor: lead.mensagemLembrete24hEnviadaPor || null,
     };
 
+    const cadenciaMeta = {
+      dataEntradaReativacao: lead.dataEntradaReativacao || null,
+      dataEntradaSituacao: lead.dataEntradaSituacao || {},
+      dataUltimoContato: lead.dataUltimoContato || null,
+      dataUltimoContatoPorSituacao: lead.dataUltimoContatoPorSituacao || {},
+      dataUltimaAcao: lead.dataUltimaAcao || null,
+    };
+
     const etapaMap = {
       ...(lead.etapaPorSituacao || {}),
       _agendamento: agendamentoMeta,
+      _cadenciaMeta: cadenciaMeta,
     };
 
     return {
@@ -278,6 +287,11 @@ export const supabaseMapper = {
       motivo_perda: lead.motivoPerda ? String(lead.motivoPerda).trim() : null,
       data_perda: sanitizeDate(lead.dataPerda),
       situacao_perda: lead.situacaoPerda || null,
+      data_entrada_reativacao: sanitizeDate(lead.dataEntradaReativacao),
+      data_entrada_situacao: lead.dataEntradaSituacao || {},
+      data_ultimo_contato: lead.dataUltimoContato || null,
+      data_ultimo_contato_por_situacao: lead.dataUltimoContatoPorSituacao || {},
+      data_ultima_acao: lead.dataUltimaAcao || null,
       version: Number(lead.version || 1),
       created_at: lead.created_at || new Date().toISOString(),
       updated_at: lead.updated_at || new Date().toISOString(),
@@ -287,8 +301,10 @@ export const supabaseMapper = {
 
   dbToLead: (row: any): Lead => {
     const metaAgendamento = row.etapa_por_situacao?._agendamento || {};
+    const metaCadencia = row.etapa_por_situacao?._cadenciaMeta || {};
     const etapaMap = { ...(row.etapa_por_situacao || {}) };
     delete etapaMap._agendamento;
+    delete etapaMap._cadenciaMeta;
 
     return {
       id: row.id,
@@ -307,6 +323,11 @@ export const supabaseMapper = {
       motivoPerda: row.motivo_perda || undefined,
       dataPerda: row.data_perda || undefined,
       situacaoPerda: (row.situacao_perda as SituacaoLead) || undefined,
+      dataEntradaReativacao: row.data_entrada_reativacao || metaCadencia.dataEntradaReativacao || undefined,
+      dataEntradaSituacao: row.data_entrada_situacao || metaCadencia.dataEntradaSituacao || undefined,
+      dataUltimoContato: row.data_ultimo_contato || metaCadencia.dataUltimoContato || undefined,
+      dataUltimoContatoPorSituacao: row.data_ultimo_contato_por_situacao || metaCadencia.dataUltimoContatoPorSituacao || undefined,
+      dataUltimaAcao: row.data_ultima_acao || metaCadencia.dataUltimaAcao || undefined,
 
       // Recuperação dos dados do agendamento a partir do meta JSONB ou coluna legado
       dataAgendamento: metaAgendamento.dataAgendamento || row.data_agendamento || undefined,

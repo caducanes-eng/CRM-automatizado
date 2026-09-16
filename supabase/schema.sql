@@ -214,16 +214,49 @@ CREATE TABLE IF NOT EXISTS leads (
   motivo_perda TEXT,
   data_perda DATE,
   situacao_perda VARCHAR(50),
+  data_entrada_reativacao DATE,
+  data_entrada_situacao JSONB NOT NULL DEFAULT '{}'::jsonb,
+  data_ultimo_contato TIMESTAMPTZ,
+  data_ultimo_contato_por_situacao JSONB NOT NULL DEFAULT '{}'::jsonb,
+  data_ultima_acao TIMESTAMPTZ,
+  data_agendamento DATE,
+  horario_agendamento VARCHAR(10),
+  profissional_agendamento VARCHAR(255),
+  tipo_consulta VARCHAR(100),
+  unidade_agendamento VARCHAR(100),
+  observacoes_agendamento TEXT,
+  status_confirmacao_agendamento VARCHAR(50),
+  lembrete_24h_enviado BOOLEAN DEFAULT false,
+  data_envio_lembrete_24h TIMESTAMPTZ,
+  mensagem_lembrete_24h_enviada_por VARCHAR(255),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   deleted_at TIMESTAMPTZ NULL,
   version INTEGER NOT NULL DEFAULT 1
 );
 
+-- Migrações idempotentes para tabelas existentes
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS data_entrada_reativacao DATE;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS data_entrada_situacao JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS data_ultimo_contato TIMESTAMPTZ;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS data_ultimo_contato_por_situacao JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS data_ultima_acao TIMESTAMPTZ;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS data_agendamento DATE;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS horario_agendamento VARCHAR(10);
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS profissional_agendamento VARCHAR(255);
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS tipo_consulta VARCHAR(100);
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS unidade_agendamento VARCHAR(100);
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS observacoes_agendamento TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS status_confirmacao_agendamento VARCHAR(50);
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS lembrete_24h_enviado BOOLEAN DEFAULT false;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS data_envio_lembrete_24h TIMESTAMPTZ;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS mensagem_lembrete_24h_enviada_por VARCHAR(255);
+
 CREATE INDEX IF NOT EXISTS idx_leads_empresa ON leads(empresa_id) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_leads_situacao ON leads(empresa_id, situacao) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_leads_status_venda ON leads(empresa_id, status_venda) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_leads_data_entrada ON leads(empresa_id, data_entrada) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_leads_data_reativacao ON leads(empresa_id, data_entrada_reativacao) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_leads_responsavel ON leads(empresa_id, responsavel) WHERE deleted_at IS NULL;
 
 DROP TRIGGER IF EXISTS trg_leads_updated_at ON leads;

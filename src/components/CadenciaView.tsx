@@ -35,6 +35,7 @@ import {
   calcularStatusCadencia,
   verificarSeDeveContatarHoje,
   obterOpcoesCadenciaPorSituacao,
+  obterDataEntradaEfetiva,
   StatusCadencia,
   obterProximaEtapa,
   avancarProximaEtapa,
@@ -143,7 +144,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
   // 2. Mapeamento enriquecido com cálculos de cadência para cada lead
   const leadsProcessados = useMemo(() => {
     return leadsDaSituacao.map((lead) => {
-      const dataEntradaEfetiva = lead.dataEntradaSituacao?.[situacao] || lead.dataEntrada;
+      const dataEntradaEfetiva = obterDataEntradaEfetiva(lead);
       const diasCorridos = calcularDiasCorridos(dataEntradaEfetiva);
       const etapaArmazenada = lead.etapaPorSituacao?.[situacao];
       const proximaEtapa = obterProximaEtapa(situacao, etapaArmazenada);
@@ -161,6 +162,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
 
       return {
         ...lead,
+        dataEntradaEfetiva,
         diasCorridos,
         etapaArmazenada,
         proximaEtapa,
@@ -215,7 +217,9 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
           return a.nome.localeCompare(b.nome) * fator;
         }
         if (ordenacao.campo === 'dataEntrada') {
-          return a.dataEntrada.localeCompare(b.dataEntrada) * fator;
+          const dataA = a.dataEntradaEfetiva || a.dataEntrada;
+          const dataB = b.dataEntradaEfetiva || b.dataEntrada;
+          return dataA.localeCompare(dataB) * fator;
         }
         if (ordenacao.campo === 'diasCorridos') {
           return (a.diasCorridos - b.diasCorridos) * fator;
@@ -495,7 +499,9 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
                     onClick={() => handleToggleOrdenacao('dataEntrada')}
                     className="flex items-center gap-1.5 text-white hover:text-white/80 font-bold cursor-pointer"
                   >
-                    <span className="text-white font-bold">Data de entrada</span>
+                    <span className="text-white font-bold">
+                      {situacao === 'Reativação' ? 'Inclusão em Reativação' : 'Data de entrada'}
+                    </span>
                     <ArrowUpDown className="w-3 h-3 text-white/70" />
                   </button>
                 </th>
@@ -606,8 +612,13 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
                       <td className="py-3 px-4 text-xs font-semibold text-[#1A1A1A] whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           <Calendar className="w-3.5 h-3.5 text-[#8F887E] shrink-0" />
-                          <span>{formatarDataBR(lead.dataEntrada)}</span>
+                          <span>{formatarDataBR(lead.dataEntradaEfetiva || lead.dataEntrada)}</span>
                         </div>
+                        {situacao === 'Reativação' && lead.dataEntrada && lead.dataEntrada !== (lead.dataEntradaEfetiva || lead.dataEntrada) && (
+                          <span className="text-[10px] text-[#8F887E] block pl-5" title={`Data de cadastro inicial: ${formatarDataBR(lead.dataEntrada)}`}>
+                            Cadastro: {formatarDataBR(lead.dataEntrada)}
+                          </span>
+                        )}
                       </td>
 
                       {/* 3. Dias corridos */}
@@ -620,6 +631,11 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
                               ? 'bg-sky-50 text-sky-800 border-sky-200'
                               : 'bg-white text-[#1A1A1A] border-[#D9D6D0]'
                           }`}
+                          title={
+                            situacao === 'Reativação'
+                              ? `Inclusa na Reativação há ${lead.diasCorridos} dias. A mudança de etapa não altera esta contagem.`
+                              : undefined
+                          }
                         >
                           {lead.diasCorridos === 0
                             ? 'Hoje (0d)'
@@ -627,6 +643,11 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
                             ? '1 dia'
                             : `${lead.diasCorridos} dias`}
                         </span>
+                        {situacao === 'Reativação' && (
+                          <span className="block text-[10px] text-[#8F887E] font-medium mt-0.5">
+                            em reativação
+                          </span>
+                        )}
                       </td>
 
                       {/* 4. Próxima Etapa (Clicável para abrir: "Etapa realizada? Concluída ou cancelar") */}
@@ -657,10 +678,20 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
 
                       {/* 5. Etapa esperada */}
                       <td className="py-3 px-4 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium bg-[#F2EFEA] text-[#1A1A1A] border border-[#D9D6D0]">
-                          <Clock className="w-3 h-3 text-[#5C3A22] shrink-0" />
-                          <span>{lead.etapaEsperada}</span>
-                        </span>
+                        {situacao === 'Reativação' ? (
+                          <span
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium bg-[#F2EFEA] text-[#6E6E6E] border border-[#D9D6D0]"
+                            title="Para pacientes em Reativação, os dias corridos são informativos e não determinam uma etapa esperada fixa."
+                          >
+                            <Clock className="w-3 h-3 text-[#8F887E] shrink-0" />
+                            <span>Livre (não calculada)</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium bg-[#F2EFEA] text-[#1A1A1A] border border-[#D9D6D0]">
+                            <Clock className="w-3 h-3 text-[#5C3A22] shrink-0" />
+                            <span>{lead.etapaEsperada}</span>
+                          </span>
+                        )}
                       </td>
 
                       {/* 6. Status */}
