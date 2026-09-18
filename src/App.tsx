@@ -13,6 +13,7 @@ import { Sidebar, navigationItems } from './components/Sidebar';
 import { Header } from './components/Header';
 import { PlaceholderView } from './components/PlaceholderView';
 import { CadastroRapidoView } from './components/CadastroRapidoView';
+import { TarefasView } from './components/TarefasView';
 import { ConsultasAgendadasView } from './components/ConsultasAgendadasView';
 import { CadenciaView } from './components/CadenciaView';
 import { NutricaoView } from './components/NutricaoView';
@@ -84,6 +85,9 @@ export default function App() {
     switch (activeSection) {
       case 'cadastro_rapido':
         return <CadastroRapidoView />;
+
+      case 'tarefas':
+        return <TarefasView />;
 
       case 'em_captacao':
         return (

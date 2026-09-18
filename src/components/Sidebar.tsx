@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   UserPlus,
+  CheckSquare,
   Flame,
   Handshake,
   CalendarClock,
@@ -45,6 +46,12 @@ export const navigationItems: {
         description: 'Entrada ultra rápida de novos pacientes',
         icon: UserPlus,
         isPrimary: true,
+      },
+      {
+        id: 'tarefas',
+        label: 'Tarefas & Agendamentos',
+        description: 'Gestão de tarefas operacionais e cadências',
+        icon: CheckSquare,
       },
     ],
   },
@@ -163,7 +170,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
 }) => {
   const { responsavelAtivo, responsavelNome, isGestor, podeAcessarSecao, deslogar } = useAuth();
-  const { isFirestoreConnected } = useCrm();
+  const { isFirestoreConnected, indicadoresTarefas } = useCrm();
   const { config, isPlataformaAdmin, empresas, empresaAtivaId, definirEmpresaAtivaId } = useEmpresa();
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
 
@@ -375,6 +382,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             }}
                           >
                             Gestor
+                          </span>
+                        ) : item.id === 'tarefas' && indicadoresTarefas?.tarefasHoje > 0 ? (
+                          <span
+                            className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-500 text-black shadow-2xs"
+                            title={`${indicadoresTarefas.tarefasHoje} tarefas agendadas para hoje`}
+                          >
+                            {indicadoresTarefas.tarefasHoje}
                           </span>
                         ) : (
                           <ChevronRight

@@ -27,6 +27,10 @@ import {
   ImportarLeadItem,
   ResultadoImportacao,
   OrigemLead,
+  Tarefa,
+  IndicadoresTarefas,
+  StatusTarefa,
+  PrioridadeTarefa,
 } from '../types';
 import { SEED_RESPONSAVEIS, SEED_PROCEDIMENTOS } from '../data/seedData';
 import { obterOpcoesCadenciaPorSituacao } from '../utils/cadencia';
@@ -123,6 +127,27 @@ interface CrmContextType {
   todosProcedimentos: ProcedimentoClinica[];
   estatisticasProcedimentos: EstatisticasProcedimento[];
 
+  // Tarefas & Agendamentos
+  tarefas: Tarefa[];
+  indicadoresTarefas: IndicadoresTarefas;
+  criarTarefa: (payload: {
+    leadId?: string | null;
+    usuarioResponsavelId?: string | null;
+    titulo: string;
+    descricao?: string;
+    situacaoOrigem?: string;
+    etapaCadencia?: string;
+    dataAgendada: string;
+    horaAgendada?: string;
+    prioridade?: PrioridadeTarefa;
+  }) => Promise<Tarefa>;
+  atualizarStatusTarefa: (
+    tarefaId: string,
+    status: StatusTarefa,
+    observacaoConclusao?: string
+  ) => Promise<boolean>;
+  excluirTarefa: (tarefaId: string) => Promise<boolean>;
+
   // Operações
   carregarDadosCompletos: () => Promise<void>;
   criarLead: (payload: CriarLeadPayload) => Promise<Lead>;
@@ -172,6 +197,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [todasFichasRaw, setTodasFichasRaw] = useState<FichaLead[]>([]);
   const [todasComprasRaw, setTodasComprasRaw] = useState<Compra[]>([]);
   const [todosProcedimentosRaw, setTodosProcedimentosRaw] = useState<ProcedimentoClinica[]>([]);
+  const [todasTarefasRaw, setTodasTarefasRaw] = useState<Tarefa[]>([]);
   const [usuariosState, setUsuariosState] = useState<UsuarioColaborador[]>([]);
   const [responsaveisCustom, setResponsaveisCustom] = useState<string[]>(SEED_RESPONSAVEIS);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -221,6 +247,19 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         (p) => !p.deleted_at && pertenceAEmpresaAtiva(p.empresaId || (p as any).empresa_id)
       ),
     [todosProcedimentosRaw, pertenceAEmpresaAtiva]
+  );
+
+  const tarefas = useMemo(
+    () =>
+      todasTarefasRaw.filter(
+        (t) => !t.deleted_at && pertenceAEmpresaAtiva(t.empresaId || (t as any).empresa_id)
+      ),
+    [todasTarefasRaw, pertenceAEmpresaAtiva]
+  );
+
+  const indicadoresTarefas = useMemo(
+    () => supabaseService.calcularIndicadoresTarefas(tarefas),
+    [tarefas]
   );
 
   // Colaboradores da clínica ativa
@@ -283,6 +322,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setTodasComprasRaw(dados.compras || []);
         setTodosProcedimentosRaw(dados.procedimentos || []);
         setUsuariosState(dados.usuarios || []);
+
+        try {
+          const tarefasSupabase = await supabaseService.fetchTarefas();
+          setTodasTarefasRaw(tarefasSupabase || []);
+        } catch (e) {}
+
         if (dados.usuarios && dados.usuarios.length > 0) {
           const nomes = dados.usuarios.filter((u) => !u.deleted_at && u.ativo !== false).map((u) => u.nome);
           if (nomes.length > 0) setResponsaveisCustom(nomes);
@@ -1175,6 +1220,74 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return { totalRemovidos: count };
   }, [leads, excluirLead]);
 
+  // =========================================================================
+  // OPERAÇÕES DE TAREFAS
+  // =========================================================================
+  const criarTarefa = useCallback(
+    async (payload: {
+      leadId?: string | null;
+      usuarioResponsavelId?: string | null;
+      titulo: string;
+      descricao?: string;
+      situacaoOrigem?: string;
+      etapaCadencia?: string;
+      dataAgendada: string;
+      horaAgendada?: string;
+      prioridade?: PrioridadeTarefa;
+    }): Promise<Tarefa> => {
+      const nova = await supabaseService.criarTarefa({
+        ...payload,
+        empresaId: empresaIdEfetiva,
+      });
+
+      setTodasTarefasRaw((prev) => [nova, ...prev.filter((t) => t.id !== nova.id)]);
+      return nova;
+    },
+    [empresaIdEfetiva]
+  );
+
+  const atualizarStatusTarefa = useCallback(
+    async (
+      tarefaId: string,
+      status: StatusTarefa,
+      observacaoConclusao?: string
+    ): Promise<boolean> => {
+      await supabaseService.atualizarStatusTarefa(
+        tarefaId,
+        status,
+        observacaoConclusao,
+        user?.uid
+      );
+
+      const nowIso = new Date().toISOString();
+      setTodasTarefasRaw((prev) =>
+        prev.map((t) => {
+          if (t.id === tarefaId) {
+            return {
+              ...t,
+              status,
+              dataConclusao: status === 'concluida' ? nowIso : null,
+              observacaoConclusao: observacaoConclusao || t.observacaoConclusao,
+              updated_at: nowIso,
+            };
+          }
+          return t;
+        })
+      );
+      return true;
+    },
+    [user?.uid]
+  );
+
+  const excluirTarefa = useCallback(
+    async (tarefaId: string): Promise<boolean> => {
+      await supabaseService.excluirTarefa(tarefaId);
+      setTodasTarefasRaw((prev) => prev.filter((t) => t.id !== tarefaId));
+      return true;
+    },
+    []
+  );
+
   // Cálculo das estatísticas de procedimentos
   const estatisticasProcedimentos = useMemo<EstatisticasProcedimento[]>(() => {
     const hoje = new Date();
@@ -1296,6 +1409,11 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         importarLeadsEmMassa,
         resetarDadosExemplo,
         limparTodosLeads,
+        tarefas,
+        indicadoresTarefas,
+        criarTarefa,
+        atualizarStatusTarefa,
+        excluirTarefa,
       }}
     >
       {children}

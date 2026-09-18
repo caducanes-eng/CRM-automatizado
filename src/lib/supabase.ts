@@ -1,9 +1,6 @@
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
-import { doc, setDoc, onSnapshot } from 'firebase/firestore';
-import { db } from './firebase';
 
 const STORAGE_KEY_SUPABASE = 'crm_supabase_config_v1';
-const FIRESTORE_DOC_PATH = { collection: 'configuracoes_sistema', doc: 'supabase' };
 
 export interface SupabaseConfig {
   url: string;
@@ -156,86 +153,19 @@ export function saveSupabaseConfig(url: string, anonKey: string): void {
 
   logRealtimeEvent('SISTEMA', 'SYSTEM', 'Novas credenciais do Supabase salvas localmente.');
 
-  // Sincroniza credenciais no Firestore para outros navegadores apenas se a cota estiver disponível
-  if (db && limpoUrl && limpoKey) {
-    try {
-      const docRef = doc(db, FIRESTORE_DOC_PATH.collection, FIRESTORE_DOC_PATH.doc);
-      setDoc(
-        docRef,
-        {
-          url: limpoUrl,
-          anonKey: limpoKey,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      ).catch((e) => {
-        // Silencia erro se for cota excedida
-        if (!String(e?.message || '').includes('Quota') && !String(e?.code || '').includes('resource-exhausted')) {
-          console.warn('Erro ao salvar config do Supabase no Firestore:', e);
-        }
-      });
-    } catch (e) {
-      // Ignora erro
-    }
-  }
-
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('supabase-config-changed'));
   }
 }
 
+/**
+ * Função mantida para compatibilidade com chamadas existentes.
+ * O sistema agora opera exclusivamente com Supabase e armazenamento local.
+ */
 export function iniciarEscutaSupabaseConfigFirestore(): () => void {
-  if (!db) return () => {};
-
-  try {
-    const docRef = doc(db, FIRESTORE_DOC_PATH.collection, FIRESTORE_DOC_PATH.doc);
-    let primeiraLeitura = true;
-
-    const unsubscribe = onSnapshot(
-      docRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          if (data && data.url && data.anonKey) {
-            const limpoUrl = String(data.url).trim();
-            const limpoKey = String(data.anonKey).trim();
-            const configAtual = getSupabaseConfig();
-
-            const mudou = configAtual.url !== limpoUrl || configAtual.anonKey !== limpoKey;
-
-            if (mudou || primeiraLeitura) {
-              primeiraLeitura = false;
-              console.log('🔄 Sincronizando credenciais do Supabase obtidas via Firestore...');
-              localStorage.setItem(
-                STORAGE_KEY_SUPABASE,
-                JSON.stringify({ url: limpoUrl, anonKey: limpoKey })
-              );
-              cachedClient = null;
-              lastClientKey = '';
-              if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('supabase-config-changed'));
-              }
-            }
-          }
-        }
-      },
-      (error) => {
-        console.warn('Aviso ao escutar Supabase config no Firestore:', error);
-      }
-    );
-    return unsubscribe;
-  } catch (e) {
-    console.warn('Erro ao iniciar listener de Supabase config no Firestore:', e);
-    return () => {};
-  }
+  return () => {};
 }
 
-// Inicialização automática do listener ao carregar o módulo no navegador
-if (typeof window !== 'undefined') {
-  try {
-    iniciarEscutaSupabaseConfigFirestore();
-  } catch (e) {}
-}
 
 /**
  * Remove credenciais do Supabase salvas no navegador

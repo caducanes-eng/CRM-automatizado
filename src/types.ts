@@ -1,5 +1,6 @@
 export type SectionId =
   | 'cadastro_rapido'
+  | 'tarefas'
   | 'em_captacao'
   | 'em_negociacao'
   | 'consulta_agendada'
@@ -137,6 +138,7 @@ export type NivelAcesso =
 
 export interface PermissoesUsuario {
   podeCadastrarLeads: boolean;
+  podeAcessarTarefas?: boolean;
   podeAcessarEmCaptacao: boolean;
   podeAcessarEmNegociacao?: boolean;
   podeAcessarConsultaAgendada?: boolean;
@@ -889,5 +891,54 @@ export interface KpiSecretariaMensal {
   created_at?: string;
   updated_at?: string;
 }
+
+/**
+ * ENTIDADE "Tarefa" (Agendamento de tarefas e cadências operacionais)
+ */
+export type StatusTarefa = 'pendente' | 'concluida' | 'cancelada';
+export type PrioridadeTarefa = 'baixa' | 'normal' | 'alta' | 'urgente';
+
+export interface Tarefa extends BaseEntity {
+  empresaId?: string;
+  empresa_id?: string;
+  leadId?: string | null;
+  lead_id?: string | null;
+  leadNome?: string;
+  usuarioResponsavelId?: string | null;
+  usuario_responsavel_id?: string | null;
+  responsavelNome?: string;
+  
+  titulo: string;
+  descricao?: string;
+  
+  situacaoOrigem?: string;
+  situacao_origem?: string;
+  etapaCadencia?: string;
+  etapa_cadencia?: string;
+  
+  dataAgendada: string; // YYYY-MM-DD
+  data_agendada?: string;
+  horaAgendada?: string; // HH:MM
+  hora_agendada?: string;
+  
+  status: StatusTarefa;
+  prioridade: PrioridadeTarefa;
+  
+  dataConclusao?: string | null;
+  data_conclusao?: string | null;
+  usuarioConclusaoId?: string | null;
+  usuario_conclusao_id?: string | null;
+  observacaoConclusao?: string;
+  observacao_conclusao?: string;
+}
+
+export interface IndicadoresTarefas {
+  tarefasHoje: number;
+  tarefasAtrasadas: number;
+  tarefasFuturas: number;
+  tarefasConcluidas: number;
+  totalPendentes: number;
+}
+
 
 

@@ -30,6 +30,7 @@ import {
   Minimize2,
   RotateCcw,
   ArrowRight,
+  CheckSquare,
 } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
 import { useEmpresa } from '../context/EmpresaContext';
@@ -116,6 +117,10 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
     responsaveis,
     procedimentos,
     obterProcedimentoPorNomeOuInteresse,
+    tarefas,
+    criarTarefa,
+    atualizarStatusTarefa,
+    excluirTarefa,
   } = useCrm();
 
   const { config, empresaAtivaId } = useEmpresa();
@@ -159,8 +164,17 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
   const isModalOpen = propIsOpen !== undefined ? propIsOpen : isFichaLeadOpen;
   const handleClose = propOnClose || fecharFichaLead;
 
-  // Aba ativa: 'dados' (Ficha & Dados) ou 'compras' (Histórico de Compras)
-  const [activeTab, setActiveTab] = useState<'dados' | 'compras'>('dados');
+  // Aba ativa: 'dados' (Ficha & Dados), 'compras' (Histórico de Compras) ou 'tarefas' (Tarefas & Agendamentos)
+  const [activeTab, setActiveTab] = useState<'dados' | 'compras' | 'tarefas'>('dados');
+
+  // Estados do agendamento de tarefas na ficha
+  const [showNovaTarefaFicha, setShowNovaTarefaFicha] = useState(false);
+  const [tarefaFichaTitulo, setTarefaFichaTitulo] = useState('');
+  const [tarefaFichaDesc, setTarefaFichaDesc] = useState('');
+  const [tarefaFichaData, setTarefaFichaData] = useState(() => new Date().toISOString().slice(0, 10));
+  const [tarefaFichaHora, setTarefaFichaHora] = useState('14:00');
+  const [tarefaFichaPrioridade, setTarefaFichaPrioridade] = useState<'baixa' | 'media' | 'alta' | 'urgente'>('alta');
+  const [salvandoTarefaFicha, setSalvandoTarefaFicha] = useState(false);
 
   // Modo de visualização expandida (tela cheia)
   const [isMaximized, setIsMaximized] = useState(false);
@@ -253,6 +267,12 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
   const totalComprado = useMemo(() => {
     return compras.reduce((acc, curr) => acc + (curr.valor || 0), 0);
   }, [compras]);
+
+  // Tarefas agendadas no Supabase vinculadas a este paciente
+  const tarefasDoLead = useMemo(() => {
+    if (!activeLeadId || !tarefas) return [];
+    return tarefas.filter((t) => t.leadId === activeLeadId);
+  }, [activeLeadId, tarefas]);
 
   // Sincronizar estado local apenas quando o modal é aberto ou o lead ativo é alternado
   useEffect(() => {
@@ -785,6 +805,24 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                   {formatarMoeda(totalComprado)}
                 </span>
               )}
+            </button>
+
+            <button
+              id="tab-ficha-tarefas"
+              type="button"
+              onClick={() => setActiveTab('tarefas')}
+              style={activeTab === 'tarefas' ? { borderBottomColor: corPrimaria, color: corPrimaria } : {}}
+              className={`py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 uppercase tracking-wider ${
+                activeTab === 'tarefas'
+                  ? 'text-[#1A1A1A]'
+                  : 'border-transparent text-[#6E6E6E] hover:text-[#1A1A1A]'
+              }`}
+            >
+              <CheckSquare className="w-4 h-4" />
+              <span>Tarefas & Agendamentos</span>
+              <span className="px-2 py-0.5 rounded-sm text-[10px] sm:text-[11px] bg-amber-100 text-amber-900 border border-amber-300 font-bold">
+                {tarefasDoLead.filter(t => t.status === 'pendente').length}
+              </span>
             </button>
           </div>
 
@@ -2040,6 +2078,290 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                     className="w-full p-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden leading-relaxed placeholder:text-[#8F887E]"
                   />
                 </div>
+              </div>
+            </div>
+          ) : activeTab === 'tarefas' ? (
+            /* =====================================================================
+                SEÇÃO TAREFAS & AGENDAMENTOS DO PACIENTE (SUPABASE)
+               ===================================================================== */
+            <div id="secao-tarefas-lead" className="space-y-5">
+              {/* Header do Bloco de Tarefas */}
+              <div
+                id="card-header-tarefas-lead"
+                className="p-5 rounded-sm text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-black/30"
+                style={{ backgroundColor: corSidebar }}
+              >
+                <div className="space-y-1">
+                  <span className="text-xs uppercase tracking-wider font-bold flex items-center gap-1.5 text-[#D9D6D0]">
+                    <CheckSquare className="w-4 h-4 text-amber-300" />
+                    Tarefas e Agendamentos no Supabase
+                  </span>
+                  <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                    {tarefasDoLead.filter((t) => t.status === 'pendente').length} pendente(s) •{' '}
+                    {tarefasDoLead.filter((t) => t.status === 'concluida').length} concluída(s)
+                  </h3>
+                  <p className="text-xs text-[#D9D6D0]">
+                    Controle de rotinas operacionais, contatos de follow-up e compromissos deste paciente
+                  </p>
+                </div>
+
+                {!showNovaTarefaFicha && (
+                  <button
+                    id="btn-abrir-form-nova-tarefa-ficha"
+                    type="button"
+                    onClick={() => {
+                      setShowNovaTarefaFicha(true);
+                      setTarefaFichaTitulo(`Follow-up com ${nome || lead?.nome || 'paciente'}`);
+                    }}
+                    style={{ backgroundColor: corPrimaria }}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 text-white font-bold text-xs uppercase tracking-wider rounded-sm transition-all shadow-xs hover:brightness-110 cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-4 h-4 text-white" />
+                    <span>+ Nova Tarefa</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Formulário de Nova Tarefa no Lead */}
+              {showNovaTarefaFicha && (
+                <form
+                  id="form-nova-tarefa-ficha"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!activeLeadId || !tarefaFichaTitulo.trim() || !tarefaFichaData) return;
+                    setSalvandoTarefaFicha(true);
+                    try {
+                      await criarTarefa({
+                        leadId: activeLeadId,
+                        titulo: tarefaFichaTitulo.trim(),
+                        descricao: tarefaFichaDesc.trim() || undefined,
+                        dataAgendada: tarefaFichaData,
+                        horaAgendada: tarefaFichaHora || undefined,
+                        prioridade: tarefaFichaPrioridade,
+                        situacaoOrigem: situacao,
+                        etapaCadencia: lead?.etapaPorSituacao?.[situacao] || 'Ficha',
+                      });
+                      setShowNovaTarefaFicha(false);
+                      setTarefaFichaTitulo('');
+                      setTarefaFichaDesc('');
+                      setFeedbackSalvo('Tarefa agendada com sucesso!');
+                      setTimeout(() => setFeedbackSalvo(null), 3000);
+                    } finally {
+                      setSalvandoTarefaFicha(false);
+                    }
+                  }}
+                  className="p-4 bg-[#F8F7F4] border border-[#D9D6D0] rounded-sm space-y-3 animate-in fade-in duration-150"
+                >
+                  <div className="flex items-center justify-between pb-2 border-b border-[#D9D6D0]">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#1A1A1A] flex items-center gap-1.5">
+                      <Plus className="w-4 h-4 text-[#5C3A22]" />
+                      Agendar Nova Tarefa para {nome || lead?.nome}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowNovaTarefaFicha(false)}
+                      className="text-xs font-bold text-[#6E6E6E] hover:text-[#1A1A1A] cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]">
+                      Título da Tarefa *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={tarefaFichaTitulo}
+                      onChange={(e) => setTarefaFichaTitulo(e.target.value)}
+                      placeholder="Ex: Ligar para confirmar interesse no procedimento"
+                      className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]">
+                        Data Agendada *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={tarefaFichaData}
+                        onChange={(e) => setTarefaFichaData(e.target.value)}
+                        className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]">
+                        Horário
+                      </label>
+                      <input
+                        type="time"
+                        value={tarefaFichaHora}
+                        onChange={(e) => setTarefaFichaHora(e.target.value)}
+                        className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]">
+                        Prioridade
+                      </label>
+                      <select
+                        value={tarefaFichaPrioridade}
+                        onChange={(e) => setTarefaFichaPrioridade(e.target.value as any)}
+                        className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:outline-hidden cursor-pointer"
+                      >
+                        <option value="baixa">Baixa</option>
+                        <option value="media">Média</option>
+                        <option value="alta">Alta</option>
+                        <option value="urgente">Urgente</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#1A1A1A]">
+                      Descrição / Instruções
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={tarefaFichaDesc}
+                      onChange={(e) => setTarefaFichaDesc(e.target.value)}
+                      placeholder="Detalhes ou anotações para o executor..."
+                      className="w-full p-2.5 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#D9D6D0]">
+                    <button
+                      type="button"
+                      onClick={() => setShowNovaTarefaFicha(false)}
+                      className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-[#6E6E6E] hover:text-[#1A1A1A] cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={salvandoTarefaFicha}
+                      className="px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white bg-[#5C3A22] hover:bg-[#4A2E1B] rounded-sm transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {salvandoTarefaFicha ? 'Salvando...' : 'Salvar no Supabase'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Lista de Tarefas do Paciente */}
+              <div className="space-y-3">
+                {tarefasDoLead.length === 0 ? (
+                  <div className="p-8 text-center bg-[#FAF8F5] border border-[#D9D6D0] rounded-sm space-y-2">
+                    <CheckSquare className="w-8 h-8 text-[#8F887E] mx-auto opacity-50" />
+                    <p className="text-xs font-bold text-[#1A1A1A]">Nenhuma tarefa agendada para este paciente</p>
+                    <p className="text-[11px] text-[#6E6E6E]">
+                      Clique em "+ Nova Tarefa" acima para agendar contatos e acompanhamentos diretamente no Supabase.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-[#D9D6D0] border border-[#D9D6D0] rounded-sm overflow-hidden bg-white">
+                    {tarefasDoLead.map((t) => {
+                      const isConcluida = t.status === 'concluida';
+                      const isCancelada = t.status === 'cancelada';
+
+                      return (
+                        <div
+                          key={t.id}
+                          className={`p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
+                            isConcluida ? 'bg-emerald-50/40' : isCancelada ? 'bg-zinc-50 opacity-60' : 'hover:bg-[#FAF8F5]'
+                          }`}
+                        >
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`text-xs font-bold ${
+                                  isConcluida ? 'line-through text-zinc-500' : 'text-[#1A1A1A]'
+                                }`}
+                              >
+                                {t.titulo}
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase ${
+                                  t.prioridade === 'urgente'
+                                    ? 'bg-rose-100 text-rose-800'
+                                    : t.prioridade === 'alta'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-zinc-100 text-zinc-700'
+                                }`}
+                              >
+                                {t.prioridade}
+                              </span>
+                              {t.etapaCadencia && (
+                                <span className="text-[10px] text-[#6E6E6E] bg-[#F2EFEA] px-2 py-0.5 rounded-sm">
+                                  {t.etapaCadencia}
+                                </span>
+                              )}
+                            </div>
+
+                            {t.descricao && (
+                              <p className="text-xs text-[#6E6E6E]">{t.descricao}</p>
+                            )}
+
+                            <div className="flex items-center gap-3 text-[11px] text-[#8F887E]">
+                              <span className="flex items-center gap-1 font-semibold text-[#1A1A1A]">
+                                <Calendar className="w-3 h-3 text-[#5C3A22]" />
+                                Data: {formatarDataBR(t.dataAgendada)} {t.horaAgendada ? `às ${t.horaAgendada}` : ''}
+                              </span>
+                              {t.dataConclusao && (
+                                <span className="text-emerald-700">
+                                  Concluída em {formatarDataBR(t.dataConclusao.slice(0, 10))}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {t.status === 'pendente' && (
+                              <button
+                                type="button"
+                                onClick={() => atualizarStatusTarefa(t.id, 'concluida')}
+                                className="px-2.5 py-1 text-[11px] font-bold bg-emerald-700 hover:bg-emerald-800 text-white rounded-sm transition-colors cursor-pointer flex items-center gap-1"
+                              >
+                                <Check className="w-3 h-3" />
+                                <span>Concluir</span>
+                              </button>
+                            )}
+
+                            {t.status === 'concluida' && (
+                              <button
+                                type="button"
+                                onClick={() => atualizarStatusTarefa(t.id, 'pendente')}
+                                className="px-2 py-1 text-[11px] font-bold text-[#6E6E6E] hover:text-[#1A1A1A] border border-[#D9D6D0] rounded-sm transition-colors cursor-pointer"
+                              >
+                                Reabrir
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm(`Deseja excluir a tarefa "${t.titulo}"?`)) {
+                                  excluirTarefa(t.id);
+                                }
+                              }}
+                              className="p-1.5 text-[#8F887E] hover:text-rose-600 rounded-sm cursor-pointer"
+                              title="Excluir tarefa"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           ) : (

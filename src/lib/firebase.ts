@@ -1,25 +1,12 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
-
-let firebaseApp: any = null;
-let firestoreDb: any = null;
-
-try {
-  if (firebaseConfig && firebaseConfig.apiKey) {
-    firebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-    firestoreDb = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId || undefined);
-  }
-} catch (e) {
-  console.warn('Erro ao inicializar Firebase:', e);
-}
-
-export const app = firebaseApp;
+// O projeto utiliza exclusivamente o Supabase como banco de dados principal (conforme diretriz do usuário).
+// O Firestore é mantido como null para evitar tentativas de conexão em segundo plano
+// e erros como "Could not reach Cloud Firestore backend".
+export const app = null as any;
 export const auth = null as any;
-export const db = firestoreDb;
+export const db = null as any;
 
 /**
- * Sanitiza recursivamente objetos para o Firestore (remove valores undefined)
+ * Sanitiza recursivamente objetos (remove valores undefined)
  */
 export function sanitizeForFirestore<T>(obj: T): T {
   if (obj === undefined) {

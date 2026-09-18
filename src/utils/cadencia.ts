@@ -256,6 +256,44 @@ export function calcularDiasCorridos(dataEntradaIso: string | undefined | null):
 }
 
 /**
+ * Classificação de permanência na situação atual (Reativação e demais tabelas):
+ * - Recente / "Entrou agora": 0 a 7 dias
+ * - Intermediário: 8 a 30 dias
+ * - Longa permanência / "A mais tempo": mais de 30 dias (ou > 60 dias para crítico)
+ */
+export type FaixaTempoSituacao = 'recente' | 'moderado' | 'antigo';
+
+export function classificarTempoSituacao(diasCorridos: number): {
+  faixa: FaixaTempoSituacao;
+  rotulo: string;
+  badgeClass: string;
+  descricao: string;
+} {
+  if (diasCorridos <= 7) {
+    return {
+      faixa: 'recente',
+      rotulo: diasCorridos === 0 ? 'Entrou hoje' : diasCorridos === 1 ? 'Entrou ontem' : 'Entrou agora',
+      badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+      descricao: 'Entrou recentemente nesta situação (até 7 dias)',
+    };
+  }
+  if (diasCorridos <= 30) {
+    return {
+      faixa: 'moderado',
+      rotulo: 'Em andamento',
+      badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
+      descricao: 'Tempo intermediário nesta situação (8 a 30 dias)',
+    };
+  }
+  return {
+    faixa: 'antigo',
+    rotulo: 'A mais tempo',
+    badgeClass: 'bg-purple-50 text-purple-900 border-purple-200',
+    descricao: 'Na reativação a mais tempo (mais de 30 dias)',
+  };
+}
+
+/**
  * Calcula a "Etapa esperada" com base na situação do lead e nos dias corridos.
  * A etapa esperada é sempre a mais avançada cujo número de dias já foi atingido.
  * NOTA: Para pacientes em Reativação, os dias corridos são informativos e NÃO
