@@ -791,23 +791,64 @@ export const supabaseService = {
   },
 
   /**
-   * Alias de compatibilidade para soft delete de lead
+   * Alias de compatibilidade para soft delete de lead com exclusão em cascata (soft delete)
+   * de fichas, compras, tarefas e históricos vinculados para garantir integridade relacional.
    */
   async softDeleteLead(leadId: string): Promise<boolean> {
     const client = getSupabaseClient();
     if (!client) return false;
 
+    const uuid = normalizarUuid(leadId);
+    const nowIso = new Date().toISOString();
+
+    // 1. Soft delete no próprio Lead
     const { error } = await client
       .from('leads')
       .update({
-        deleted_at: new Date().toISOString(),
+        deleted_at: nowIso,
+        updated_at: nowIso,
       })
-      .eq('id', normalizarUuid(leadId));
+      .eq('id', uuid);
 
     if (error) {
       console.error('Erro ao efetuar soft delete no Lead:', error);
       throw error;
     }
+
+    // 2. Soft delete em cascata na Ficha do Lead
+    try {
+      await this.softDeleteFichaByLeadId(uuid);
+    } catch (e) {
+      console.warn('Aviso: Não foi possível atualizar soft delete na Ficha do Lead:', e);
+    }
+
+    // 3. Soft delete em cascata nas Compras do Lead
+    try {
+      await this.softDeleteComprasByLeadId(uuid);
+    } catch (e) {
+      console.warn('Aviso: Não foi possível atualizar soft delete nas Compras do Lead:', e);
+    }
+
+    // 4. Soft delete em cascata em Tarefas associadas ao Lead
+    try {
+      await client
+        .from('tarefas')
+        .update({ deleted_at: nowIso, updated_at: nowIso })
+        .eq('lead_id', uuid);
+    } catch (e) {
+      console.warn('Aviso: Não foi possível atualizar soft delete nas Tarefas do Lead:', e);
+    }
+
+    // 5. Soft delete em cascata em Histórico de Atendimentos
+    try {
+      await client
+        .from('historico_atendimentos')
+        .update({ deleted_at: nowIso, updated_at: nowIso })
+        .eq('lead_id', uuid);
+    } catch (e) {
+      console.warn('Aviso: Não foi possível atualizar soft delete no Histórico do Lead:', e);
+    }
+
     return true;
   },
 
@@ -1018,6 +1059,80 @@ export const supabaseService = {
   async salvarFicha(ficha: FichaLead, empresaId: string = ID_EMPRESA_PADRAO): Promise<boolean> {
     const res = await this.salvarFichaLead(ficha, empresaId);
     return Boolean(res);
+  },
+
+  /**
+   * Soft delete na ficha cadastral pelo ID da ficha
+   */
+  async softDeleteFicha(fichaId: string): Promise<boolean> {
+    const client = getSupabaseClient();
+    if (!client) return false;
+
+    try {
+      const tableName = await getFichasTableName();
+      const nowIso = new Date().toISOString();
+      const uuid = normalizarUuid(fichaId);
+
+      let { error } = await client
+        .from(tableName)
+        .update({ deleted_at: nowIso, updated_at: nowIso })
+        .eq('id', uuid);
+
+      if (error && (error.code === 'PGRST205' || error.message?.includes('fichas_leads'))) {
+        cachedFichasTableName = 'fichas_lead';
+        const resFallback = await client
+          .from('fichas_lead')
+          .update({ deleted_at: nowIso, updated_at: nowIso })
+          .eq('id', uuid);
+        error = resFallback.error;
+      }
+
+      if (error) {
+        console.error('Erro ao efetuar soft delete na Ficha do Lead:', error);
+        throw error;
+      }
+      return true;
+    } catch (e) {
+      console.error('Falha em softDeleteFicha:', e);
+      throw e;
+    }
+  },
+
+  /**
+   * Soft delete na ficha cadastral associada ao Lead ID
+   */
+  async softDeleteFichaByLeadId(leadId: string): Promise<boolean> {
+    const client = getSupabaseClient();
+    if (!client) return false;
+
+    try {
+      const tableName = await getFichasTableName();
+      const nowIso = new Date().toISOString();
+      const uuid = normalizarUuid(leadId);
+
+      let { error } = await client
+        .from(tableName)
+        .update({ deleted_at: nowIso, updated_at: nowIso })
+        .eq('lead_id', uuid);
+
+      if (error && (error.code === 'PGRST205' || error.message?.includes('fichas_leads'))) {
+        cachedFichasTableName = 'fichas_lead';
+        const resFallback = await client
+          .from('fichas_lead')
+          .update({ deleted_at: nowIso, updated_at: nowIso })
+          .eq('lead_id', uuid);
+        error = resFallback.error;
+      }
+
+      if (error) {
+        console.error('Erro ao efetuar soft delete na Ficha do Lead (por lead_id):', error);
+        throw error;
+      }
+      return true;
+    } catch (e) {
+      console.error('Falha em softDeleteFichaByLeadId:', e);
+      throw e;
+    }
   },
 
   // --------------------------------------------------------------------------
@@ -1257,6 +1372,25 @@ export const supabaseService = {
 
     if (error) {
       console.error('Erro ao efetuar soft delete na Compra:', error);
+      throw error;
+    }
+    return true;
+  },
+
+  /**
+   * Soft Delete em todas as Compras associadas a um Lead
+   */
+  async softDeleteComprasByLeadId(leadId: string): Promise<boolean> {
+    const client = getSupabaseClient();
+    if (!client) return false;
+
+    const { error } = await client
+      .from('compras')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('lead_id', normalizarUuid(leadId));
+
+    if (error) {
+      console.error('Erro ao efetuar soft delete nas Compras do Lead:', error);
       throw error;
     }
     return true;

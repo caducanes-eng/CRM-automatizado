@@ -783,10 +783,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 
   const excluirLead = useCallback(
-    async (leadId: string, hardDelete = false): Promise<boolean> => {
+    async (leadId: string, _hardDelete = false): Promise<boolean> => {
+      // Atualização otimista e imediata em memória
       setTodosLeadsRaw((prev) => prev.filter((l) => l.id !== leadId));
       setTodasFichasRaw((prev) => prev.filter((f) => f.leadId !== leadId));
       setTodasComprasRaw((prev) => prev.filter((c) => c.leadId !== leadId));
+      setTodasTarefasRaw((prev) => prev.filter((t) => t.leadId !== leadId && (t as any).lead_id !== leadId));
 
       try {
         await supabaseService.softDeleteLead(leadId);
