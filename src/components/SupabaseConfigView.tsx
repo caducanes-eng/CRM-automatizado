@@ -565,7 +565,7 @@ CREATE INDEX IF NOT EXISTS idx_atendimentos_lead ON historico_atendimentos(lead_
 CREATE TABLE IF NOT EXISTS tarefas (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
-  lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  lead_id UUID REFERENCES leads(id) ON DELETE CASCADE,
   usuario_id UUID REFERENCES usuarios(id) ON DELETE SET NULL,
   titulo VARCHAR(255) NOT NULL,
   descricao TEXT,

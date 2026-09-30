@@ -1,9 +1,24 @@
-// O projeto utiliza exclusivamente o Supabase como banco de dados principal (conforme diretriz do usuário).
-// O Firestore é mantido como null para evitar tentativas de conexão em segundo plano
-// e erros como "Could not reach Cloud Firestore backend".
-export const app = null as any;
-export const auth = null as any;
-export const db = null as any;
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import firebaseConfig from '../../firebase-applet-config.json';
+
+// Inicialização segura e singleton do Firebase
+export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+
+// Teste de conexão conforme recomendação do Skill Firebase
+async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn('Verifique a conexão de rede com o Firebase Firestore.');
+    }
+  }
+}
+testConnection().catch(() => {});
 
 /**
  * Sanitiza recursivamente objetos (remove valores undefined)

@@ -216,6 +216,16 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     [empresaIdEfetiva]
   );
 
+  // Comparador resiliente de IDs de Lead (suporta UUIDs em caixas altas/baixas e IDs legados)
+  const matchLeadId = useCallback((idA?: string | null, idB?: string | null): boolean => {
+    if (!idA || !idB) return false;
+    if (idA === idB) return true;
+    const strA = String(idA).trim();
+    const strB = String(idB).trim();
+    if (strA.toLowerCase() === strB.toLowerCase()) return true;
+    return normalizarUuid(strA) === normalizarUuid(strB);
+  }, []);
+
   // Dados isolados e filtrados exclusivamente para a clínica ativa
   const leads = useMemo(
     () =>
@@ -324,7 +334,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setUsuariosState(dados.usuarios || []);
 
         try {
-          const tarefasSupabase = await supabaseService.fetchTarefas();
+          const tarefasSupabase = await supabaseService.fetchTarefas(empresaIdEfetiva);
           setTodasTarefasRaw(tarefasSupabase || []);
         } catch (e) {}
 
@@ -465,6 +475,17 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             carregarDadosCompletos();
           }
         )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'tarefas' },
+          async (payload) => {
+            logRealtimeEvent('tarefas', payload.eventType as any, 'Tarefa atualizada no banco de dados');
+            try {
+              const tarefasAtualizadas = await supabaseService.fetchTarefas(empresaIdEfetiva);
+              setTodasTarefasRaw(tarefasAtualizadas);
+            } catch (e) {}
+          }
+        )
         .subscribe((status: string) => {
           if (status === 'SUBSCRIBED') {
             setRealtimeStatus('CONECTADO');
@@ -506,9 +527,27 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [usuarios]);
 
   // Getters
-  const obterLeadPorId = useCallback((leadId: string) => leads.find((l) => l.id === leadId), [leads]);
-  const obterFichaPorLead = useCallback((leadId: string) => fichas.find((f) => f.leadId === leadId), [fichas]);
-  const obterComprasPorLead = useCallback((leadId: string) => compras.filter((c) => c.leadId === leadId), [compras]);
+  const obterLeadPorId = useCallback(
+    (leadId: string) => {
+      if (!leadId) return undefined;
+      return (
+        leads.find((l) => matchLeadId(l.id, leadId)) ||
+        todosLeadsRaw.find((l) => matchLeadId(l.id, leadId)) ||
+        (leadSelecionadoModal && matchLeadId(leadSelecionadoModal.id, leadId) ? leadSelecionadoModal : undefined)
+      );
+    },
+    [leads, todosLeadsRaw, leadSelecionadoModal, matchLeadId]
+  );
+  const obterFichaPorLead = useCallback(
+    (leadId: string) =>
+      fichas.find((f) => matchLeadId(f.leadId, leadId)) ||
+      todasFichasRaw.find((f) => matchLeadId(f.leadId, leadId)),
+    [fichas, todasFichasRaw, matchLeadId]
+  );
+  const obterComprasPorLead = useCallback(
+    (leadId: string) => compras.filter((c) => matchLeadId(c.leadId, leadId)),
+    [compras, matchLeadId]
+  );
   const obterProcedimentoPorId = useCallback((id: string) => procedimentos.find((p) => p.id === id), [procedimentos]);
   const obterProcedimentoPorNomeOuInteresse = useCallback(
     (termo: string) => casarProcedimentoComTexto(termo, procedimentos),
@@ -784,11 +823,23 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const excluirLead = useCallback(
     async (leadId: string, _hardDelete = false): Promise<boolean> => {
-      // Atualização otimista e imediata em memória
-      setTodosLeadsRaw((prev) => prev.filter((l) => l.id !== leadId));
-      setTodasFichasRaw((prev) => prev.filter((f) => f.leadId !== leadId));
-      setTodasComprasRaw((prev) => prev.filter((c) => c.leadId !== leadId));
-      setTodasTarefasRaw((prev) => prev.filter((t) => t.leadId !== leadId && (t as any).lead_id !== leadId));
+      if (!leadId) return false;
+
+      // 1. Limpa o modal e fecha a ficha se este for o lead atualmente aberto
+      if (
+        matchLeadId(leadFichaAbertoId, leadId) ||
+        matchLeadId(leadSelecionadoModal?.id, leadId)
+      ) {
+        setIsFichaLeadOpen(false);
+        setLeadFichaAbertoId(null);
+        setLeadSelecionadoModal(null);
+      }
+
+      // 2. Atualização otimista e imediata em memória (insensível a maiúsculas/minúsculas e formato UUID)
+      setTodosLeadsRaw((prev) => prev.filter((l) => !matchLeadId(l?.id, leadId)));
+      setTodasFichasRaw((prev) => prev.filter((f) => !matchLeadId(f?.leadId || (f as any)?.lead_id, leadId)));
+      setTodasComprasRaw((prev) => prev.filter((c) => !matchLeadId(c?.leadId || (c as any)?.lead_id, leadId)));
+      setTodasTarefasRaw((prev) => prev.filter((t) => !matchLeadId(t?.leadId || (t as any)?.lead_id, leadId)));
 
       try {
         await supabaseService.softDeleteLead(leadId);
@@ -798,7 +849,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return false;
       }
     },
-    []
+    [leadFichaAbertoId, leadSelecionadoModal, matchLeadId]
   );
 
   const definirEtapaPorSituacao = useCallback(
@@ -1283,8 +1334,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const excluirTarefa = useCallback(
     async (tarefaId: string): Promise<boolean> => {
-      await supabaseService.excluirTarefa(tarefaId);
       setTodasTarefasRaw((prev) => prev.filter((t) => t.id !== tarefaId));
+      await supabaseService.excluirTarefa(tarefaId);
       return true;
     },
     []

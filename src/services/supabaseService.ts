@@ -796,60 +796,73 @@ export const supabaseService = {
    */
   async softDeleteLead(leadId: string): Promise<boolean> {
     const client = getSupabaseClient();
-    if (!client) return false;
+    if (!client) return true;
 
-    const uuid = normalizarUuid(leadId);
-    const nowIso = new Date().toISOString();
-
-    // 1. Soft delete no próprio Lead
-    const { error } = await client
-      .from('leads')
-      .update({
-        deleted_at: nowIso,
-        updated_at: nowIso,
-      })
-      .eq('id', uuid);
-
-    if (error) {
-      console.error('Erro ao efetuar soft delete no Lead:', error);
-      throw error;
-    }
-
-    // 2. Soft delete em cascata na Ficha do Lead
     try {
-      await this.softDeleteFichaByLeadId(uuid);
-    } catch (e) {
-      console.warn('Aviso: Não foi possível atualizar soft delete na Ficha do Lead:', e);
-    }
+      const uuid = normalizarUuid(leadId);
+      const nowIso = new Date().toISOString();
 
-    // 3. Soft delete em cascata nas Compras do Lead
-    try {
-      await this.softDeleteComprasByLeadId(uuid);
-    } catch (e) {
-      console.warn('Aviso: Não foi possível atualizar soft delete nas Compras do Lead:', e);
-    }
+      const execCascade = async () => {
+        // 1. Soft delete no próprio Lead
+        const { error } = await client
+          .from('leads')
+          .update({
+            deleted_at: nowIso,
+            updated_at: nowIso,
+          })
+          .eq('id', uuid);
 
-    // 4. Soft delete em cascata em Tarefas associadas ao Lead
-    try {
-      await client
-        .from('tarefas')
-        .update({ deleted_at: nowIso, updated_at: nowIso })
-        .eq('lead_id', uuid);
-    } catch (e) {
-      console.warn('Aviso: Não foi possível atualizar soft delete nas Tarefas do Lead:', e);
-    }
+        if (error) {
+          console.error('Erro ao efetuar soft delete no Lead:', error);
+          throw error;
+        }
 
-    // 5. Soft delete em cascata em Histórico de Atendimentos
-    try {
-      await client
-        .from('historico_atendimentos')
-        .update({ deleted_at: nowIso, updated_at: nowIso })
-        .eq('lead_id', uuid);
-    } catch (e) {
-      console.warn('Aviso: Não foi possível atualizar soft delete no Histórico do Lead:', e);
-    }
+        // 2. Soft delete em cascata na Ficha do Lead
+        try {
+          await this.softDeleteFichaByLeadId(uuid);
+        } catch (e) {
+          console.warn('Aviso: Não foi possível atualizar soft delete na Ficha do Lead:', e);
+        }
 
-    return true;
+        // 3. Soft delete em cascata nas Compras do Lead
+        try {
+          await this.softDeleteComprasByLeadId(uuid);
+        } catch (e) {
+          console.warn('Aviso: Não foi possível atualizar soft delete nas Compras do Lead:', e);
+        }
+
+        // 4. Soft delete em cascata em Tarefas associadas ao Lead
+        try {
+          await client
+            .from('tarefas')
+            .update({ deleted_at: nowIso, updated_at: nowIso })
+            .eq('lead_id', uuid);
+        } catch (e) {
+          console.warn('Aviso: Não foi possível atualizar soft delete nas Tarefas do Lead:', e);
+        }
+
+        // 5. Soft delete em cascata em Histórico de Atendimentos
+        try {
+          await client
+            .from('historico_atendimentos')
+            .update({ deleted_at: nowIso, updated_at: nowIso })
+            .eq('lead_id', uuid);
+        } catch (e) {
+          console.warn('Aviso: Não foi possível atualizar soft delete no Histórico do Lead:', e);
+        }
+
+        return true;
+      };
+
+      // Limita a espera de rede a 4 segundos para evitar travamento da interface
+      return await Promise.race([
+        execCascade(),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 4000)),
+      ]);
+    } catch (e) {
+      console.warn('Aviso ao sincronizar exclusão com o Supabase:', e);
+      return false;
+    }
   },
 
   // --------------------------------------------------------------------------
@@ -1866,12 +1879,13 @@ export const supabaseService = {
     }
   },
 
-  // Módulo de Tarefas
+  // Módulo de Tarefas & Eventos
   fetchTarefas: fetchTarefasPorEmpresa,
   criarTarefa: criarTarefaSupabase,
   atualizarStatusTarefa: atualizarStatusTarefaSupabase,
   excluirTarefa: excluirTarefaSupabase,
   calcularIndicadoresTarefas: calcularIndicadoresTarefas,
+  registrarEventoHistorico: registrarEventoHistoricoSupabase,
 };
 
 // =========================================================================
@@ -2557,75 +2571,147 @@ export async function salvarSnapshotKpi(
 // ============================================================================
 const STORAGE_KEY_TAREFAS = 'estetica_crm_tarefas';
 
+export async function registrarEventoHistoricoSupabase(payload: {
+  empresaId: string;
+  leadId: string;
+  tipo: string;
+  descricao: string;
+  canal?: string;
+  metadata?: Record<string, any>;
+}): Promise<boolean> {
+  const client = getSupabaseClient();
+  if (!client) return false;
+  try {
+    const uuid = normalizarUuid(payload.leadId);
+    const empUuid = normalizarUuid(payload.empresaId);
+    await client.from('historico_atendimentos').insert([{
+      id: crypto.randomUUID(),
+      empresa_id: empUuid,
+      lead_id: uuid,
+      tipo: payload.tipo,
+      canal: payload.canal || 'WhatsApp',
+      descricao: payload.descricao,
+      metadata: payload.metadata || {},
+      data_hora: new Date().toISOString(),
+      status: 'CONCLUIDO',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      version: 1,
+    }]);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 export async function fetchTarefasPorEmpresa(empresaId?: string): Promise<Tarefa[]> {
   const empUuid = normalizarUuid(empresaId || ID_EMPRESA_PADRAO);
   const client = getSupabaseClient();
+  const tarefasMap = new Map<string, Tarefa>();
 
+  // 1. Tenta carregar do Supabase se o cliente estiver configurado
   if (client) {
     try {
-      const { data, error } = await client
+      const res = await client
         .from('tarefas')
         .select('*')
         .eq('empresa_id', empUuid)
         .is('deleted_at', null)
-        .order('data_agendada', { ascending: true })
-        .order('hora_agendada', { ascending: true, nullsFirst: false });
+        .order('created_at', { ascending: false });
 
-      if (!error && data) {
-        const mapeados: Tarefa[] = data.map((t: any) => ({
-          id: t.id,
-          created_at: t.created_at,
-          updated_at: t.updated_at,
-          deleted_at: t.deleted_at,
-          version: t.version || 1,
-          empresaId: t.empresa_id,
-          empresa_id: t.empresa_id,
-          leadId: t.lead_id,
-          lead_id: t.lead_id,
-          usuarioResponsavelId: t.usuario_responsavel_id,
-          usuario_responsavel_id: t.usuario_responsavel_id,
-          titulo: t.titulo,
-          descricao: t.descricao,
-          situacaoOrigem: t.situacao_origem,
-          situacao_origem: t.situacao_origem,
-          etapaCadencia: t.etapa_cadencia,
-          etapa_cadencia: t.etapa_cadencia,
-          dataAgendada: t.data_agendada,
-          data_agendada: t.data_agendada,
-          horaAgendada: t.hora_agendada,
-          hora_agendada: t.hora_agendada,
-          status: t.status as StatusTarefa,
-          prioridade: (t.prioridade || 'normal') as PrioridadeTarefa,
-          dataConclusao: t.data_conclusao,
-          data_conclusao: t.data_conclusao,
-          usuarioConclusaoId: t.usuario_conclusao_id,
-          usuario_conclusao_id: t.usuario_conclusao_id,
-          observacaoConclusao: t.observacao_conclusao,
-          observacao_conclusao: t.observacao_conclusao,
-        }));
+      if (!res.error && res.data && res.data.length > 0) {
+        res.data.forEach((t: any) => {
+          const rawVencimento = t.data_agendada || t.data_vencimento || t.created_at || new Date().toISOString();
+          const dataAgendadaVal = typeof rawVencimento === 'string' ? rawVencimento.split('T')[0] : new Date().toISOString().split('T')[0];
+          const horaAgendadaVal = t.hora_agendada || (typeof rawVencimento === 'string' && rawVencimento.includes('T') ? rawVencimento.split('T')[1].slice(0, 5) : '14:00');
+          const statusLower = (t.status ? String(t.status).toLowerCase() : 'pendente') as StatusTarefa;
+          const prioridadeLower: PrioridadeTarefa = (() => {
+            const p = t.prioridade ? String(t.prioridade).toLowerCase() : 'normal';
+            if (p === 'baixa') return 'baixa';
+            if (p === 'alta') return 'alta';
+            if (p === 'urgente') return 'urgente';
+            return 'normal';
+          })();
 
-        try {
-          const key = `${STORAGE_KEY_TAREFAS}_${empUuid}`;
-          localStorage.setItem(key, JSON.stringify(mapeados));
-        } catch (e) {}
-
-        return mapeados;
+          tarefasMap.set(t.id, {
+            id: t.id,
+            created_at: t.created_at || new Date().toISOString(),
+            updated_at: t.updated_at || new Date().toISOString(),
+            deleted_at: t.deleted_at || null,
+            version: t.version || 1,
+            empresaId: t.empresa_id || empUuid,
+            empresa_id: t.empresa_id || empUuid,
+            leadId: t.lead_id || null,
+            lead_id: t.lead_id || null,
+            usuarioResponsavelId: t.usuario_responsavel_id || t.usuario_id || null,
+            usuario_responsavel_id: t.usuario_responsavel_id || t.usuario_id || null,
+            titulo: t.titulo || 'Tarefa sem título',
+            descricao: t.descricao || '',
+            situacaoOrigem: t.situacao_origem || undefined,
+            situacao_origem: t.situacao_origem || undefined,
+            etapaCadencia: t.etapa_cadencia || undefined,
+            etapa_cadencia: t.etapa_cadencia || undefined,
+            dataAgendada: dataAgendadaVal,
+            data_agendada: dataAgendadaVal,
+            horaAgendada: horaAgendadaVal,
+            hora_agendada: horaAgendadaVal,
+            status: statusLower === 'concluida' ? 'concluida' : statusLower === 'cancelada' ? 'cancelada' : 'pendente',
+            prioridade: prioridadeLower,
+            dataConclusao: t.data_conclusao || null,
+            data_conclusao: t.data_conclusao || null,
+            usuarioConclusaoId: t.usuario_conclusao_id || null,
+            usuario_conclusao_id: t.usuario_conclusao_id || null,
+            observacaoConclusao: t.observacao_conclusao || undefined,
+            observacao_conclusao: t.observacao_conclusao || undefined,
+          });
+        });
       }
     } catch (e) {
       console.warn('Erro ao carregar tarefas do Supabase:', e);
     }
   }
 
-  // Fallback seguro de cache local
+  // 2. Busca e sincroniza do Firestore (banco de dados central)
+  try {
+    const tarefasFirestore = await firestoreService.fetchTarefas(empUuid);
+    if (tarefasFirestore && tarefasFirestore.length > 0) {
+      for (const tf of tarefasFirestore) {
+        if (!tarefasMap.has(tf.id)) {
+          tarefasMap.set(tf.id, tf);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Erro ao buscar tarefas do Firestore:', e);
+  }
+
+  // 3. Fallback seguro de cache local
+  if (tarefasMap.size === 0) {
+    try {
+      const key = `${STORAGE_KEY_TAREFAS}_${empUuid}`;
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const localList: Tarefa[] = JSON.parse(raw);
+        for (const lt of localList) {
+          if (!tarefasMap.has(lt.id)) {
+            tarefasMap.set(lt.id, lt);
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  const resultado = Array.from(tarefasMap.values()).sort(
+    (a, b) => (b.created_at || '').localeCompare(a.created_at || '')
+  );
+
+  // Atualiza cache local
   try {
     const key = `${STORAGE_KEY_TAREFAS}_${empUuid}`;
-    const raw = localStorage.getItem(key);
-    if (raw) {
-      return JSON.parse(raw);
-    }
+    localStorage.setItem(key, JSON.stringify(resultado));
   } catch (e) {}
 
-  return [];
+  return resultado;
 }
 
 export async function criarTarefaSupabase(
@@ -2646,6 +2732,24 @@ export async function criarTarefaSupabase(
   const nowIso = new Date().toISOString();
   const id = crypto.randomUUID();
 
+  const dataAgendadaVal = payload.dataAgendada ? payload.dataAgendada.slice(0, 10) : nowIso.slice(0, 10);
+  const horaAgendadaVal = payload.horaAgendada ? payload.horaAgendada.slice(0, 5) : '14:00';
+  let dataVencimentoVal = nowIso;
+  try {
+    const d = new Date(`${dataAgendadaVal}T${horaAgendadaVal}:00`);
+    if (!isNaN(d.getTime())) {
+      dataVencimentoVal = d.toISOString();
+    }
+  } catch (e) {}
+
+  const prioridadeUpper = (() => {
+    const p = String(payload.prioridade || '').toUpperCase();
+    if (p === 'ALTA') return 'ALTA';
+    if (p === 'URGENTE') return 'URGENTE';
+    if (p === 'BAIXA') return 'BAIXA';
+    return 'MEDIA';
+  })();
+
   const novaTarefa: Tarefa = {
     id,
     created_at: nowIso,
@@ -2654,55 +2758,111 @@ export async function criarTarefaSupabase(
     version: 1,
     empresaId: empUuid,
     empresa_id: empUuid,
-    leadId: payload.leadId || null,
-    lead_id: payload.leadId || null,
-    usuarioResponsavelId: payload.usuarioResponsavelId || null,
-    usuario_responsavel_id: payload.usuarioResponsavelId || null,
-    titulo: payload.titulo,
-    descricao: payload.descricao || '',
+    leadId: payload.leadId ? normalizarUuid(payload.leadId) : null,
+    lead_id: payload.leadId ? normalizarUuid(payload.leadId) : null,
+    usuarioResponsavelId: payload.usuarioResponsavelId ? normalizarUuid(payload.usuarioResponsavelId) : null,
+    usuario_responsavel_id: payload.usuarioResponsavelId ? normalizarUuid(payload.usuarioResponsavelId) : null,
+    titulo: payload.titulo.trim(),
+    descricao: payload.descricao ? payload.descricao.trim() : '',
     situacaoOrigem: payload.situacaoOrigem,
     situacao_origem: payload.situacaoOrigem,
     etapaCadencia: payload.etapaCadencia,
     etapa_cadencia: payload.etapaCadencia,
-    dataAgendada: payload.dataAgendada,
-    data_agendada: payload.dataAgendada,
-    horaAgendada: payload.horaAgendada || undefined,
-    hora_agendada: payload.horaAgendada || undefined,
+    dataAgendada: dataAgendadaVal,
+    data_agendada: dataAgendadaVal,
+    horaAgendada: horaAgendadaVal,
+    hora_agendada: horaAgendadaVal,
     status: 'pendente',
     prioridade: payload.prioridade || 'normal',
   };
 
+  // 1. Gravação direta no Firestore (banco de dados em nuvem central)
+  try {
+    await firestoreService.salvarTarefa(novaTarefa);
+    console.log('✅ Tarefa gravada com sucesso no Firestore:', novaTarefa.id);
+  } catch (errFirestore) {
+    console.warn('Aviso ao persistir tarefa no Firestore:', errFirestore);
+  }
+
+  // 2. Gravação no Supabase (se cliente configurado)
   const client = getSupabaseClient();
   if (client) {
     try {
-      const dbPayload = {
+      const dbPayload: Record<string, any> = {
         id: novaTarefa.id,
         empresa_id: empUuid,
-        lead_id: payload.leadId || null,
-        usuario_responsavel_id: payload.usuarioResponsavelId || null,
-        titulo: payload.titulo,
-        descricao: payload.descricao || null,
+        lead_id: payload.leadId ? normalizarUuid(payload.leadId) : null,
+        usuario_id: payload.usuarioResponsavelId ? normalizarUuid(payload.usuarioResponsavelId) : null,
+        usuario_responsavel_id: payload.usuarioResponsavelId ? normalizarUuid(payload.usuarioResponsavelId) : null,
+        titulo: payload.titulo.trim(),
+        descricao: payload.descricao ? payload.descricao.trim() : null,
+        data_vencimento: dataVencimentoVal,
+        data_agendada: dataAgendadaVal,
+        hora_agendada: horaAgendadaVal,
         situacao_origem: payload.situacaoOrigem || null,
         etapa_cadencia: payload.etapaCadencia || null,
-        data_agendada: payload.dataAgendada,
-        hora_agendada: payload.horaAgendada || null,
-        status: 'pendente',
-        prioridade: payload.prioridade || 'normal',
+        status: 'PENDENTE',
+        prioridade: prioridadeUpper,
         version: 1,
         created_at: nowIso,
         updated_at: nowIso,
       };
 
-      const { error } = await client.from('tarefas').insert([dbPayload]);
+      let { error } = await client.from('tarefas').insert([dbPayload]);
+
+      // Fallback para campos canônicos básicos
+      if (error && (error.code === '42703' || error.message?.includes('does not exist') || error.message?.includes('column') || error.message?.includes('schema'))) {
+        const canonicalPayload: Record<string, any> = {
+          id: novaTarefa.id,
+          empresa_id: empUuid,
+          titulo: payload.titulo.trim(),
+          descricao: payload.descricao ? payload.descricao.trim() : null,
+          data_vencimento: dataVencimentoVal,
+          status: 'PENDENTE',
+          prioridade: prioridadeUpper,
+          version: 1,
+          created_at: nowIso,
+          updated_at: nowIso,
+        };
+        if (payload.leadId) {
+          canonicalPayload.lead_id = normalizarUuid(payload.leadId);
+        }
+        if (payload.usuarioResponsavelId) {
+          canonicalPayload.usuario_id = normalizarUuid(payload.usuarioResponsavelId);
+        }
+
+        const fallbackRes = await client.from('tarefas').insert([canonicalPayload]);
+        error = fallbackRes.error;
+      }
+
       if (error) {
-        console.warn('Erro ao inserir tarefa no Supabase:', error);
+        console.error('Erro ao inserir tarefa no Supabase:', error);
+      } else {
+        console.log('✅ Tarefa gravada com sucesso no Supabase:', novaTarefa.id);
       }
     } catch (e) {
       console.warn('Falha na comunicação de tarefas com Supabase:', e);
     }
   }
 
-  // Atualizar cache local
+  // 3. Se houver lead associado, registra no histórico de atendimentos / eventos
+  if (payload.leadId) {
+    try {
+      await registrarEventoHistoricoSupabase({
+        empresaId: empUuid,
+        leadId: payload.leadId,
+        tipo: 'NOTA',
+        descricao: `Tarefa agendada: "${payload.titulo}" para ${dataAgendadaVal} às ${horaAgendadaVal}`,
+        metadata: {
+          tarefaId: novaTarefa.id,
+          prioridade: payload.prioridade,
+          etapaCadencia: payload.etapaCadencia,
+        },
+      });
+    } catch (e) {}
+  }
+
+  // 4. Atualizar cache local
   try {
     const key = `${STORAGE_KEY_TAREFAS}_${empUuid}`;
     const existentes = await fetchTarefasPorEmpresa(empUuid);
@@ -2721,27 +2881,46 @@ export async function atualizarStatusTarefaSupabase(
 ): Promise<boolean> {
   const client = getSupabaseClient();
   const nowIso = new Date().toISOString();
+  const statusUpper = status === 'concluida' ? 'CONCLUIDA' : status === 'cancelada' ? 'CANCELADA' : 'PENDENTE';
 
-  const updates: any = {
-    status,
-    updated_at: nowIso,
-    data_conclusao: status === 'concluida' ? nowIso : null,
-    usuario_conclusao_id: status === 'concluida' ? (usuarioId || null) : null,
-    observacao_conclusao: observacaoConclusao || null,
-  };
+  // 1. Atualizar no Firestore
+  try {
+    await firestoreService.atualizarStatusTarefa(tarefaId, status, observacaoConclusao, usuarioId);
+  } catch (errFirestore) {
+    console.warn('Aviso ao atualizar tarefa no Firestore:', errFirestore);
+  }
 
+  // 2. Atualizar no Supabase
   if (client) {
     try {
-      await client
+      const updates: any = {
+        status: statusUpper,
+        updated_at: nowIso,
+        data_conclusao: status === 'concluida' ? nowIso : null,
+        usuario_conclusao_id: status === 'concluida' ? (usuarioId ? normalizarUuid(usuarioId) : null) : null,
+        observacao_conclusao: observacaoConclusao || null,
+      };
+
+      let { error } = await client
         .from('tarefas')
         .update(updates)
         .eq('id', tarefaId);
+
+      if (error && (error.code === '42703' || error.message?.includes('does not exist') || error.message?.includes('column'))) {
+        await client
+          .from('tarefas')
+          .update({
+            status: statusUpper,
+            updated_at: nowIso,
+          })
+          .eq('id', tarefaId);
+      }
     } catch (e) {
       console.warn('Erro ao atualizar tarefa no Supabase:', e);
     }
   }
 
-  // Atualizar local
+  // 3. Atualizar local
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
@@ -2754,10 +2933,10 @@ export async function atualizarStatusTarefaSupabase(
             list[idx] = {
               ...list[idx],
               status,
-              dataConclusao: updates.data_conclusao,
-              data_conclusao: updates.data_conclusao,
-              observacaoConclusao: updates.observacao_conclusao,
-              observacao_conclusao: updates.observacao_conclusao,
+              dataConclusao: status === 'concluida' ? nowIso : null,
+              data_conclusao: status === 'concluida' ? nowIso : null,
+              observacaoConclusao: observacaoConclusao || list[idx].observacaoConclusao,
+              observacao_conclusao: observacaoConclusao || list[idx].observacao_conclusao,
               updated_at: nowIso,
             };
             localStorage.setItem(k, JSON.stringify(list));
@@ -2774,6 +2953,14 @@ export async function excluirTarefaSupabase(tarefaId: string): Promise<boolean> 
   const client = getSupabaseClient();
   const nowIso = new Date().toISOString();
 
+  // 1. Soft-delete no Firestore
+  try {
+    await firestoreService.excluirTarefa(tarefaId);
+  } catch (errFirestore) {
+    console.warn('Aviso ao excluir tarefa no Firestore:', errFirestore);
+  }
+
+  // 2. Soft-delete no Supabase
   if (client) {
     try {
       await client
@@ -2785,6 +2972,7 @@ export async function excluirTarefaSupabase(tarefaId: string): Promise<boolean> 
     }
   }
 
+  // 3. Atualizar local
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);

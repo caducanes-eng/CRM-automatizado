@@ -35,6 +35,9 @@ service cloud.firestore {
     match /kpis_secretaria_mensal/{kpiId} {
       allow read, write: if true;
     }
+    match /tarefas/{tarefaId} {
+      allow read, write: if true;
+    }
   }
 }
 

@@ -187,6 +187,37 @@
         "totalFaturamento": { "type": "number" },
         "updated_at": { "type": "string" }
       }
+    },
+    "Tarefa": {
+      "collection": "tarefas",
+      "fields": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "empresa_id": { "type": "string" },
+        "leadId": { "type": "string" },
+        "lead_id": { "type": "string" },
+        "usuarioResponsavelId": { "type": "string" },
+        "usuario_responsavel_id": { "type": "string" },
+        "titulo": { "type": "string" },
+        "descricao": { "type": "string" },
+        "dataAgendada": { "type": "string" },
+        "data_agendada": { "type": "string" },
+        "horaAgendada": { "type": "string" },
+        "hora_agendada": { "type": "string" },
+        "prioridade": { "type": "string" },
+        "status": { "type": "string" },
+        "situacaoOrigem": { "type": "string" },
+        "situacao_origem": { "type": "string" },
+        "etapaCadencia": { "type": "string" },
+        "etapa_cadencia": { "type": "string" },
+        "dataConclusao": { "type": "string" },
+        "usuarioConclusaoId": { "type": "string" },
+        "observacaoConclusao": { "type": "string" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "deleted_at": { "type": "string" },
+        "version": { "type": "number" }
+      }
     }
   }
 }

@@ -152,9 +152,10 @@ export const TarefasView: React.FC = () => {
       setTituloNova('');
       setDescricaoNova('');
       setLeadIdNova('');
-      dispararFeedback('Tarefa agendada com sucesso no Supabase!');
-    } catch (err) {
+      dispararFeedback('Tarefa lançada com sucesso no banco de dados!');
+    } catch (err: any) {
       console.error(err);
+      dispararFeedback(`Erro ao lançar tarefa: ${err?.message || 'Falha na gravação'}`);
     } finally {
       setSalvandoTarefa(false);
     }

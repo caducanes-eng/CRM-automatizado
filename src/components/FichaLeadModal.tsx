@@ -103,6 +103,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
   const {
     leadFichaAbertoId,
     isFichaLeadOpen,
+    leadSelecionadoModal,
     fecharFichaLead,
     obterLeadPorId,
     obterFichaPorLead,
@@ -160,7 +161,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
   const corBorda = config.estetica?.corBorda || '#D9D6D0';
 
   // Suporte a controle via Props OU via Contexto Global
-  const activeLeadId = propLeadId !== undefined ? propLeadId : leadFichaAbertoId;
+  const activeLeadId = propLeadId !== undefined ? propLeadId : (leadFichaAbertoId || leadSelecionadoModal?.id);
   const isModalOpen = propIsOpen !== undefined ? propIsOpen : isFichaLeadOpen;
   const handleClose = propOnClose || fecharFichaLead;
 
@@ -249,8 +250,10 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
     return mapa;
   }, [procedimentosAtivos]);
 
-  // Dados do lead atual a partir do contexto
-  const lead = activeLeadId ? obterLeadPorId(activeLeadId) : undefined;
+  // Dados do lead atual a partir do contexto ou lead selecionado
+  const lead = activeLeadId
+    ? (obterLeadPorId(activeLeadId) || leadSelecionadoModal || undefined)
+    : (leadSelecionadoModal || undefined);
   const ficha = activeLeadId ? obterFichaPorLead(activeLeadId) : undefined;
   const compras = useMemo(() => {
     return activeLeadId ? obterComprasPorLead(activeLeadId) : [];
@@ -268,10 +271,17 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
     return compras.reduce((acc, curr) => acc + (curr.valor || 0), 0);
   }, [compras]);
 
-  // Tarefas agendadas no Supabase vinculadas a este paciente
+  // Tarefas agendadas no banco de dados vinculadas a este paciente
   const tarefasDoLead = useMemo(() => {
     if (!activeLeadId || !tarefas) return [];
-    return tarefas.filter((t) => t.leadId === activeLeadId);
+    const leadIdNorm = normalizarUuid(activeLeadId);
+    return tarefas.filter((t) => {
+      const tLeadId = t.leadId || (t as any).lead_id;
+      if (!tLeadId) return false;
+      if (tLeadId === activeLeadId) return true;
+      if (String(tLeadId).trim().toLowerCase() === String(activeLeadId).trim().toLowerCase()) return true;
+      return normalizarUuid(tLeadId) === leadIdNorm;
+    });
   }, [activeLeadId, tarefas]);
 
   // Sincronizar estado local apenas quando o modal é aberto ou o lead ativo é alternado
@@ -589,13 +599,25 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
   };
 
   // Excluir paciente / lead definitivamente com confirmação
-  const handleConfirmarExclusaoLead = async () => {
-    if (!activeLeadId) return;
-    setIsExcluindo(true);
-    try {
-      await excluirLead(activeLeadId, true);
+  const handleConfirmarExclusaoLead = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const idParaExcluir = activeLeadId || lead?.id || leadFichaAbertoId || leadSelecionadoModal?.id;
+    if (!idParaExcluir) {
       setShowModalExcluirLead(false);
       handleClose();
+      return;
+    }
+
+    setIsExcluindo(true);
+    // Fecha imediatamente a confirmação e a ficha para resposta visual instantânea ao usuário
+    setShowModalExcluirLead(false);
+    handleClose();
+
+    try {
+      await excluirLead(idParaExcluir, true);
     } catch (err) {
       console.error('Erro ao excluir paciente:', err);
     } finally {
@@ -2094,14 +2116,14 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                 <div className="space-y-1">
                   <span className="text-xs uppercase tracking-wider font-bold flex items-center gap-1.5 text-[#D9D6D0]">
                     <CheckSquare className="w-4 h-4 text-amber-300" />
-                    Tarefas e Agendamentos no Supabase
+                    Tarefas e Agendamentos no Banco de Dados
                   </span>
                   <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
                     {tarefasDoLead.filter((t) => t.status === 'pendente').length} pendente(s) •{' '}
                     {tarefasDoLead.filter((t) => t.status === 'concluida').length} concluída(s)
                   </h3>
                   <p className="text-xs text-[#D9D6D0]">
-                    Controle de rotinas operacionais, contatos de follow-up e compromissos deste paciente
+                    Controle de rotinas operacionais, contatos de follow-up e compromissos deste paciente salvos na nuvem
                   </p>
                 </div>
 
@@ -2128,11 +2150,24 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                   id="form-nova-tarefa-ficha"
                   onSubmit={async (e) => {
                     e.preventDefault();
-                    if (!activeLeadId || !tarefaFichaTitulo.trim() || !tarefaFichaData) return;
+                    const idAlvo = activeLeadId || lead?.id;
+                    if (!idAlvo) {
+                      dispararFeedback('Atenção: selecione ou carregue o paciente antes de lançar a tarefa.');
+                      return;
+                    }
+                    if (!tarefaFichaTitulo.trim()) {
+                      dispararFeedback('Por favor, informe o título da tarefa.');
+                      return;
+                    }
+                    if (!tarefaFichaData) {
+                      dispararFeedback('Por favor, selecione a data agendada.');
+                      return;
+                    }
+
                     setSalvandoTarefaFicha(true);
                     try {
                       await criarTarefa({
-                        leadId: activeLeadId,
+                        leadId: idAlvo,
                         titulo: tarefaFichaTitulo.trim(),
                         descricao: tarefaFichaDesc.trim() || undefined,
                         dataAgendada: tarefaFichaData,
@@ -2144,8 +2179,10 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                       setShowNovaTarefaFicha(false);
                       setTarefaFichaTitulo('');
                       setTarefaFichaDesc('');
-                      setFeedbackSalvo('Tarefa agendada com sucesso!');
-                      setTimeout(() => setFeedbackSalvo(null), 3000);
+                      dispararFeedback('Tarefa lançada com sucesso no banco de dados!');
+                    } catch (err: any) {
+                      console.error('Erro ao lançar tarefa:', err);
+                      dispararFeedback(`Erro ao lançar tarefa: ${err?.message || 'Falha na gravação'}`);
                     } finally {
                       setSalvandoTarefaFicha(false);
                     }
@@ -2249,7 +2286,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                       disabled={salvandoTarefaFicha}
                       className="px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white bg-[#5C3A22] hover:bg-[#4A2E1B] rounded-sm transition-colors cursor-pointer disabled:opacity-50"
                     >
-                      {salvandoTarefaFicha ? 'Salvando...' : 'Salvar no Supabase'}
+                      {salvandoTarefaFicha ? 'Lançando no Banco...' : 'Lançar Tarefa no Banco'}
                     </button>
                   </div>
                 </form>
@@ -2720,6 +2757,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
+                id="btn-cancelar-exclusao-modal"
                 type="button"
                 disabled={isExcluindo}
                 onClick={() => setShowModalExcluirLead(false)}
@@ -2729,10 +2767,11 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
               </button>
 
               <button
+                id="btn-confirmar-exclusao-modal"
                 type="button"
                 disabled={isExcluindo}
-                onClick={handleConfirmarExclusaoLead}
-                className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold uppercase tracking-wider text-white bg-rose-700 hover:bg-rose-800 rounded-sm transition-colors cursor-pointer shadow-xs"
+                onClick={(e) => handleConfirmarExclusaoLead(e)}
+                className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold uppercase tracking-wider text-white bg-rose-700 hover:bg-rose-800 rounded-sm transition-colors cursor-pointer shadow-xs disabled:opacity-50"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{isExcluindo ? 'Excluindo...' : 'Sim, Excluir Paciente'}</span>
