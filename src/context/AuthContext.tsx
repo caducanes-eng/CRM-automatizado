@@ -192,16 +192,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }
 
-    if (usuariosRemotos.length === 0 && !firestoreService.isQuotaExhausted()) {
-      try {
-        const dadosFs = await firestoreService.carregarDadosCompletos();
-        if (dadosFs.usuarios && dadosFs.usuarios.length > 0) {
-          usuariosRemotos = dadosFs.usuarios;
-        }
-      } catch (err) {
-        console.warn('Erro ao consultar usuários no Firestore:', err);
-      }
-    }
 
     if (usuariosRemotos.length > 0) {
       setUsuarios((prev) => {
@@ -591,7 +581,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Login com e-mail/login e senha utilizando Supabase Auth
+  // Login com e-mail e senha EXCLUSIVAMENTE via Supabase Auth.
+  // Sem senhas padrão, sem acesso local de emergência: sem sessão do Supabase,
+  // o RLS do banco não libera nenhum dado.
   const loginComEmailSenha = async (loginOuEmail: string, senha: string) => {
     setIsLoading(true);
     setErroAuth(null);
@@ -599,238 +591,52 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const termoLimpo = (loginOuEmail || '').trim();
     const senhaLimpa = (senha || '').trim();
 
-    if (!termoLimpo || !senhaLimpa) {
+    const falhar = (msg: string): never => {
       setIsLoading(false);
-      const msg = 'Por favor, informe seu e-mail e sua senha de acesso.';
       setErroAuth(msg);
       throw new Error(msg);
-    }
-
-    // 1. Resolver e-mail se o usuário tiver digitado login, apelido ou nome
-    const todosUsuarios = usuarios.length > 0 ? usuarios : SEED_USUARIOS;
-
-    let colaboradorEncontrado = todosUsuarios.find((u) => {
-      const emailLower = (u.email || '').toLowerCase().trim();
-      const loginLower = (u.login || '').toLowerCase().trim();
-      const prefixoEmail = emailLower.split('@')[0];
-      const idLower = (u.id || '').toLowerCase().trim();
-      const nomeLower = (u.nome || '').toLowerCase().trim();
-      const termoLower = termoLimpo.toLowerCase();
-
-      if (loginLower === termoLower && loginLower !== '') return true;
-      if (emailLower === termoLower) return true;
-      if (prefixoEmail === termoLower && prefixoEmail !== '') return true;
-      if (idLower === termoLower || idLower.replace(/^user-/, '') === termoLower) return true;
-      if (nomeLower === termoLower) return true;
-
-      if (termoLower === 'cadu' || termoLower === 'caducanes' || termoLower === 'cadu canes') {
-        return emailLower === 'caducanes@gmail.com' || idLower === 'user-cadu';
-      }
-      if (termoLower === 'admin' || termoLower === 'gestao' || termoLower === 'gestor') {
-        return u.role === 'GESTOR' || emailLower.includes('gestao') || emailLower.includes('cadu');
-      }
-      if (termoLower.includes('agda')) {
-        return emailLower.includes('agda') || idLower.includes('agda') || nomeLower.includes('agda');
-      }
-      if (termoLower.includes('camila')) {
-        return emailLower.includes('camila') || idLower.includes('camila') || nomeLower.includes('camila');
-      }
-      if (termoLower.includes('secretaria') || termoLower === 'sec1' || termoLower === 'recepcao') {
-        return idLower.includes('sec1') || emailLower.includes('secretaria1');
-      }
-      return false;
-    });
-
-    // Se ainda não encontrou, busca no SEED_USUARIOS diretamente
-    if (!colaboradorEncontrado) {
-      colaboradorEncontrado = SEED_USUARIOS.find((u) => {
-        const emailLower = (u.email || '').toLowerCase().trim();
-        const loginLower = (u.login || '').toLowerCase().trim();
-        const prefixoEmail = emailLower.split('@')[0];
-        const idLower = (u.id || '').toLowerCase().trim();
-        const termoLower = termoLimpo.toLowerCase();
-        return (
-          emailLower === termoLower ||
-          loginLower === termoLower ||
-          prefixoEmail === termoLower ||
-          idLower === termoLower ||
-          (termoLower.includes('cadu') && emailLower.includes('cadu')) ||
-          (termoLower.includes('gestao') && emailLower.includes('gestao'))
-        );
-      });
-    }
-
-    const emailParaAuth = colaboradorEncontrado
-      ? colaboradorEncontrado.email
-      : termoLimpo.includes('@')
-      ? termoLimpo
-      : `${termoLimpo}@agdarodrigues.med.br`;
-
-    // 2. Tentar autenticação no Supabase Auth primeiro se configurado
-    if (isSupabaseConfigured()) {
-      const client = getSupabaseClient();
-      if (client) {
-        try {
-          const { data: authData, error: authError } = await client.auth.signInWithPassword({
-            email: emailParaAuth,
-            password: senhaLimpa,
-          });
-
-          if (!authError && authData?.user) {
-            await carregarPerfilUsuarioSupabase(authData.user);
-            setIsLoading(false);
-            return;
-          }
-        } catch (e) {
-          console.warn('Tentativa no Supabase Auth retornou erro, prosseguindo para validação de perfil:', e);
-        }
-      }
-    }
-
-    // 3. Fallback para autenticação local / colaboradores cadastrados
-    const senhasMestrasPadrao = [
-      'Agda@2026', 'agda@2026', 'Agda2026', 'agda2026', 'AGDA@2026',
-      'Lumina@2026', 'lumina@2026', 'Lumina2026', 'lumina2026',
-      'Gestor@2026', 'gestor@2026', 'Gestor2026', 'gestor2026',
-      'Master@2026', 'master@2026', 'Master2026', 'master2026',
-      'Admin@2026', 'admin@2026', 'Admin2026', 'admin2026',
-      'Admin@123', 'admin@123', 'Admin123', 'admin123',
-      'admin', 'ADMIN', 'gestor', 'GESTOR', 'master', 'MASTER',
-      '123456', '12345678', '1234', '0000', 'senha', 'cadu', 'CADU', 'caducanes', 'secretaria'
-    ];
-
-    let colabParaLogar = colaboradorEncontrado;
-
-    // Se não encontrou na memória local, busca na tabela usuarios do Supabase ou Firestore
-    if (!colabParaLogar) {
-      if (isSupabaseConfigured()) {
-        const client = getSupabaseClient();
-        if (client) {
-          try {
-            const { data: dbUsers } = await client
-              .from('usuarios')
-              .select('*')
-              .or(`email.eq.${emailParaAuth.toLowerCase()},email.eq.${termoLimpo.toLowerCase()}`)
-              .is('deleted_at', null)
-              .limit(1);
-
-            if (dbUsers && dbUsers.length > 0) {
-              colabParaLogar = supabaseMapper.dbToUsuario(dbUsers[0]);
-              setUsuarios((prev) => [colabParaLogar!, ...prev]);
-            }
-          } catch (e) {
-            console.warn('Erro ao consultar usuário no Supabase durante login:', e);
-          }
-        }
-      }
-
-      if (!colabParaLogar && !firestoreService.isQuotaExhausted()) {
-        try {
-          const dadosFs = await firestoreService.carregarDadosCompletos();
-          const match = (dadosFs.usuarios || []).find(
-            (u) =>
-              !u.deleted_at &&
-              (u.email?.toLowerCase() === emailParaAuth.toLowerCase() ||
-                u.email?.toLowerCase() === termoLimpo.toLowerCase())
-          );
-          if (match) {
-            colabParaLogar = match;
-            setUsuarios((prev) => [colabParaLogar!, ...prev]);
-          }
-        } catch (e) {
-          console.warn('Erro ao consultar usuário no Firestore durante login:', e);
-        }
-      }
-    }
-
-    // Se mesmo assim não encontrou, mas o termo inserido contém cadu ou gestor, vincula ao usuário master
-    if (!colabParaLogar && (termoLimpo.toLowerCase().includes('cadu') || termoLimpo.toLowerCase().includes('gestor') || termoLimpo.toLowerCase().includes('admin'))) {
-      colabParaLogar = SEED_USUARIOS[0];
-    }
-
-    if (colabParaLogar) {
-      // Verificar se o usuário está ativo
-      if (colabParaLogar.ativo === false) {
-        setIsLoading(false);
-        const msg = 'Este usuário foi desativado pela administração. Entre em contato com a coordenação.';
-        setErroAuth(msg);
-        throw new Error(msg);
-      }
-
-      const isUserCaduOuGestor =
-        colabParaLogar.id === 'user-cadu' ||
-        colabParaLogar.email?.toLowerCase() === 'caducanes@gmail.com' ||
-        colabParaLogar.role === 'GESTOR';
-
-      // Validar se a senha digitada é igual à senha cadastrada do usuário ou a uma senha mestra
-      const senhaPadraoCadastrada = colabParaLogar.senhaPadrao || '';
-      const senhaValida =
-        (senhaPadraoCadastrada && senhaPadraoCadastrada === senhaLimpa) ||
-        (senhaPadraoCadastrada && senhaPadraoCadastrada.toLowerCase() === senhaLimpa.toLowerCase()) ||
-        senhasMestrasPadrao.includes(senhaLimpa) ||
-        senhasMestrasPadrao.map((s) => s.toLowerCase()).includes(senhaLimpa.toLowerCase()) ||
-        validarSenhaGestor(senhaLimpa) ||
-        (isUserCaduOuGestor && senhaLimpa.length >= 3);
-
-      if (!senhaValida) {
-        setIsLoading(false);
-        const msg = 'E-mail ou senha incorretos. Verifique suas credenciais.';
-        setErroAuth(msg);
-        throw new Error(msg);
-      }
-    } else {
-      setIsLoading(false);
-      const msg = 'Usuário ou e-mail não encontrado. Verifique o login digitado ou utilize um dos acessos rápidos abaixo.';
-      setErroAuth(msg);
-      throw new Error(msg);
-    }
-
-    const empresaId = colabParaLogar.empresa_id || colabParaLogar.empresaId || ID_EMPRESA_PADRAO;
-    const perfil: ResponsavelPerfil = {
-      id: colabParaLogar.id,
-      nome: colabParaLogar.nome,
-      cargo: colabParaLogar.cargo,
-      email: colabParaLogar.email,
-      senhaPadrao: colabParaLogar.senhaPadrao || senhaLimpa,
-      iniciais: colabParaLogar.iniciais,
-      corBadge: colabParaLogar.corBadge,
-      descricao: colabParaLogar.observacoes || '',
-      role: colabParaLogar.role,
-      permissoes: colabParaLogar.permissoes,
-      ativo: colabParaLogar.ativo,
-      empresa_id: empresaId,
     };
 
-    setUser({
-      uid: colabParaLogar.id,
-      email: colabParaLogar.email,
-      displayName: colabParaLogar.nome,
-      empresa_id: empresaId,
-    });
-    setSessionPerfil(perfil);
-    setErroAuth(null);
+    if (!termoLimpo || !senhaLimpa) {
+      falhar('Por favor, informe seu e-mail e sua senha de acesso.');
+    }
 
-    try {
-      localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(perfil));
-      localStorage.setItem('crm_empresa_ativa_id', empresaId);
-    } catch (e) {}
-
-    // Tentar cadastrar/sincronizar no Supabase Auth em segundo plano se for primeira vez
-    if (isSupabaseConfigured()) {
-      const client = getSupabaseClient();
-      if (client) {
-        client.auth
-          .signUp({
-            email: colabParaLogar.email,
-            password: senhaLimpa,
-            options: { data: { full_name: colabParaLogar.nome } },
-          })
-          .catch(() => {});
+    // Resolve o e-mail: aceita e-mail completo ou o início do e-mail de um usuário já carregado
+    let emailParaAuth = termoLimpo.toLowerCase();
+    if (!emailParaAuth.includes('@')) {
+      const achado = usuarios.find(
+        (u) => (u.email || '').toLowerCase().split('@')[0] === emailParaAuth
+      );
+      if (!achado?.email) {
+        falhar('Informe o e-mail completo cadastrado.');
+      } else {
+        emailParaAuth = achado.email.toLowerCase();
       }
     }
 
+    if (!isSupabaseConfigured()) {
+      falhar('Banco de dados não configurado. Contate o administrador.');
+    }
+    const client = getSupabaseClient();
+    if (!client) {
+      falhar('Não foi possível conectar ao banco de dados.');
+    }
+
+    const { data: authData, error: authError } = await client!.auth.signInWithPassword({
+      email: emailParaAuth,
+      password: senhaLimpa,
+    });
+
+    if (authError || !authData?.user) {
+      const bruto = (authError?.message || '').toLowerCase();
+      if (bruto.includes('not confirmed')) {
+        falhar('E-mail ainda não confirmado. Peça ao administrador para liberar seu acesso.');
+      }
+      falhar('E-mail ou senha incorretos. Verifique suas credenciais.');
+    }
+
+    await carregarPerfilUsuarioSupabase(authData!.user);
     setIsLoading(false);
-    return;
   };
 
   // Cadastro de novo usuário
@@ -1151,18 +957,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const gestores = usuarios.filter((u) => u.role === 'GESTOR' && u.ativo && !u.deleted_at);
     if (gestores.some((g) => g.senhaPadrao === senhaInformada || g.senhaPadrao?.toLowerCase() === senhaLower)) return true;
-
-    const senhasMestras = [
-      'Agda@2026', 'agda@2026', 'Agda2026', 'agda2026', 'AGDA@2026',
-      'Lumina@2026', 'lumina@2026', 'Lumina2026', 'lumina2026',
-      'Gestor@2026', 'gestor@2026', 'Gestor2026', 'gestor2026',
-      'Master@2026', 'master@2026', 'Master2026', 'master2026',
-      'Admin@2026', 'admin@2026', 'Admin2026', 'admin2026',
-      'Admin@123', 'admin@123', 'Admin123', 'admin123',
-      'admin', 'ADMIN', 'gestor', 'GESTOR', 'master', 'MASTER',
-      '123456', '12345678', '1234', '0000', 'cadu', 'CADU', 'caducanes'
-    ];
-    if (senhasMestras.includes(senhaInformada) || senhasMestras.map(s => s.toLowerCase()).includes(senhaLower)) return true;
 
     const usuarioAtualLista = usuarios.find((u) => u.id === (responsavelAtivo?.id || usuarioLogado?.id));
     if (usuarioAtualLista?.senhaPadrao && (usuarioAtualLista.senhaPadrao === senhaInformada || usuarioAtualLista.senhaPadrao.toLowerCase() === senhaLower)) return true;

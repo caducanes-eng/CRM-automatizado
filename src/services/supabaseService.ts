@@ -88,25 +88,8 @@ export function normalizarUuid(id?: string | null): string {
 let cachedFichasTableName: string | null = null;
 
 async function getFichasTableName(): Promise<string> {
-  if (cachedFichasTableName) return cachedFichasTableName;
-  const client = getSupabaseClient();
-  if (!client) return 'fichas_leads';
-
-  const { error: err1 } = await client.from('fichas_leads').select('id').limit(1);
-  if (!err1) {
-    cachedFichasTableName = 'fichas_leads';
-    return cachedFichasTableName;
-  }
-
-  if (err1.code === 'PGRST205' || err1.code === '42P01' || err1.message?.includes('fichas_leads')) {
-    const { error: err2 } = await client.from('fichas_lead').select('id').limit(1);
-    if (!err2 || err2.code !== 'PGRST205') {
-      cachedFichasTableName = 'fichas_lead';
-      return cachedFichasTableName;
-    }
-  }
-
-  cachedFichasTableName = 'fichas_leads';
+  // Tabela oficial no banco: fichas_lead (o nome antigo fichas_leads não existe)
+  cachedFichasTableName = 'fichas_lead';
   return cachedFichasTableName;
 }
 
@@ -1524,34 +1507,14 @@ export const supabaseService = {
           usuarios: rowsUsuarios.map(supabaseMapper.dbToUsuario),
         };
 
-        if (
-          resultado.leads.length > 0 ||
-          resultado.procedimentos.length > 0 ||
-          resultado.empresas.length > 0 ||
-          resultado.usuarios.length > 0
-        ) {
-          return resultado;
-        }
-
-        // Se Supabase está vazio e Firestore não está com cota estourada, busca do Firestore como fallback
-        const dadosFirestore = await firestoreService.carregarDadosCompletos();
-        if (
-          dadosFirestore &&
-          (dadosFirestore.leads.length > 0 ||
-            dadosFirestore.procedimentos.length > 0 ||
-            dadosFirestore.usuarios.length > 0 ||
-            dadosFirestore.empresas.length > 0)
-        ) {
-          return dadosFirestore;
-        }
-
         return resultado;
       } catch (error: any) {
         console.warn('Aviso ao carregar dados do Supabase:', error?.message || error);
       }
     }
 
-    return await firestoreService.carregarDadosCompletos();
+    // Sem Firestore como fonte de leitura: o Supabase é a única fonte de verdade.
+    return null;
   },
 
   /**
