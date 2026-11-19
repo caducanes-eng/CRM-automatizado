@@ -622,17 +622,45 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       falhar('Não foi possível conectar ao banco de dados.');
     }
 
-    const { data: authData, error: authError } = await client!.auth.signInWithPassword({
-      email: emailParaAuth,
-      password: senhaLimpa,
-    });
+    let authData: Awaited<ReturnType<typeof client.auth.signInWithPassword>>['data'] | null = null;
+    let authError: { message?: string; status?: number; code?: string; name?: string } | null = null;
+    try {
+      const resposta = await client!.auth.signInWithPassword({
+        email: emailParaAuth,
+        password: senhaLimpa,
+      });
+      authData = resposta.data;
+      authError = resposta.error;
+    } catch (e: any) {
+      // Falha antes de chegar ao servidor (rede, bloqueio do navegador, etc.)
+      authError = { message: e?.message || String(e), name: e?.name };
+    }
 
     if (authError || !authData?.user) {
       const bruto = (authError?.message || '').toLowerCase();
-      if (bruto.includes('not confirmed')) {
+      const status = authError?.status;
+      const codigo = authError?.code || authError?.name || '';
+      const detalhe = `(${[status, codigo, authError?.message].filter(Boolean).join(' · ') || 'sem detalhe'})`;
+      console.error('Falha no login (Supabase Auth):', { status, codigo, mensagem: authError?.message });
+
+      if (bruto.includes('not confirmed') || codigo === 'email_not_confirmed') {
         falhar('E-mail ainda não confirmado. Peça ao administrador para liberar seu acesso.');
       }
-      falhar('E-mail ou senha incorretos. Verifique suas credenciais.');
+      if (status === 429 || codigo === 'over_request_rate_limit') {
+        falhar('Muitas tentativas. Aguarde alguns minutos e tente de novo.');
+      }
+      if (
+        status === 400 &&
+        (codigo === 'invalid_credentials' || bruto.includes('invalid login credentials'))
+      ) {
+        falhar('E-mail ou senha incorretos. Verifique suas credenciais.');
+      }
+      if (!status || bruto.includes('fetch') || bruto.includes('network') || bruto.includes('lock')) {
+        falhar(
+          `Não foi possível conectar ao servidor. Verifique a internet, VPN ou extensões do navegador. ${detalhe}`
+        );
+      }
+      falhar(`Não foi possível entrar agora. Tente novamente. ${detalhe}`);
     }
 
     await carregarPerfilUsuarioSupabase(authData!.user);
