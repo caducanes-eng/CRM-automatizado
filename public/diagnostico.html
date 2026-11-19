@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Diagnóstico de conexão</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; margin: 0; padding: 20px; background: #f8fafc; color: #0f172a; }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 6px; }
+  p { font-size: 14px; line-height: 1.45; margin: 6px 0 14px; color: #475569; }
+  button { font-size: 16px; font-weight: 700; padding: 12px 22px; border: 0; border-radius: 10px; background: #0f172a; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .teste { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 14px; margin: 10px 0; font-size: 14px; }
+  .teste b { display: block; margin-bottom: 2px; }
+  .ok { border-left: 5px solid #16a34a; }
+  .falha { border-left: 5px solid #dc2626; }
+  .info { border-left: 5px solid #64748b; }
+  .det { color: #475569; font-size: 12px; word-break: break-word; }
+  #resumo { background: #0f172a; color: #fff; border-radius: 10px; padding: 14px; margin: 14px 0; font-size: 15px; line-height: 1.45; display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Diagnóstico de conexão com o Supabase</h1>
+  <p>Clique no botão e aguarde uns 20 segundos. Depois tire uma foto da tela inteira com o resultado. Este teste não usa senha nem acessa dados.</p>
+  <button id="rodar">Rodar teste</button>
+  <div id="resumo"></div>
+  <div id="saida"></div>
+</main>
+<script>
+(function () {
+  var SUPA = 'https://msiuqiyndnvpwkpkaglm.supabase.co';
+  var saida = document.getElementById('saida');
+  var resumo = document.getElementById('resumo');
+  var botao = document.getElementById('rodar');
+  var resultados = {};
+
+  function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
+
+  function mostrar(classe, titulo, detalhe) {
+    var d = document.createElement('div');
+    d.className = 'teste ' + classe;
+    d.innerHTML = '<b>' + esc(titulo) + '</b><span class="det">' + esc(detalhe || '') + '</span>';
+    saida.appendChild(d);
+  }
+
+  function comTimeout(promessaFn, ms) {
+    var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var t = setTimeout(function () { if (ctrl) ctrl.abort(); }, ms);
+    return promessaFn(ctrl ? ctrl.signal : undefined).then(
+      function (r) { clearTimeout(t); return r; },
+      function (e) { clearTimeout(t); throw e; }
+    );
+  }
+
+  function descreverErro(e) {
+    return (e && e.name ? e.name : 'Erro') + ': ' + (e && e.message ? e.message : String(e));
+  }
+
+  function teste(id, titulo, fn) {
+    var inicio = Date.now();
+    return fn().then(function (detalhe) {
+      resultados[id] = true;
+      mostrar('ok', 'OK — ' + titulo, detalhe + ' (' + (Date.now() - inicio) + ' ms)');
+    }, function (e) {
+      resultados[id] = false;
+      mostrar('falha', 'FALHOU — ' + titulo, descreverErro(e) + ' (' + (Date.now() - inicio) + ' ms)');
+    });
+  }
+
+  function ambiente() {
+    var linhas = [];
+    linhas.push('Navegador: ' + navigator.userAgent);
+    linhas.push('Online segundo o navegador: ' + navigator.onLine);
+    linhas.push('Navigator Locks disponível: ' + (typeof navigator.locks !== 'undefined'));
+    var ls = 'não';
+    try { localStorage.setItem('_diag', '1'); ls = localStorage.getItem('_diag') === '1' ? 'sim' : 'não'; localStorage.removeItem('_diag'); } catch (e) { ls = 'ERRO ' + e.name; }
+    linhas.push('localStorage funciona: ' + ls);
+    linhas.push('Cookies ativos: ' + navigator.cookieEnabled);
+    linhas.push('Data e hora do aparelho: ' + new Date().toString());
+    linhas.push('Endereço desta página: ' + location.origin);
+    mostrar('info', 'Ambiente', linhas.join('\n'));
+    saida.lastChild.querySelector('.det').style.whiteSpace = 'pre-wrap';
+  }
+
+  function rodar() {
+    botao.disabled = true;
+    saida.innerHTML = '';
+    resumo.style.display = 'none';
+    resultados = {};
+    ambiente();
+
+    // 1. Controle: outro site com CORS liberado. Se falhar, tudo que sai desta página está sendo barrado.
+    teste('controle', 'Pedido a outro site (api.github.com)', function () {
+      return comTimeout(function (signal) {
+        return fetch('https://api.github.com/zen', { signal: signal }).then(function (r) { return 'HTTP ' + r.status; });
+      }, 12000);
+    })
+    // 2. Alcance de rede ao Supabase, sem CORS (só prova que dá para chegar lá).
+    .then(function () {
+      return teste('rede', 'Chegar ao Supabase (sem CORS)', function () {
+        return comTimeout(function (signal) {
+          return fetch(SUPA + '/auth/v1/health', { mode: 'no-cors', signal: signal }).then(function () { return 'resposta recebida'; });
+        }, 12000);
+      });
+    })
+    // 3. GET com CORS, como o navegador faz de dentro de uma página.
+    .then(function () {
+      return teste('cors_get', 'Pedido GET ao Supabase (com CORS)', function () {
+        return comTimeout(function (signal) {
+          return fetch(SUPA + '/auth/v1/health', { signal: signal }).then(function (r) { return 'HTTP ' + r.status + ' (401 é o esperado, sem chave)'; });
+        }, 12000);
+      });
+    })
+    // 4. Igual ao login: POST JSON com cabeçalhos próprios (gera preflight). Chave falsa: o esperado é HTTP 401.
+    .then(function () {
+      return teste('login', 'Pedido igual ao do login (POST com cabeçalhos)', function () {
+        return comTimeout(function (signal) {
+          return fetch(SUPA + '/auth/v1/token?grant_type=password', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json;charset=UTF-8',
+              'apikey': 'chave-falsa-de-teste',
+              'Authorization': 'Bearer chave-falsa-de-teste',
+              'X-Client-Info': 'diagnostico'
+            },
+            body: JSON.stringify({ email: 'teste@invalido.example', password: 'teste-invalido' }),
+            signal: signal
+          }).then(function (r) { return 'HTTP ' + r.status + ' (401 é o esperado, chave falsa)'; });
+        }, 12000);
+      });
+    })
+    .then(finalizar);
+  }
+
+  function finalizar() {
+    var r = resultados, texto;
+    if (!r.controle && !r.rede) {
+      texto = 'Esta página não consegue sair para nenhum site. Provável: rede sem internet de verdade, VPN, filtro de rede ou antivírus bloqueando.';
+    } else if (!r.controle) {
+      texto = 'Pedidos feitos de dentro da página a outros sites estão sendo barrados, mesmo a um site comum. Provável: extensão do Safari, bloqueador de conteúdo ou antivírus.';
+    } else if (!r.rede) {
+      texto = 'Só o Supabase não é alcançado, e outros sites são. Provável: filtro de DNS ou de rede bloqueando supabase.co.';
+    } else if (!r.cors_get || !r.login) {
+      texto = 'O Supabase é alcançado, mas os pedidos feitos de dentro da página são barrados' + (r.cors_get ? ' (o GET passa, o pedido de login não)' : '') + '. Provável: extensão, bloqueador de conteúdo ou antivírus que filtra esse tipo de pedido.';
+    } else {
+      texto = 'Todos os testes passaram. A conexão com o Supabase está normal neste aparelho. O problema não é de rede nem de bloqueio.';
+    }
+    resumo.textContent = 'Conclusão: ' + texto;
+    resumo.style.display = 'block';
+    botao.disabled = false;
+    botao.textContent = 'Rodar de novo';
+  }
+
+  botao.addEventListener('click', rodar);
+})();
+</script>
+</body>
+</html>
