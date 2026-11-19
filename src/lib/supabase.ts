@@ -90,13 +90,40 @@ export function getRealtimeLogs(): RealtimeEventLog[] {
   return [...realtimeLogs];
 }
 
+let avisouConfigLocalIgnorada = false;
+
 /**
- * Obtém as credenciais ativas do Supabase (prioridade: localStorage configurado > variáveis VITE_*)
+ * Obtém as credenciais ativas do Supabase.
+ * Prioridade: variáveis VITE_* do deploy > configuração salva no navegador (localStorage).
+ * A configuração do navegador só vale quando o deploy não define as variáveis; assim um
+ * navegador com dados antigos nunca desvia o login para outro projeto Supabase.
  */
 export function getSupabaseConfig(): SupabaseConfig {
   const envObj = (import.meta as any).env || {};
   const envUrl = (envObj.VITE_SUPABASE_URL || '').trim();
   const envKey = (envObj.VITE_SUPABASE_ANON_KEY || '').trim();
+
+  if (envUrl && envKey) {
+    if (!avisouConfigLocalIgnorada) {
+      try {
+        const salvo = localStorage.getItem(STORAGE_KEY_SUPABASE);
+        if (salvo) {
+          const parsed = JSON.parse(salvo);
+          if (parsed?.url && String(parsed.url).trim() !== envUrl) {
+            console.warn(
+              'Configuração do Supabase salva neste navegador difere da oficial e foi ignorada.'
+            );
+          }
+        }
+      } catch (e) {}
+      avisouConfigLocalIgnorada = true;
+    }
+    return {
+      url: envUrl,
+      anonKey: envKey,
+      origem: 'env',
+    };
+  }
 
   try {
     const salvo = localStorage.getItem(STORAGE_KEY_SUPABASE);
