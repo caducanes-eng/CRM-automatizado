@@ -132,7 +132,63 @@
         }, 12000);
       });
     })
+    .then(testarEnderecoDoCrm)
     .then(finalizar);
+  }
+
+  var ESPERADO = 'msiuqiyndnvpwkpkaglm';
+  var EXEMPLOS = ['abcdefghijklm', 'xyzcompany']; // endereços de exemplo que vêm dentro da biblioteca do Supabase
+  var achados = { hosts: [], esperadoOk: false, local: null };
+
+  // Lê o próprio CRM publicado (mesmo endereço desta página) e extrai o endereço do Supabase embutido nele.
+  // Mostra só o endereço, nunca a chave.
+  function testarEnderecoDoCrm() {
+    return teste('endereco', 'Endereço do Supabase embutido no CRM', function () {
+      return comTimeout(function (signal) {
+        return fetch('/', { signal: signal })
+          .then(function (r) { return r.text(); })
+          .then(function (html) {
+            var srcs = (html.match(/\/assets\/[^"']+\.js/g) || []).slice(0, 4);
+            if (!srcs.length) throw new Error('não achei o arquivo do CRM nesta página');
+            return Promise.all(srcs.map(function (s) {
+              return fetch(s, { signal: signal }).then(function (r) { return r.text(); });
+            }));
+          });
+      }, 25000).then(function (textos) {
+        var set = {}, chave = false;
+        textos.forEach(function (t) {
+          (t.match(/https?:\/\/[a-z0-9-]+\.supabase\.co/gi) || []).forEach(function (h) {
+            var ehExemplo = EXEMPLOS.some(function (e) { return h.toLowerCase().indexOf(e) !== -1; });
+            if (!ehExemplo) set[h.toLowerCase()] = true;
+          });
+          if (/eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/.test(t)) chave = true;
+        });
+        var hosts = Object.keys(set);
+        achados.hosts = hosts;
+        achados.esperadoOk = hosts.some(function (h) { return h.indexOf(ESPERADO) !== -1; });
+        if (!hosts.length) {
+          throw new Error('nenhum endereço do Supabase dentro do CRM publicado (as variáveis do deploy parecem vazias). Chave embutida: ' + (chave ? 'sim' : 'não'));
+        }
+        var semHttps = hosts.filter(function (h) { return h.indexOf('http://') === 0; });
+        return 'Endereço(s): ' + hosts.join(', ') +
+          ' | é o projeto correto: ' + (achados.esperadoOk ? 'SIM' : 'NÃO') +
+          (semHttps.length ? ' | ATENÇÃO: sem https' : '') +
+          ' | chave embutida: ' + (chave ? 'sim' : 'não');
+      });
+    }).then(function () {
+      var txt;
+      try {
+        var salvo = localStorage.getItem('crm_supabase_config_v1');
+        if (!salvo) {
+          txt = 'Nenhuma configuração do Supabase guardada neste navegador.';
+        } else {
+          var p = JSON.parse(salvo);
+          achados.local = (p && p.url) ? String(p.url) : '';
+          txt = 'HÁ configuração guardada neste navegador. Endereço: ' + (achados.local || '(vazio)');
+        }
+      } catch (e) { txt = 'Não foi possível ler: ' + e.name; }
+      mostrar('info', 'Configuração guardada neste navegador', txt);
+    });
   }
 
   function finalizar() {
@@ -147,6 +203,12 @@
       texto = 'O Supabase é alcançado, mas os pedidos feitos de dentro da página são barrados' + (r.cors_get ? ' (o GET passa, o pedido de login não)' : '') + '. Provável: extensão, bloqueador de conteúdo ou antivírus que filtra esse tipo de pedido.';
     } else {
       texto = 'Todos os testes passaram. A conexão com o Supabase está normal neste aparelho. O problema não é de rede nem de bloqueio.';
+    }
+    if (achados.hosts.length && !achados.esperadoOk) {
+      texto = 'CAUSA PROVÁVEL: o CRM publicado aponta para um endereço do Supabase diferente do projeto correto (' + achados.hosts.join(', ') + '). ' +
+        (achados.local ? 'Este navegador tem uma configuração guardada que sobrepõe o endereço do CRM. ' : 'Este navegador não tem configuração guardada, por isso depende do endereço embutido no CRM. ') + texto;
+    } else if (r.endereco === false && !achados.hosts.length) {
+      texto = 'CAUSA PROVÁVEL: o CRM publicado não tem endereço do Supabase embutido (variáveis do deploy vazias). ' + texto;
     }
     resumo.textContent = 'Conclusão: ' + texto;
     resumo.style.display = 'block';
