@@ -381,7 +381,6 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   const [textoColado, setTextoColado] = useState('');
   const [arquivoNome, setArquivoNome] = useState<string | null>(null);
   const [conteudoCsvLido, setConteudoCsvLido] = useState<string>('');
-  const [modoDuplicados, setModoDuplicados] = useState<'ignorar_duplicados' | 'atualizar_duplicados' | 'criar_todos'>('ignorar_duplicados');
   const [importando, setImportando] = useState(false);
   const [resultadoImportacao, setResultadoImportacao] = useState<ResultadoImportacao | null>(null);
   const [erroAnalise, setErroAnalise] = useState<string | null>(null);
@@ -461,7 +460,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     setErroAnalise(null);
 
     try {
-      const resultado = await importarLeadsEmLote(leadsPreVisualizacao, modoDuplicados);
+      const resultado = await importarLeadsEmLote(leadsPreVisualizacao, 'criar_todos');
       setResultadoImportacao(resultado);
       // Limpa dados após importação
       if (resultado.totalCriados > 0 || resultado.totalAtualizados > 0) {
@@ -1027,19 +1026,8 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               )}
 
               {/* Tratamento de Duplicados */}
-              <div className="p-3 rounded-sm border border-[#D9D6D0] bg-[#FAF8F5] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-                <span className="font-bold text-[#1A1A1A] uppercase tracking-wider text-[11px] shrink-0">
-                  Regra para clientes já cadastrados (por nome ou telefone):
-                </span>
-                <select
-                  value={modoDuplicados}
-                  onChange={(e: any) => setModoDuplicados(e.target.value)}
-                  className="h-8 px-2.5 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] font-medium focus:border-[#5C3A22] focus:outline-hidden"
-                >
-                  <option value="ignorar_duplicados">Ignorar duplicados (manter cadastro atual)</option>
-                  <option value="atualizar_duplicados">Atualizar dados do cliente existente</option>
-                  <option value="criar_todos">Importar todos (permitir repetidos)</option>
-                </select>
+              <div className="p-3 rounded-sm border border-[#D9D6D0] bg-[#FAF8F5] text-xs text-[#1A1A1A]">
+                Cada linha da planilha vira um novo cadastro. A importação ainda não compara com os cadastros existentes, então não importe a mesma lista duas vezes.
               </div>
 
               {/* Pré-visualização dos Dados Identificados */}
