@@ -250,11 +250,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {config.monogramaIniciais || 'AR'}
               </div>
               <div className="min-w-0">
-                <h1 className="text-xs font-bold tracking-wider text-white uppercase truncate">
+                <h1 className="font-display text-base font-medium text-white truncate">
                   {config.nomeEmpresa || 'Dra. Agda Rodrigues'}
                 </h1>
                 <p
-                  className="text-[10px] font-semibold uppercase tracking-wider truncate"
+                  className="text-xs font-medium truncate"
                   style={{ color: c.corSecundaria }}
                 >
                   {config.subtitulo || 'Harmonização Facial'}
@@ -287,7 +287,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {group.category && (
                   <div
                     style={{ color: c.corNavCategoriaTexto }}
-                    className="px-2.5 pb-0.5 text-[9px] font-bold uppercase tracking-wider opacity-90"
+                    className="px-2.5 pt-2 pb-1 text-xs font-medium opacity-90"
                   >
                     {group.category}
                   </div>
@@ -332,7 +332,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           onCloseMobile();
                         }}
                         style={itemStyle}
-                        className={`group w-full flex items-center justify-between px-2.5 py-1.5 rounded-sm text-xs font-medium transition-all duration-150 text-left cursor-pointer ${
+                        className={`group w-full flex items-center justify-between px-2.5 py-2 rounded-md text-sm font-medium transition-colors duration-150 text-left cursor-pointer ${
                           isActive
                             ? 'font-semibold border-l-2 pl-2 shadow-xs'
                             : ''
@@ -347,14 +347,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 ? c.corNavTextoHover
                                 : c.corNavTextoInativo,
                             }}
-                            className="w-3.5 h-3.5 shrink-0 transition-colors"
+                            className="w-4 h-4 shrink-0 transition-colors"
                           />
-                          <span className="truncate text-[11.5px]">{item.label}</span>
+                          <span className="truncate text-[13px]">{item.label}</span>
                         </div>
 
                         {isPrimaryQuick ? (
                           <span
-                            className="text-[8.5px] uppercase font-bold tracking-wider px-1 py-0.5 rounded-sm"
+                            className="text-[11px] font-semibold px-1.5 py-0.5 rounded"
                             style={
                               isActive
                                 ? { backgroundColor: '#FFFFFF', color: '#1A1A1A' }
@@ -368,13 +368,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           </span>
                         ) : isPlataformaExclusivo ? (
                           <span
-                            className="text-[8.5px] font-bold tracking-wider uppercase px-1 py-0.5 rounded-sm bg-amber-400/20 text-amber-300 border border-amber-400/30"
+                            className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30"
                           >
                             Master
                           </span>
                         ) : isGestorExclusivo ? (
                           <span
-                            className="text-[8.5px] font-bold tracking-wider uppercase px-1 py-0.5 rounded-sm border border-white/10"
+                            className="text-[11px] font-semibold px-1.5 py-0.5 rounded border border-white/10"
                             style={{
                               backgroundColor: c.corNavBadgeBg,
                               color: c.corNavBadgeTexto,
@@ -432,13 +432,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="min-w-0">
                 <p
                   style={{ color: c.corNavFooterTextoPrincipal }}
-                  className="text-[11.5px] font-bold truncate leading-tight tracking-wide"
+                  className="text-[13px] font-semibold truncate leading-tight"
                 >
                   {responsavelNome}
                 </p>
                 <p
                   style={{ color: c.corNavFooterTextoSecundario }}
-                  className="text-[9.5px] font-medium truncate opacity-95"
+                  className="text-xs font-medium truncate opacity-95"
                 >
                   {responsavelAtivo?.cargo || (isGestor ? 'Gestor Master' : 'Colaborador')}
                 </p>
@@ -458,7 +458,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <div
             style={{ borderColor: 'rgba(255, 255, 255, 0.08)' }}
-            className="flex items-center justify-between pt-1.5 border-t text-[9px]"
+            className="flex items-center justify-between pt-1.5 border-t text-[11px]"
           >
             <span
               style={{ color: c.corNavFooterTextoSecundario }}
@@ -468,11 +468,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="w-1.5 h-1.5 rounded-full shrink-0 shadow-2xs"
                 style={{ backgroundColor: isFirestoreConnected ? '#10B981' : c.corSecundaria }}
               />
-              {isFirestoreConnected ? 'Nuvem Conectada' : 'Sincronizando...'}
+              {isFirestoreConnected ? 'Conectado' : 'Sincronizando'}
             </span>
             <span
               style={{ color: c.corNavFooterTextoSecundario }}
-              className="text-[8.5px] uppercase font-mono tracking-wider opacity-85 font-semibold"
+              className="text-[11px] opacity-85 font-medium"
             >
               {config.monogramaIniciais || 'AR'} CRM
             </span>

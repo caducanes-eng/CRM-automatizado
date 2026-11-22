@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: 'Figtree', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Fraunces', Georgia, serif;
+}
+
 :root {
   --cor-primaria: #5C3A22;
   --cor-secundaria: #8A6142;
@@ -18,14 +23,26 @@
   --cor-nav-footer-texto-principal: #FFFFFF;
   --cor-nav-footer-texto-secundario: #C8C3BC;
   --cor-nav-footer-icone: #D9D6D0;
-  --cor-fundo-destaque: #F2EFEA;
+  --cor-fundo-destaque: #F6F1EA;
   --cor-borda: #D9D6D0;
   --cor-texto: #1A1A1A;
 }
 
 @layer base {
-  * {
-    font-family: 'Montserrat', sans-serif;
+  html {
+    font-family: var(--font-sans);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--cor-secundaria, #B8793A);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 
   body {
@@ -36,7 +53,12 @@
 
 /* Utilitários da Identidade Visual & Estética Customizável */
 .font-montserrat {
-  font-family: 'Montserrat', sans-serif;
+  font-family: var(--font-sans);
+}
+
+.font-display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
 }
 
 /* Bloco de destaque oficial dinâmico: fundo de destaque + barra lateral esquerda primária */
