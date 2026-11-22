@@ -429,14 +429,6 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         )
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table: 'fichas_leads' },
-          () => {
-            logRealtimeEvent('fichas_leads', 'UPDATE', 'Ficha atualizada em tempo real');
-            carregarDadosCompletos();
-          }
-        )
-        .on(
-          'postgres_changes',
           { event: '*', schema: 'public', table: 'fichas_lead' },
           () => {
             logRealtimeEvent('fichas_lead', 'UPDATE', 'Ficha atualizada em tempo real');

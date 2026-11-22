@@ -712,6 +712,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         localStorage.removeItem('crm_sessao_responsavel_v2');
         localStorage.removeItem('crm_multiempresa_empresa_ativa_id_v1');
         localStorage.removeItem('crm_leads_col_widths_v2');
+        // Cache de usuários guardava senhas em texto; as tarefas e KPIs locais NÃO são apagados porque hoje só existem aqui.
+        localStorage.removeItem(STORAGE_USUARIOS_KEY);
 
         // Limpar tokens do Supabase e chaves de sessão no localStorage
         const keysParaRemover: string[] = [];

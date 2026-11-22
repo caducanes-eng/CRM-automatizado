@@ -2122,7 +2122,7 @@ export async function fetchKpisMesAtual(
 
       // 2. KPI 4: Faturamento Mensal
       const { data: comprasData } = await client
-        .from('historico_compras')
+        .from('compras')
         .select('*')
         .eq('empresa_id', empUuid)
         .is('deleted_at', null);
