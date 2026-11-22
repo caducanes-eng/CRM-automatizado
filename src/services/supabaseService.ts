@@ -2029,7 +2029,6 @@ export function calcularRegraComissao(params: ParametrosCalculoKpi): ResultadoCa
   };
 }
 
-const STORAGE_KEY_KPIS_HISTORICO = 'crm_kpis_secretaria_snapshots_v1';
 
 /**
  * Busca e calcula em tempo real os 4 KPIs para o mês/ano selecionado (ex: '2026-08')
@@ -2259,274 +2258,123 @@ export async function fetchKpisMesAtual(
   };
 }
 
-function obterSeedSnapshotsHistoricos(empresaId: string): KpiSecretariaMensal[] {
-  const empUuid = normalizarUuid(empresaId);
-  return [
-    {
-      id: `kpi-snap-2026-07`,
-      empresaId: empUuid,
-      empresa_id: empUuid,
-      mesAno: '2026-07',
-      mes_ano: '2026-07',
-      consultasRealizadas: 48,
-      consultas_realizadas: 48,
-      totalAgendamentos: 52,
-      total_agendamentos: 52,
-      taxaComparecimento: 92.3,
-      taxa_comparecimento: 92.3,
-      travaComparecimentoOk: true,
-      trava_comparecimento_ok: true,
-      leadsPosConsulta: 40,
-      leads_pos_consulta: 40,
-      leadsVendaFeita: 24,
-      leads_venda_feita: 24,
-      taxaFechamento: 60.0,
-      taxa_fechamento: 60.0,
-      faturamentoRealizado: 92000,
-      faturamento_realizado: 92000,
-      metaFaturamento: 80000,
-      meta_faturamento: 80000,
-      percentualMetaFaturamento: 115.0,
-      percentual_meta_faturamento: 115.0,
-      bonusCaptacao: 400,
-      bonus_captacao: 400,
-      bonusComparecimento: 500,
-      bonus_comparecimento: 500,
-      bonusFechamento: 700,
-      bonus_fechamento: 700,
-      bonusFaturamento: 2000,
-      bonus_faturamento: 2000,
-      comissaoTotal: 3600,
-      comissao_total: 3600,
-      fechado: true,
-      fechadoEm: '2026-08-01T08:00:00.000Z',
-      fechado_em: '2026-08-01T08:00:00.000Z',
-      observacoes: 'Mês encerrado com alta performance em faturamento e comparecimento.',
-    },
-    {
-      id: `kpi-snap-2026-06`,
-      empresaId: empUuid,
-      empresa_id: empUuid,
-      mesAno: '2026-06',
-      mes_ano: '2026-06',
-      consultasRealizadas: 54,
-      consultas_realizadas: 54,
-      totalAgendamentos: 58,
-      total_agendamentos: 58,
-      taxaComparecimento: 93.1,
-      taxa_comparecimento: 93.1,
-      travaComparecimentoOk: true,
-      trava_comparecimento_ok: true,
-      leadsPosConsulta: 42,
-      leads_pos_consulta: 42,
-      leadsVendaFeita: 27,
-      leads_venda_feita: 27,
-      taxaFechamento: 64.3,
-      taxa_fechamento: 64.3,
-      faturamentoRealizado: 98500,
-      faturamento_realizado: 98500,
-      metaFaturamento: 80000,
-      meta_faturamento: 80000,
-      percentualMetaFaturamento: 123.1,
-      percentual_meta_faturamento: 123.1,
-      bonusCaptacao: 500,
-      bonus_captacao: 500,
-      bonusComparecimento: 500,
-      bonus_comparecimento: 500,
-      bonusFechamento: 1000,
-      bonus_fechamento: 1000,
-      bonusFaturamento: 3000,
-      bonus_faturamento: 3000,
-      comissaoTotal: 5000,
-      comissao_total: 5000,
-      fechado: true,
-      fechadoEm: '2026-07-01T08:00:00.000Z',
-      fechado_em: '2026-07-01T08:00:00.000Z',
-      observacoes: 'Recorde de faturamento no semestre. Todos os bônus atingidos no teto.',
-    },
-    {
-      id: `kpi-snap-2026-05`,
-      empresaId: empUuid,
-      empresa_id: empUuid,
-      mesAno: '2026-05',
-      mes_ano: '2026-05',
-      consultasRealizadas: 38,
-      consultas_realizadas: 38,
-      totalAgendamentos: 44,
-      total_agendamentos: 44,
-      taxaComparecimento: 86.4,
-      taxa_comparecimento: 86.4,
-      travaComparecimentoOk: true,
-      trava_comparecimento_ok: true,
-      leadsPosConsulta: 32,
-      leads_pos_consulta: 32,
-      leadsVendaFeita: 14,
-      leads_venda_feita: 14,
-      taxaFechamento: 43.8,
-      taxa_fechamento: 43.8,
-      faturamentoRealizado: 72000,
-      faturamento_realizado: 72000,
-      metaFaturamento: 80000,
-      meta_faturamento: 80000,
-      percentualMetaFaturamento: 90.0,
-      percentual_meta_faturamento: 90.0,
-      bonusCaptacao: 300,
-      bonus_captacao: 300,
-      bonusComparecimento: 500,
-      bonus_comparecimento: 500,
-      bonusFechamento: 400,
-      bonus_fechamento: 400,
-      bonusFaturamento: 1400,
-      bonus_faturamento: 1400,
-      comissaoTotal: 2600,
-      comissao_total: 2600,
-      fechado: true,
-      fechadoEm: '2026-06-01T08:00:00.000Z',
-      fechado_em: '2026-06-01T08:00:00.000Z',
-      observacoes: 'Mês de maio concluído dentro da faixa intermediária da meta.',
-    },
-  ];
+// Histórico de KPIs: lê somente o que está gravado em public.kpis_secretaria_mensal.
+// Sem histórico inventado e sem cache local que esconda falha: se o banco falhar, o erro sobe e a tela avisa.
+function kpiLinhaParaModelo(d: any): KpiSecretariaMensal {
+  const mesAno = String(d.mes_referencia || '').slice(0, 7);
+  const fechado = d.status_fechamento === 'fechado';
+  return {
+    id: d.id,
+    empresaId: d.empresa_id,
+    empresa_id: d.empresa_id,
+    mesAno,
+    mes_ano: mesAno,
+    consultasRealizadas: Number(d.consultas_realizadas) || 0,
+    consultas_realizadas: Number(d.consultas_realizadas) || 0,
+    totalAgendamentos: Number(d.total_agendamentos) || 0,
+    total_agendamentos: Number(d.total_agendamentos) || 0,
+    taxaComparecimento: Number(d.taxa_comparecimento) || 0,
+    taxa_comparecimento: Number(d.taxa_comparecimento) || 0,
+    travaComparecimentoOk: Boolean(d.trava_comparecimento_ok),
+    trava_comparecimento_ok: Boolean(d.trava_comparecimento_ok),
+    leadsPosConsulta: Number(d.orcamentos_pos_consulta) || 0,
+    leads_pos_consulta: Number(d.orcamentos_pos_consulta) || 0,
+    leadsVendaFeita: Number(d.vendas_fechadas) || 0,
+    leads_venda_feita: Number(d.vendas_fechadas) || 0,
+    taxaFechamento: Number(d.taxa_fechamento) || 0,
+    taxa_fechamento: Number(d.taxa_fechamento) || 0,
+    faturamentoRealizado: Number(d.faturamento_total) || 0,
+    faturamento_realizado: Number(d.faturamento_total) || 0,
+    metaFaturamento: Number(d.meta_faturamento) || 0,
+    meta_faturamento: Number(d.meta_faturamento) || 0,
+    percentualMetaFaturamento: Number(d.percentual_meta) || 0,
+    percentual_meta_faturamento: Number(d.percentual_meta) || 0,
+    bonusCaptacao: Number(d.bonus_captacao) || 0,
+    bonus_captacao: Number(d.bonus_captacao) || 0,
+    bonusComparecimento: Number(d.bonus_comparecimento) || 0,
+    bonus_comparecimento: Number(d.bonus_comparecimento) || 0,
+    bonusFechamento: Number(d.bonus_fechamento) || 0,
+    bonus_fechamento: Number(d.bonus_fechamento) || 0,
+    bonusFaturamento: Number(d.bonus_faturamento) || 0,
+    bonus_faturamento: Number(d.bonus_faturamento) || 0,
+    comissaoTotal: Number(d.comissao_total) || 0,
+    comissao_total: Number(d.comissao_total) || 0,
+    fechado,
+    fechadoEm: fechado ? d.updated_at : null,
+    fechado_em: fechado ? d.updated_at : null,
+    created_at: d.created_at,
+    updated_at: d.updated_at,
+  };
 }
 
+/** Devolve só o histórico realmente gravado. Lança erro se o banco falhar; lista vazia significa "nada gravado". */
 export async function fetchHistoricoKpis(empresaId: string): Promise<KpiSecretariaMensal[]> {
   const empUuid = normalizarUuid(empresaId);
   const client = getSupabaseClient();
+  if (!client) return [];
 
-  if (client) {
-    try {
-      const { data, error } = await client
-        .from('kpis_secretaria_mensal')
-        .select('*')
-        .eq('empresa_id', empUuid)
-        .order('mes_ano', { ascending: false });
+  const { data, error } = await client
+    .from('kpis_secretaria_mensal')
+    .select('*')
+    .eq('empresa_id', empUuid)
+    .order('mes_referencia', { ascending: false });
 
-      if (!error && data && data.length > 0) {
-        return data.map((d: any) => ({
-          id: d.id,
-          empresaId: d.empresa_id,
-          empresa_id: d.empresa_id,
-          mesAno: d.mes_ano,
-          mes_ano: d.mes_ano,
-          consultasRealizadas: d.consultas_realizadas,
-          consultas_realizadas: d.consultas_realizadas,
-          totalAgendamentos: d.total_agendamentos,
-          total_agendamentos: d.total_agendamentos,
-          taxaComparecimento: Number(d.taxa_comparecimento),
-          taxa_comparecimento: Number(d.taxa_comparecimento),
-          travaComparecimentoOk: Boolean(d.trava_comparecimento_ok),
-          trava_comparecimento_ok: Boolean(d.trava_comparecimento_ok),
-          leadsPosConsulta: d.leads_pos_consulta,
-          leads_pos_consulta: d.leads_pos_consulta,
-          leadsVendaFeita: d.leads_venda_feita,
-          leads_venda_feita: d.leads_venda_feita,
-          taxaFechamento: Number(d.taxa_fechamento),
-          taxa_fechamento: Number(d.taxa_fechamento),
-          faturamentoRealizado: Number(d.faturamento_realizado),
-          faturamento_realizado: Number(d.faturamento_realizado),
-          metaFaturamento: Number(d.meta_faturamento || 80000),
-          meta_faturamento: Number(d.meta_faturamento || 80000),
-          percentualMetaFaturamento: Number(d.percentual_meta_faturamento),
-          percentual_meta_faturamento: Number(d.percentual_meta_faturamento),
-          bonusCaptacao: Number(d.bonus_captacao),
-          bonus_captacao: Number(d.bonus_captacao),
-          bonusComparecimento: Number(d.bonus_comparecimento),
-          bonus_comparecimento: Number(d.bonus_comparecimento),
-          bonusFechamento: Number(d.bonus_fechamento),
-          bonus_fechamento: Number(d.bonus_fechamento),
-          bonusFaturamento: Number(d.bonus_faturamento),
-          bonus_faturamento: Number(d.bonus_faturamento),
-          comissaoTotal: Number(d.comissao_total),
-          comissao_total: Number(d.comissao_total),
-          fechado: Boolean(d.fechado),
-          fechadoEm: d.fechado_em,
-          fechado_em: d.fechado_em,
-          observacoes: d.observacoes || '',
-          created_at: d.created_at,
-          updated_at: d.updated_at,
-        }));
-      }
-    } catch (e) {
-      console.warn('Tabela kpis_secretaria_mensal não encontrada ou sem dados no Supabase, usando cache local:', e);
-    }
+  if (error) {
+    console.error('Erro ao ler kpis_secretaria_mensal:', error);
+    throw new Error(error.message || 'Falha ao ler o histórico de KPIs.');
   }
-
-  try {
-    const key = `${STORAGE_KEY_KPIS_HISTORICO}_${empUuid}`;
-    const salvo = localStorage.getItem(key);
-    if (salvo) {
-      const parsed = JSON.parse(salvo);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-  } catch (e) {}
-
-  const seeds = obterSeedSnapshotsHistoricos(empUuid);
-  try {
-    const key = `${STORAGE_KEY_KPIS_HISTORICO}_${empUuid}`;
-    localStorage.setItem(key, JSON.stringify(seeds));
-  } catch (e) {}
-
-  return seeds;
+  return (data || []).map(kpiLinhaParaModelo);
 }
 
+/** Grava o fechamento do mês. Lança erro se o banco recusar; nunca devolve sucesso sem gravar. */
 export async function salvarSnapshotKpi(
   kpiData: KpiSecretariaMensal
 ): Promise<KpiSecretariaMensal> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error('Banco de dados não configurado. O fechamento não foi gravado.');
+  }
+
   const empUuid = normalizarUuid(kpiData.empresaId || kpiData.empresa_id || ID_EMPRESA_PADRAO);
   const mesAno = kpiData.mesAno || kpiData.mes_ano || new Date().toISOString().slice(0, 7);
+  const consultas = kpiData.consultasRealizadas ?? kpiData.consultas_realizadas ?? 0;
 
-  const payload: any = {
-    id: kpiData.id || normalizarUuid(),
+  // Somente colunas que existem na tabela. mes_referencia é date (primeiro dia do mês).
+  const payload = {
     empresa_id: empUuid,
-    mes_ano: mesAno,
-    consultas_realizadas: kpiData.consultasRealizadas ?? kpiData.consultas_realizadas ?? 0,
+    mes_referencia: `${mesAno}-01`,
+    consultas_realizadas: consultas,
     total_agendamentos: kpiData.totalAgendamentos ?? kpiData.total_agendamentos ?? 0,
+    comparecimentos_efetivos: consultas,
     taxa_comparecimento: kpiData.taxaComparecimento ?? kpiData.taxa_comparecimento ?? 0,
     trava_comparecimento_ok: kpiData.travaComparecimentoOk ?? kpiData.trava_comparecimento_ok ?? false,
-    leads_pos_consulta: kpiData.leadsPosConsulta ?? kpiData.leads_pos_consulta ?? 0,
-    leads_venda_feita: kpiData.leadsVendaFeita ?? kpiData.leads_venda_feita ?? 0,
+    orcamentos_pos_consulta: kpiData.leadsPosConsulta ?? kpiData.leads_pos_consulta ?? 0,
+    vendas_fechadas: kpiData.leadsVendaFeita ?? kpiData.leads_venda_feita ?? 0,
     taxa_fechamento: kpiData.taxaFechamento ?? kpiData.taxa_fechamento ?? 0,
-    faturamento_realizado: kpiData.faturamentoRealizado ?? kpiData.faturamento_realizado ?? 0,
-    meta_faturamento: kpiData.metaFaturamento ?? kpiData.meta_faturamento ?? 80000,
-    percentual_meta_faturamento: kpiData.percentualMetaFaturamento ?? kpiData.percentual_meta_faturamento ?? 0,
+    faturamento_total: kpiData.faturamentoRealizado ?? kpiData.faturamento_realizado ?? 0,
+    meta_faturamento: kpiData.metaFaturamento ?? kpiData.meta_faturamento ?? 0,
+    percentual_meta: kpiData.percentualMetaFaturamento ?? kpiData.percentual_meta_faturamento ?? 0,
     bonus_captacao: kpiData.bonusCaptacao ?? kpiData.bonus_captacao ?? 0,
     bonus_comparecimento: kpiData.bonusComparecimento ?? kpiData.bonus_comparecimento ?? 0,
     bonus_fechamento: kpiData.bonusFechamento ?? kpiData.bonus_fechamento ?? 0,
     bonus_faturamento: kpiData.bonusFaturamento ?? kpiData.bonus_faturamento ?? 0,
     comissao_total: kpiData.comissaoTotal ?? kpiData.comissao_total ?? 0,
-    fechado: kpiData.fechado ?? true,
-    fechado_em: kpiData.fechadoEm || kpiData.fechado_em || new Date().toISOString(),
-    observacoes: kpiData.observacoes || 'Snapshot mensal congelado e salvo.',
+    status_fechamento: (kpiData.fechado ?? true) ? 'fechado' : 'em_aberto',
     updated_at: new Date().toISOString(),
   };
 
-  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('kpis_secretaria_mensal')
+    .upsert(payload, { onConflict: 'empresa_id,mes_referencia' })
+    .select()
+    .single();
 
-  if (client) {
-    try {
-      await client
-        .from('kpis_secretaria_mensal')
-        .upsert(payload, { onConflict: 'empresa_id,mes_ano' });
-    } catch (e) {
-      console.warn('Erro ao salvar snapshot em kpis_secretaria_mensal no Supabase:', e);
-    }
+  if (error) {
+    console.error('Erro ao salvar fechamento em kpis_secretaria_mensal:', error);
+    throw new Error(error.message || 'Falha ao gravar o fechamento do mês.');
   }
 
-  // Espelhamento resiliente no Firestore
-  try {
-    await firestoreService.salvarSnapshotKpi(payload);
-  } catch (e) {}
-
-  try {
-    const key = `${STORAGE_KEY_KPIS_HISTORICO}_${empUuid}`;
-    const historicoAtual = await fetchHistoricoKpis(empUuid);
-    const filtrado = historicoAtual.filter((h) => (h.mesAno || h.mes_ano) !== mesAno);
-    const atualizado = [kpiData, ...filtrado];
-    localStorage.setItem(key, JSON.stringify(atualizado));
-  } catch (e) {}
-
-  return kpiData;
+  return kpiLinhaParaModelo(data);
 }
 
 // ============================================================================

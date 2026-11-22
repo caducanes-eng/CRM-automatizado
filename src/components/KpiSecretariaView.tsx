@@ -36,7 +36,7 @@ export const KpiSecretariaView: React.FC = () => {
 
   const dispararFeedback = (msg: string) => {
     setFeedbackToast(msg);
-    setTimeout(() => setFeedbackToast(null), 3500);
+    setTimeout(() => setFeedbackToast(null), 6000);
   };
 
   // Mês selecionado no formato 'YYYY-MM' (Ex: '2026-08')
@@ -92,7 +92,8 @@ export const KpiSecretariaView: React.FC = () => {
       setHistorico(historicoSnapshots);
     } catch (error) {
       console.error('Erro ao carregar dados de KPIs:', error);
-      dispararFeedback('Aviso: Não foi possível sincronizar todos os dados do Supabase.');
+      setHistorico([]);
+      dispararFeedback('Não foi possível ler o histórico de fechamentos. Os valores abaixo podem estar incompletos.');
     } finally {
       setCarregando(false);
     }
@@ -118,7 +119,7 @@ export const KpiSecretariaView: React.FC = () => {
 
     try {
       const snapshot: KpiSecretariaMensal = {
-        id: snapshotMesAtual?.id || `kpi-snap-${mesAnoSelecionado}`,
+        id: snapshotMesAtual?.id || '',
         empresaId: empresaAtivaId,
         mesAno: mesAnoSelecionado,
         consultasRealizadas: kpiAtual.consultasRealizadas,
@@ -148,9 +149,10 @@ export const KpiSecretariaView: React.FC = () => {
       dispararFeedback(`Sucesso! O mês ${mesAnoSelecionado} foi congelado e fechado na política BON-001.`);
       setModalCongelarAberto(false);
       await carregarDados();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao congelar mês:', error);
-      dispararFeedback('Erro ao salvar snapshot de comissionamento.');
+      setModalCongelarAberto(false);
+      dispararFeedback(`O mês NÃO foi congelado: ${error?.message || 'falha ao gravar no banco'}. Tente de novo.`);
     } finally {
       setSalvandoSnapshot(false);
     }
