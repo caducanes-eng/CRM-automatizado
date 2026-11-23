@@ -50,6 +50,7 @@ import {
   calcularEtapaEsperada,
   calcularStatusCadencia,
   verificarSeDeveContatarHoje,
+  estaForaDaCadencia,
   obterDataEntradaEfetiva,
   StatusCadencia,
   obterOpcoesCadenciaPorSituacao,
@@ -204,7 +205,12 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
     const situacao = leadAtual.situacao;
     const etapaArmazenada = leadAtual.etapaPorSituacao?.[situacao];
     const res = avancarProximaEtapa(situacao, etapaArmazenada);
-    await definirEtapaPorSituacao(leadAtual.id, situacao, res.proximaEtapa);
+    const r = await definirEtapaPorSituacao(leadAtual.id, situacao, res.proximaEtapa);
+    if (!r.ok) {
+      setFeedbackToast(`Não foi possível salvar: ${(r as any)?.erro || 'tente novamente'}`);
+      setTimeout(() => setFeedbackToast(null), 4500);
+      return;
+    }
     setModalEtapaLead(null);
     setFeedbackToast(
       res.todasConcluidas
@@ -219,7 +225,12 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
     if (!modalEtapaLead || !etapaManualSelecionada) return;
     const leadAtual = leads.find((l) => l.id === modalEtapaLead.id) || modalEtapaLead;
     const situacao = leadAtual.situacao;
-    await definirEtapaPorSituacao(leadAtual.id, situacao, etapaManualSelecionada);
+    const r = await definirEtapaPorSituacao(leadAtual.id, situacao, etapaManualSelecionada);
+    if (!r.ok) {
+      setFeedbackToast(`Não foi possível salvar: ${(r as any)?.erro || 'tente novamente'}`);
+      setTimeout(() => setFeedbackToast(null), 4500);
+      return;
+    }
     setModalEtapaLead(null);
     setFeedbackToast(`Etapa de ${leadAtual.nome} alterada para: ${etapaManualSelecionada}`);
     setTimeout(() => setFeedbackToast(null), 3200);
@@ -231,7 +242,12 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
     const leadAtual = leads.find((l) => l.id === modalEtapaLead.id) || modalEtapaLead;
     const situacao = leadAtual.situacao;
     const primeira = reiniciarCadencia(situacao);
-    await definirEtapaPorSituacao(leadAtual.id, situacao, primeira);
+    const r = await definirEtapaPorSituacao(leadAtual.id, situacao, primeira);
+    if (!r.ok) {
+      setFeedbackToast(`Não foi possível salvar: ${(r as any)?.erro || 'tente novamente'}`);
+      setTimeout(() => setFeedbackToast(null), 4500);
+      return;
+    }
     setModalEtapaLead(null);
     setFeedbackToast(`Cadência reiniciada para ${leadAtual.nome}.`);
     setTimeout(() => setFeedbackToast(null), 3200);
@@ -392,11 +408,13 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
         statusCadencia,
         etapaAtual,
         dataUltimoContatoEfetiva,
-        lead.dataUltimaAcao
+        lead.dataUltimaAcao,
+        lead.statusVenda
       );
 
       return {
         ...lead,
+        foraDaCadencia: estaForaDaCadencia(lead.statusVenda),
         diasCorridos,
         etapaAtual,
         etapaEsperada,
@@ -407,7 +425,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
   }, [leads]);
 
   const contagensCadencia = useMemo(() => {
-    const validos = leadsComCadencia.filter((l) => !l.deleted_at);
+    const validos = leadsComCadencia.filter((l) => !l.deleted_at && !l.foraDaCadencia);
     const total = validos.length;
     const contatarHoje = validos.filter((l) => l.deveContatarHoje).length;
     const emDia = validos.filter((l) => l.statusCadencia === 'Em dia').length;
@@ -483,6 +501,9 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
 
         // Filtro por Cadência (Contatar hoje / Em dia / Atrasados / Adiantados / Sem etapa)
         if (filtroCadencia !== 'todos') {
+          if (lead.foraDaCadencia) {
+            return false;
+          }
           if (filtroCadencia === 'contatar_hoje' && !lead.deveContatarHoje) {
             return false;
           }
@@ -577,7 +598,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
     <div id="bloco-tabela-leads" className="bg-white rounded-sm border border-[#D9D6D0] shadow-xs overflow-hidden">
       {/* Indicadores Rápidos de Cadência e Contato */}
       <div className="p-4 sm:p-5 border-b border-[#D9D6D0] bg-[#FAF8F5]/60">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {/* Contatar Hoje */}
           <button
             id="card-filtro-leads-contatar-hoje"
@@ -665,28 +686,6 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
             </div>
             <p className="text-xl sm:text-2xl font-bold text-[#5C3A22] mt-1">
               {contagensCadencia.adiantados}
-            </p>
-          </button>
-
-          {/* Sem Etapa */}
-          <button
-            id="card-filtro-leads-sem-etapa"
-            type="button"
-            onClick={() => setFiltroCadencia(filtroCadencia === 'sem_etapa' ? 'todos' : 'sem_etapa')}
-            className={`p-3 rounded-sm border text-left transition-all cursor-pointer ${
-              filtroCadencia === 'sem_etapa'
-                ? 'bg-white border-[#8F887E] ring-1 ring-[#8F887E] shadow-xs'
-                : 'bg-white/80 border-[#D9D6D0] hover:bg-[#F2EFEA]'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-[#8F887E] uppercase tracking-wider">
-                Sem Etapa
-              </span>
-              <AlertTriangle className="w-4 h-4 text-[#8F887E]" />
-            </div>
-            <p className="text-xl sm:text-2xl font-bold text-[#1A1A1A] mt-1">
-              {contagensCadencia.semEtapa}
             </p>
           </button>
         </div>

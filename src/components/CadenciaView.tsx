@@ -35,6 +35,7 @@ import {
   calcularEtapaEsperada,
   calcularStatusCadencia,
   verificarSeDeveContatarHoje,
+  estaForaDaCadencia,
   obterOpcoesCadenciaPorSituacao,
   obterDataEntradaEfetiva,
   StatusCadencia,
@@ -101,7 +102,12 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
     const leadAtual = leads.find((l) => l.id === modalEtapaLead.id) || modalEtapaLead;
     const etapaArmazenada = leadAtual.etapaPorSituacao?.[situacao];
     const res = avancarProximaEtapa(situacao, etapaArmazenada);
-    await definirEtapaPorSituacao(leadAtual.id, situacao, res.proximaEtapa);
+    const r = await definirEtapaPorSituacao(leadAtual.id, situacao, res.proximaEtapa);
+    if (!r.ok) {
+      setFeedbackToast(`Não foi possível salvar: ${(r as any)?.erro || 'tente novamente'}`);
+      setTimeout(() => setFeedbackToast(null), 4500);
+      return;
+    }
     setModalEtapaLead(null);
     setFeedbackToast(
       res.todasConcluidas
@@ -116,7 +122,12 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
     if (!modalEtapaLead) return;
     const leadAtual = leads.find((l) => l.id === modalEtapaLead.id) || modalEtapaLead;
     const primeira = reiniciarCadencia(situacao);
-    await definirEtapaPorSituacao(leadAtual.id, situacao, primeira);
+    const r = await definirEtapaPorSituacao(leadAtual.id, situacao, primeira);
+    if (!r.ok) {
+      setFeedbackToast(`Não foi possível salvar: ${(r as any)?.erro || 'tente novamente'}`);
+      setTimeout(() => setFeedbackToast(null), 4500);
+      return;
+    }
     setModalEtapaLead(null);
     setFeedbackToast(`Cadência reiniciada para ${leadAtual.nome}.`);
     setTimeout(() => setFeedbackToast(null), 3200);
@@ -145,7 +156,9 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
 
   // 1. Filtrar SOMENTE leads cuja situação atual seja a situação da tela
   const leadsDaSituacao = useMemo(() => {
-    return leads.filter((lead) => lead.situacao === situacao && !lead.deleted_at);
+    return leads.filter(
+      (lead) => lead.situacao === situacao && !lead.deleted_at && !estaForaDaCadencia(lead.statusVenda)
+    );
   }, [leads, situacao]);
 
   // 2. Mapeamento enriquecido com cálculos de cadência para cada lead
@@ -164,7 +177,8 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
         statusCadencia,
         etapaArmazenada,
         dataUltimoContatoEfetiva,
-        lead.dataUltimaAcao
+        lead.dataUltimaAcao,
+        lead.statusVenda
       );
 
       return {
@@ -319,7 +333,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
     >
       {/* RESUMO DE STATUS DA CADÊNCIA */}
       <div className="bg-white rounded-sm p-4 sm:p-5 border border-[#D9D6D0] shadow-xs">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {/* Contatar Hoje */}
           <button
             id="card-filtro-contatar-hoje"
@@ -407,32 +421,6 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
               {metricas.adiantados}
             </p>
           </button>
-
-          {/* Sem Etapa */}
-          <button
-            id="card-filtro-sem-etapa"
-            type="button"
-            onClick={() =>
-              setFiltroStatus(
-                filtroStatus === 'Sem etapa selecionada' ? 'Todos' : 'Sem etapa selecionada'
-              )
-            }
-            className={`p-3 rounded-sm border text-left transition-all cursor-pointer ${
-              filtroStatus === 'Sem etapa selecionada'
-                ? 'bg-white border-[#8F887E] ring-1 ring-[#8F887E] shadow-xs'
-                : 'bg-[#F2EFEA]/40 border-[#D9D6D0] hover:bg-[#F2EFEA]'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-[#8F887E] uppercase tracking-wider">
-                Sem Etapa
-              </span>
-              <AlertTriangle className="w-4 h-4 text-[#8F887E]" />
-            </div>
-            <p className="text-xl sm:text-2xl font-bold text-[#1A1A1A] mt-1">
-              {metricas.semEtapa}
-            </p>
-          </button>
         </div>
       </div>
 
@@ -476,7 +464,6 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
             <option value="Em dia">Em dia ({metricas.emDia})</option>
             <option value="Atrasado">Atrasados ({metricas.atrasados})</option>
             <option value="Adiantado">Adiantados ({metricas.adiantados})</option>
-            <option value="Sem etapa selecionada">Sem etapa ({metricas.semEtapa})</option>
           </select>
         </div>
       </div>
@@ -713,7 +700,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
                             type="button"
                             onClick={() => {
                               setModalAgendarTarefaLead(lead);
-                              setDescTarefaAgendada(`Acompanhamento da cadência [${situacao}] - ${lead.etapaAtual || 'Contato'}`);
+                              setDescTarefaAgendada(`Acompanhamento da cadência [${situacao}] - ${lead.proximaEtapa || 'Contato'}`);
                             }}
                             className="inline-flex items-center gap-1 px-2 py-1 rounded-sm bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[10px] uppercase tracking-wider transition-colors cursor-pointer"
                             title="Agendar tarefa no Supabase para este paciente"
@@ -941,7 +928,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
                 e.preventDefault();
                 setSalvandoTarefaRapida(true);
                 try {
-                  await criarTarefa({
+                  const resTarefa = await criarTarefa({
                     leadId: modalAgendarTarefaLead.id,
                     titulo: `Acompanhamento: ${modalAgendarTarefaLead.nome} (${situacao})`,
                     descricao: descTarefaAgendada.trim() || undefined,
@@ -949,8 +936,13 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
                     etapaCadencia: modalAgendarTarefaLead.etapaPorSituacao?.[situacao] || 'Cadência',
                     dataAgendada: dataTarefaAgendada,
                     horaAgendada: horaTarefaAgendada || undefined,
-                    prioridade: 'alta',
+                    prioridade: 'ALTA',
                   });
+                  if (!resTarefa.ok) {
+                    setFeedbackToast(`A tarefa NÃO foi salva: ${resTarefa.erro}`);
+                    setTimeout(() => setFeedbackToast(null), 6000);
+                    return;
+                  }
                   setModalAgendarTarefaLead(null);
                   setFeedbackToast(`Tarefa agendada para ${modalAgendarTarefaLead.nome} em ${formatarDataBR(dataTarefaAgendada)}!`);
                   setTimeout(() => setFeedbackToast(null), 3500);

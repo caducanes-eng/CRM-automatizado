@@ -8,6 +8,7 @@ import {
   deleteDoc,
 } from 'firebase/firestore';
 import { db, auth, sanitizeForFirestore } from '../lib/firebase';
+import { normalizarStatusTarefa, normalizarPrioridadeTarefa } from '../utils/tarefas';
 import {
   Lead,
   FichaLead,
@@ -141,8 +142,8 @@ export const firestoreService = {
             data_agendada: raw.data_agendada || raw.dataAgendada || new Date().toISOString().slice(0, 10),
             horaAgendada: raw.horaAgendada || raw.hora_agendada || '14:00',
             hora_agendada: raw.hora_agendada || raw.horaAgendada || '14:00',
-            status: raw.status || 'pendente',
-            prioridade: raw.prioridade || 'normal',
+            status: normalizarStatusTarefa(raw.status),
+            prioridade: normalizarPrioridadeTarefa(raw.prioridade),
             dataConclusao: raw.dataConclusao || raw.data_conclusao || null,
             data_conclusao: raw.data_conclusao || raw.dataConclusao || null,
             usuarioConclusaoId: raw.usuarioConclusaoId || raw.usuario_conclusao_id || null,
@@ -179,10 +180,10 @@ export const firestoreService = {
       const updates: Record<string, any> = {
         status,
         updated_at: nowIso,
-        dataConclusao: status === 'concluida' ? nowIso : null,
-        data_conclusao: status === 'concluida' ? nowIso : null,
-        usuarioConclusaoId: status === 'concluida' ? usuarioId || null : null,
-        usuario_conclusao_id: status === 'concluida' ? usuarioId || null : null,
+        dataConclusao: status === 'CONCLUIDA' ? nowIso : null,
+        data_conclusao: status === 'CONCLUIDA' ? nowIso : null,
+        usuarioConclusaoId: status === 'CONCLUIDA' ? usuarioId || null : null,
+        usuario_conclusao_id: status === 'CONCLUIDA' ? usuarioId || null : null,
       };
       if (observacaoConclusao !== undefined) {
         updates.observacaoConclusao = observacaoConclusao;

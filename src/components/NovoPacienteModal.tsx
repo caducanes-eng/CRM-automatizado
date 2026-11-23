@@ -106,6 +106,8 @@ export const NovoPacienteModal: React.FC<NovoPacienteModalProps> = ({
       
       onClose();
       onLeadCreated(novoLead);
+    } catch {
+      // O aviso de erro já foi mostrado; o modal continua aberto com os dados preenchidos.
     } finally {
       setIsSubmitting(false);
     }

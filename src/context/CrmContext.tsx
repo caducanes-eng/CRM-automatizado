@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { supabaseService, ID_EMPRESA_PADRAO, normalizarUuid } from '../services/supabaseService';
 import {
   isSupabaseConfigured,
@@ -31,6 +31,7 @@ import {
   IndicadoresTarefas,
   StatusTarefa,
   PrioridadeTarefa,
+  ResultadoGravacao,
 } from '../types';
 import { SEED_RESPONSAVEIS, SEED_PROCEDIMENTOS } from '../data/seedData';
 import { obterOpcoesCadenciaPorSituacao } from '../utils/cadencia';
@@ -93,6 +94,112 @@ export function casarProcedimentoComTexto(
   return undefined;
 }
 
+/**
+ * Calcula o lead depois de aplicar as alterações. Função pura: não lê estado do React.
+ * Regra de contato (ver cadencia.ts): só "Concluir etapa" e "Registrar contato" atualizam
+ * dataUltimoContato / dataUltimaAcao; qualquer outra edição preserva os valores anteriores.
+ */
+function calcularLeadAtualizado(
+  lead: Lead,
+  dados: AtualizarLeadPayload,
+  empresaIdFallback: string,
+  timestamp: string
+): Lead {
+  const hoje = timestamp.split('T')[0];
+  const enteringNutricao = dados.situacao === 'Nutrição' && lead.situacao !== 'Nutrição';
+  const statusGrupoNutricao =
+    dados.statusGrupoNutricao !== undefined
+      ? dados.statusGrupoNutricao
+      : enteringNutricao && !lead.statusGrupoNutricao
+      ? 'Ativo'
+      : lead.statusGrupoNutricao;
+
+  const etapaPorSituacao = {
+    ...lead.etapaPorSituacao,
+    ...(dados.etapaPorSituacao || {}),
+  };
+
+  const markingPerdido = dados.statusVenda === 'Perdido' && lead.statusVenda !== 'Perdido';
+  const situacaoPerda =
+    dados.situacaoPerda !== undefined
+      ? dados.situacaoPerda
+      : markingPerdido
+      ? lead.situacao
+      : lead.situacaoPerda;
+
+  const dataPerda =
+    dados.dataPerda !== undefined
+      ? dados.dataPerda
+      : markingPerdido && !lead.dataPerda
+      ? hoje
+      : lead.dataPerda;
+
+  const motivoPerda = dados.motivoPerda !== undefined ? dados.motivoPerda : lead.motivoPerda;
+
+  // Rastreamento de entrada na situação atual
+  const changingSituation = Boolean(dados.situacao && dados.situacao !== lead.situacao);
+  const dataEntradaSituacao = {
+    ...(lead.dataEntradaSituacao || {}),
+    ...(changingSituation ? { [dados.situacao!]: hoje } : {}),
+    ...(dados.dataEntradaSituacao || {}),
+  };
+
+  // Novo contador de dias para Reativação:
+  // Apenas a mudança de status inicia ou altera a contagem. A alteração de etapa NÃO zera ou reinicia.
+  const isEnteringReativacao = changingSituation && dados.situacao === 'Reativação';
+  const isLeavingReativacao = changingSituation && lead.situacao === 'Reativação' && dados.situacao !== 'Reativação';
+
+  let dataEntradaReativacao = lead.dataEntradaReativacao;
+  if (dados.dataEntradaReativacao !== undefined) {
+    dataEntradaReativacao = dados.dataEntradaReativacao;
+  } else if (isEnteringReativacao) {
+    dataEntradaReativacao = hoje;
+  } else if (isLeavingReativacao) {
+    dataEntradaReativacao = undefined;
+  } else if ((dados.situacao || lead.situacao) === 'Reativação' && !dataEntradaReativacao) {
+    dataEntradaReativacao = lead.dataEntradaSituacao?.['Reativação'] || lead.dataEntrada || hoje;
+  }
+
+  // Rastreamento de data do último contato / ação (regra em utils/cadencia.ts).
+  // Mudar a etapa, o telefone, o responsável ou salvar a ficha NÃO conta como contato:
+  // só quem passa dataUltimoContato/dataUltimaAcao de forma explícita ("Concluir etapa" e "Registrar contato").
+  const dataUltimoContato =
+    dados.dataUltimoContato !== undefined ? dados.dataUltimoContato : lead.dataUltimoContato;
+
+  const currentSituacao = dados.situacao || lead.situacao;
+  const dataUltimoContatoPorSituacao = {
+    ...(lead.dataUltimoContatoPorSituacao || {}),
+    ...(dados.dataUltimoContato ? { [currentSituacao]: hoje } : {}),
+    ...(dados.dataUltimoContatoPorSituacao || {}),
+  };
+
+  const dataUltimaAcao = dados.dataUltimaAcao !== undefined ? dados.dataUltimaAcao : lead.dataUltimaAcao;
+
+  const eId = normalizarUuid(lead.empresaId || (lead as any).empresa_id || empresaIdFallback);
+  const leadAtualizado: Lead = {
+    ...lead,
+    ...dados,
+    empresaId: eId,
+    empresa_id: eId,
+    etapaPorSituacao,
+    statusGrupoNutricao,
+    situacaoPerda,
+    dataPerda,
+    motivoPerda,
+    dataEntradaSituacao,
+    dataEntradaReativacao,
+    dataUltimoContato,
+    dataUltimoContatoPorSituacao,
+    dataUltimaAcao,
+    nome: dados.nome !== undefined ? dados.nome.trim() : lead.nome,
+    interesse: dados.interesse !== undefined ? dados.interesse.trim() : lead.interesse,
+    possivelValor: dados.possivelValor !== undefined ? Number(dados.possivelValor) || 0 : lead.possivelValor,
+    updated_at: timestamp,
+    version: (lead.version || 1) + 1,
+  };
+  return leadAtualizado;
+}
+
 interface CrmContextType {
   leads: Lead[];
   fichas: FichaLead[];
@@ -140,7 +247,7 @@ interface CrmContextType {
     dataAgendada: string;
     horaAgendada?: string;
     prioridade?: PrioridadeTarefa;
-  }) => Promise<Tarefa>;
+  }) => Promise<ResultadoGravacao<Tarefa>>;
   atualizarStatusTarefa: (
     tarefaId: string,
     status: StatusTarefa,
@@ -150,16 +257,18 @@ interface CrmContextType {
 
   // Operações
   carregarDadosCompletos: () => Promise<void>;
-  criarLead: (payload: CriarLeadPayload) => Promise<Lead>;
+  /** Mostra um aviso de erro simples (role=alert) no canto da tela. */
+  avisarErro: (mensagem: string) => void;
+  criarLead: (payload: CriarLeadPayload, opcoes?: { silencioso?: boolean }) => Promise<Lead>;
   adicionarLead: (payload: CriarLeadPayload) => Promise<boolean>;
-  atualizarLead: (leadId: string, dados: AtualizarLeadPayload) => Promise<Lead | null>;
+  atualizarLead: (leadId: string, dados: AtualizarLeadPayload) => Promise<ResultadoGravacao<Lead>>;
   excluirLead: (leadId: string, hardDelete?: boolean) => Promise<boolean>;
-  reativarLead: (leadId: string, novaSituacao?: SituacaoLead) => Promise<Lead | null>;
-  marcarComoPerdido: (leadId: string, motivo: string, dataPerda?: string) => Promise<Lead | null>;
-  definirEtapaPorSituacao: (leadId: string, situacao: SituacaoLead, etapa: string) => Promise<Lead | null>;
-  definirEtapaSituacaoAtual: (leadId: string, etapa: string) => Promise<Lead | null>;
-  registrarContatoHoje: (leadId: string) => Promise<Lead | null>;
-  definirStatusGrupoNutricao: (leadId: string, status: StatusGrupoNutricao) => Promise<Lead | null>;
+  reativarLead: (leadId: string, novaSituacao?: SituacaoLead) => Promise<ResultadoGravacao<Lead>>;
+  marcarComoPerdido: (leadId: string, motivo: string, dataPerda?: string) => Promise<ResultadoGravacao<Lead>>;
+  definirEtapaPorSituacao: (leadId: string, situacao: SituacaoLead, etapa: string) => Promise<ResultadoGravacao<Lead>>;
+  definirEtapaSituacaoAtual: (leadId: string, etapa: string) => Promise<ResultadoGravacao<Lead>>;
+  registrarContatoHoje: (leadId: string) => Promise<ResultadoGravacao<Lead>>;
+  definirStatusGrupoNutricao: (leadId: string, status: StatusGrupoNutricao) => Promise<ResultadoGravacao<Lead>>;
   atualizarFichaLead: (leadId: string, dados: AtualizarFichaPayload) => Promise<FichaLead | null>;
   salvarFichaExtra: (leadId: string, payload: AtualizarFichaPayload) => Promise<boolean>;
   lancarCompra: (payload: CriarCompraPayload) => Promise<Compra>;
@@ -201,6 +310,28 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [usuariosState, setUsuariosState] = useState<UsuarioColaborador[]>([]);
   const [responsaveisCustom, setResponsaveisCustom] = useState<string[]>(SEED_RESPONSAVEIS);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // Aviso simples e acessível para falhas de gravação (sem biblioteca de toast)
+  const [avisoErro, setAvisoErro] = useState<string | null>(null);
+  const avisoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const avisarErro = useCallback((mensagem: string) => {
+    setAvisoErro(mensagem);
+    if (avisoTimerRef.current) clearTimeout(avisoTimerRef.current);
+    avisoTimerRef.current = setTimeout(() => setAvisoErro(null), 12000);
+  }, []);
+  const fecharAvisoErro = useCallback(() => {
+    if (avisoTimerRef.current) clearTimeout(avisoTimerRef.current);
+    setAvisoErro(null);
+  }, []);
+
+  // Refs com o estado mais recente: permitem calcular o resultado de uma gravação fora do
+  // updater do setState (D08) e evitam closures congeladas (D12).
+  const todosLeadsRef = useRef<Lead[]>([]);
+  todosLeadsRef.current = todosLeadsRaw;
+  const todasFichasRef = useRef<FichaLead[]>([]);
+  todasFichasRef.current = todasFichasRaw;
+  const empresaIdRef = useRef<string>(empresaIdEfetiva);
+  empresaIdRef.current = empresaIdEfetiva;
 
   // Connection flags
   const [isFirestoreConnected, setIsFirestoreConnected] = useState<boolean>(true);
@@ -334,7 +465,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setUsuariosState(dados.usuarios || []);
 
         try {
-          const tarefasSupabase = await supabaseService.fetchTarefas(empresaIdEfetiva);
+          const tarefasSupabase = await supabaseService.fetchTarefas(empresaIdRef.current);
           setTodasTarefasRaw(tarefasSupabase || []);
         } catch (e) {}
 
@@ -352,7 +483,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, []); // empresaIdRef é uma ref: sempre lê a clínica ativa atual
 
   // Recarrega dados ao autenticar, alterar configuração ou focar na janela
   useEffect(() => {
@@ -379,7 +510,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleFocus);
     };
-  }, [user, carregarDadosCompletos]);
+  }, [user, carregarDadosCompletos, empresaIdEfetiva]);
 
   // Supabase Realtime WebSocket Listener com suporte a re-inicialização dinâmica
   useEffect(() => {
@@ -473,7 +604,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           async (payload) => {
             logRealtimeEvent('tarefas', payload.eventType as any, 'Tarefa atualizada no banco de dados');
             try {
-              const tarefasAtualizadas = await supabaseService.fetchTarefas(empresaIdEfetiva);
+              const tarefasAtualizadas = await supabaseService.fetchTarefas(empresaIdRef.current);
               setTodasTarefasRaw(tarefasAtualizadas);
             } catch (e) {}
           }
@@ -552,7 +683,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Operações Lead
   const criarLead = useCallback(
-    async (payload: CriarLeadPayload): Promise<Lead> => {
+    async (payload: CriarLeadPayload, opcoes?: { silencioso?: boolean }): Promise<Lead> => {
       const timestamp = new Date().toISOString();
       const hoje = timestamp.split('T')[0];
       const leadId = (payload as any).id ? normalizarUuid((payload as any).id) : generateId('lead');
@@ -622,16 +753,25 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setTodosLeadsRaw((prev) => [novoLead, ...prev]);
       setTodasFichasRaw((prev) => [novaFicha, ...prev]);
 
+      let leadGravado = false;
       try {
         await supabaseService.salvarLead(novoLead, eId);
+        leadGravado = true;
         await supabaseService.salvarFicha(novaFicha, eId);
-      } catch (err) {
+      } catch (err: any) {
         console.error('Erro ao salvar lead no Supabase:', err);
+        // Desfaz o otimismo: o lead não existe no banco, então não pode continuar na tela.
+        setTodosLeadsRaw((prev) => prev.filter((l) => l.id !== leadId));
+        setTodasFichasRaw((prev) => prev.filter((f) => f.leadId !== leadId));
+        if (leadGravado) supabaseService.softDeleteLead(leadId).catch(() => {});
+        const erro = `Não foi possível salvar o paciente "${novoLead.nome}". Nada foi gravado. Detalhe: ${err?.message || 'falha de comunicação com o banco'}`;
+        if (!opcoes?.silencioso) avisarErro(erro);
+        throw new Error(erro);
       }
 
       return novoLead;
     },
-    [empresaIdEfetiva, responsaveis]
+    [empresaIdEfetiva, responsaveis, avisarErro]
   );
 
   const adicionarLead = useCallback(
@@ -647,152 +787,73 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 
   const atualizarLead = useCallback(
-    async (leadId: string, dados: AtualizarLeadPayload): Promise<Lead | null> => {
-      let leadAtualizado: Lead | null = null;
-      let fichaAtualizada: FichaLead | null = null;
+    async (leadId: string, dados: AtualizarLeadPayload): Promise<ResultadoGravacao<Lead>> => {
       const timestamp = new Date().toISOString();
       const hoje = timestamp.split('T')[0];
 
-      setTodosLeadsRaw((prev) =>
-        prev.map((lead) => {
-          if (lead.id !== leadId) return lead;
-
-          const enteringNutricao = dados.situacao === 'Nutrição' && lead.situacao !== 'Nutrição';
-          const statusGrupoNutricao =
-            dados.statusGrupoNutricao !== undefined
-              ? dados.statusGrupoNutricao
-              : enteringNutricao && !lead.statusGrupoNutricao
-              ? 'Ativo'
-              : lead.statusGrupoNutricao;
-
-          const etapaPorSituacao = {
-            ...lead.etapaPorSituacao,
-            ...(dados.etapaPorSituacao || {}),
-          };
-
-          const markingPerdido = dados.statusVenda === 'Perdido' && lead.statusVenda !== 'Perdido';
-          const situacaoPerda =
-            dados.situacaoPerda !== undefined
-              ? dados.situacaoPerda
-              : markingPerdido
-              ? lead.situacao
-              : lead.situacaoPerda;
-
-          const dataPerda =
-            dados.dataPerda !== undefined
-              ? dados.dataPerda
-              : markingPerdido && !lead.dataPerda
-              ? hoje
-              : lead.dataPerda;
-
-          const motivoPerda = dados.motivoPerda !== undefined ? dados.motivoPerda : lead.motivoPerda;
-
-          // Rastreamento de entrada na situação atual
-          const changingSituation = Boolean(dados.situacao && dados.situacao !== lead.situacao);
-          const dataEntradaSituacao = {
-            ...(lead.dataEntradaSituacao || {}),
-            ...(changingSituation ? { [dados.situacao!]: hoje } : {}),
-            ...(dados.dataEntradaSituacao || {}),
-          };
-
-          // Novo contador de dias para Reativação:
-          // Apenas a mudança de status inicia ou altera a contagem. A alteração de etapa NÃO zera ou reinicia.
-          const isEnteringReativacao = changingSituation && dados.situacao === 'Reativação';
-          const isLeavingReativacao = changingSituation && lead.situacao === 'Reativação' && dados.situacao !== 'Reativação';
-
-          let dataEntradaReativacao = lead.dataEntradaReativacao;
-          if (dados.dataEntradaReativacao !== undefined) {
-            dataEntradaReativacao = dados.dataEntradaReativacao;
-          } else if (isEnteringReativacao) {
-            dataEntradaReativacao = hoje;
-          } else if (isLeavingReativacao) {
-            dataEntradaReativacao = undefined;
-          } else if ((dados.situacao || lead.situacao) === 'Reativação' && !dataEntradaReativacao) {
-            dataEntradaReativacao = lead.dataEntradaSituacao?.['Reativação'] || lead.dataEntrada || hoje;
-          }
-
-          // Rastreamento de data do último contato / ação
-          const stepChanged = Boolean(dados.etapaPorSituacao);
-          const dataUltimoContato =
-            dados.dataUltimoContato !== undefined
-              ? dados.dataUltimoContato
-              : stepChanged
-              ? hoje
-              : lead.dataUltimoContato;
-
-          const currentSituacao = dados.situacao || lead.situacao;
-          const dataUltimoContatoPorSituacao = {
-            ...(lead.dataUltimoContatoPorSituacao || {}),
-            ...(stepChanged || dados.dataUltimoContato ? { [currentSituacao]: hoje } : {}),
-            ...(dados.dataUltimoContatoPorSituacao || {}),
-          };
-
-          const dataUltimaAcao = dados.dataUltimaAcao || timestamp;
-
-          const eId = normalizarUuid(lead.empresaId || (lead as any).empresa_id || empresaIdEfetiva);
-          leadAtualizado = {
-            ...lead,
-            ...dados,
-            empresaId: eId,
-            empresa_id: eId,
-            etapaPorSituacao,
-            statusGrupoNutricao,
-            situacaoPerda,
-            dataPerda,
-            motivoPerda,
-            dataEntradaSituacao,
-            dataEntradaReativacao,
-            dataUltimoContato,
-            dataUltimoContatoPorSituacao,
-            dataUltimaAcao,
-            nome: dados.nome !== undefined ? dados.nome.trim() : lead.nome,
-            interesse: dados.interesse !== undefined ? dados.interesse.trim() : lead.interesse,
-            possivelValor: dados.possivelValor !== undefined ? Number(dados.possivelValor) || 0 : lead.possivelValor,
-            updated_at: timestamp,
-            version: (lead.version || 1) + 1,
-          };
-          return leadAtualizado;
-        })
-      );
-
-      if (dados.motivoPerda !== undefined || dados.dataPerda !== undefined || dados.statusVenda === 'Perdido') {
-        setTodasFichasRaw((prev) =>
-          prev.map((f) => {
-            if (f.leadId !== leadId) return f;
-            const fEid = normalizarUuid(f.empresaId || (f as any).empresa_id || empresaIdEfetiva);
-            fichaAtualizada = {
-              ...f,
-              empresaId: fEid,
-              empresa_id: fEid,
-              motivoPerda: dados.motivoPerda !== undefined ? dados.motivoPerda : f.motivoPerda,
-              dataPerda: dados.dataPerda !== undefined ? dados.dataPerda : f.dataPerda || hoje,
-              updated_at: timestamp,
-              version: (f.version || 1) + 1,
-            };
-            return fichaAtualizada;
-          })
-        );
+      // D08: o lead atualizado é calculado ANTES, a partir do estado atual (ref), e não de dentro do updater.
+      const leadAnterior = todosLeadsRef.current.find((l) => l.id === leadId);
+      if (!leadAnterior) {
+        const erro = 'Paciente não encontrado na lista. Atualize a página e tente de novo.';
+        avisarErro(erro);
+        return { ok: false, erro };
       }
 
-      if (leadAtualizado) {
-        try {
-          const leadEid = normalizarUuid((leadAtualizado as Lead).empresaId || empresaIdEfetiva);
-          await supabaseService.salvarLead(leadAtualizado, leadEid);
-          if (fichaAtualizada) {
-            await supabaseService.salvarFicha(fichaAtualizada, leadEid);
-          }
-        } catch (e) {
-          console.error('Erro ao atualizar lead no Supabase:', e);
+      const leadAtualizado = calcularLeadAtualizado(leadAnterior, dados, empresaIdRef.current, timestamp);
+      todosLeadsRef.current = todosLeadsRef.current.map((l) => (l.id === leadId ? leadAtualizado : l));
+      setTodosLeadsRaw(todosLeadsRef.current);
+
+      let fichaAnterior: FichaLead | undefined;
+      let fichaAtualizada: FichaLead | undefined;
+      if (dados.motivoPerda !== undefined || dados.dataPerda !== undefined || dados.statusVenda === 'Perdido') {
+        fichaAnterior = todasFichasRef.current.find((f) => f.leadId === leadId);
+        if (fichaAnterior) {
+          const fEid = normalizarUuid(fichaAnterior.empresaId || (fichaAnterior as any).empresa_id || empresaIdRef.current);
+          fichaAtualizada = {
+            ...fichaAnterior,
+            empresaId: fEid,
+            empresa_id: fEid,
+            motivoPerda: dados.motivoPerda !== undefined ? dados.motivoPerda : fichaAnterior.motivoPerda,
+            dataPerda: dados.dataPerda !== undefined ? dados.dataPerda : fichaAnterior.dataPerda || hoje,
+            updated_at: timestamp,
+            version: (fichaAnterior.version || 1) + 1,
+          };
+          const fichaNova = fichaAtualizada;
+          todasFichasRef.current = todasFichasRef.current.map((f) => (f.leadId === leadId ? fichaNova : f));
+          setTodasFichasRaw(todasFichasRef.current);
         }
       }
 
-      return leadAtualizado;
+      try {
+        const leadEid = normalizarUuid(leadAtualizado.empresaId || empresaIdRef.current);
+        await supabaseService.salvarLead(leadAtualizado, leadEid);
+        if (fichaAtualizada) {
+          await supabaseService.salvarFicha(fichaAtualizada, leadEid);
+        }
+        return { ok: true, dados: leadAtualizado };
+      } catch (e: any) {
+        console.error('Erro ao atualizar lead no Supabase:', e);
+        // Reverte o estado otimista, a menos que outra alteração mais nova já tenha sido aplicada por cima.
+        setTodosLeadsRaw((prev) =>
+          prev.map((l) => (l.id === leadId && l.version === leadAtualizado.version ? leadAnterior : l))
+        );
+        if (fichaAnterior && fichaAtualizada) {
+          const versaoFicha = fichaAtualizada.version;
+          const fichaVolta = fichaAnterior;
+          setTodasFichasRaw((prev) =>
+            prev.map((f) => (f.leadId === leadId && f.version === versaoFicha ? fichaVolta : f))
+          );
+        }
+        const erro = `Não foi possível salvar a alteração em "${leadAnterior.nome}". A tela voltou ao valor anterior. Detalhe: ${e?.message || 'falha de comunicação com o banco'}`;
+        avisarErro(erro);
+        return { ok: false, erro };
+      }
     },
-    [empresaIdEfetiva]
+    [avisarErro]
   );
 
   const reativarLead = useCallback(
-    async (leadId: string, novaSituacao: SituacaoLead = 'Reativação'): Promise<Lead | null> => {
+    async (leadId: string, novaSituacao: SituacaoLead = 'Reativação'): Promise<ResultadoGravacao<Lead>> => {
       return atualizarLead(leadId, {
         statusVenda: 'Em processo',
         situacao: novaSituacao,
@@ -802,7 +863,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 
   const marcarComoPerdido = useCallback(
-    async (leadId: string, motivo: string, dataPerda?: string): Promise<Lead | null> => {
+    async (leadId: string, motivo: string, dataPerda?: string): Promise<ResultadoGravacao<Lead>> => {
       const hoje = new Date().toISOString().split('T')[0];
       return atualizarLead(leadId, {
         statusVenda: 'Perdido',
@@ -836,16 +897,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       try {
         await supabaseService.softDeleteLead(leadId);
         return true;
-      } catch (e) {
+      } catch (e: any) {
         console.error('Erro ao excluir lead no Supabase:', e);
+        avisarErro(`A exclusão não foi concluída. ${e?.message || 'Falha de comunicação com o banco.'} Recarregando a lista para mostrar o que realmente existe.`);
+        carregarDadosCompletos();
         return false;
       }
     },
-    [leadFichaAbertoId, leadSelecionadoModal, matchLeadId]
+    [leadFichaAbertoId, leadSelecionadoModal, matchLeadId, avisarErro, carregarDadosCompletos]
   );
 
   const definirEtapaPorSituacao = useCallback(
-    async (leadId: string, situacao: SituacaoLead, etapa: string): Promise<Lead | null> => {
+    async (leadId: string, situacao: SituacaoLead, etapa: string): Promise<ResultadoGravacao<Lead>> => {
       const target = leads.find((l) => l.id === leadId);
       const mapaAtualizado = { ...(target?.etapaPorSituacao || {}), [situacao]: etapa };
       const hoje = new Date().toISOString().split('T')[0];
@@ -890,18 +953,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 
   const definirEtapaSituacaoAtual = useCallback(
-    async (leadId: string, etapa: string): Promise<Lead | null> => {
+    async (leadId: string, etapa: string): Promise<ResultadoGravacao<Lead>> => {
       const target = leads.find((l) => l.id === leadId);
-      if (!target) return null;
+      if (!target) return { ok: false, erro: 'Paciente não encontrado na lista.' };
       return definirEtapaPorSituacao(leadId, target.situacao, etapa);
     },
     [leads, definirEtapaPorSituacao]
   );
 
   const registrarContatoHoje = useCallback(
-    async (leadId: string): Promise<Lead | null> => {
+    async (leadId: string): Promise<ResultadoGravacao<Lead>> => {
       const target = leads.find((l) => l.id === leadId);
-      if (!target) return null;
+      if (!target) return { ok: false, erro: 'Paciente não encontrado na lista.' };
       const hoje = new Date().toISOString().split('T')[0];
       const timestamp = new Date().toISOString();
       return atualizarLead(leadId, {
@@ -917,7 +980,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 
   const definirStatusGrupoNutricao = useCallback(
-    async (leadId: string, status: StatusGrupoNutricao): Promise<Lead | null> => {
+    async (leadId: string, status: StatusGrupoNutricao): Promise<ResultadoGravacao<Lead>> => {
       return atualizarLead(leadId, {
         statusGrupoNutricao: status,
       });
@@ -970,13 +1033,21 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       try {
         await supabaseService.salvarFicha(fichaAtualizada, eId);
-      } catch (e) {
+      } catch (e: any) {
         console.error('Erro ao salvar ficha no Supabase:', e);
+        const versao = fichaAtualizada.version;
+        setTodasFichasRaw((prev) =>
+          fichaExistente
+            ? prev.map((f) => (f.leadId === leadId && f.version === versao ? fichaExistente : f))
+            : prev.filter((f) => !(f.leadId === leadId && f.version === versao))
+        );
+        avisarErro(`Não foi possível salvar a ficha do paciente. A tela voltou ao valor anterior. Detalhe: ${e?.message || 'falha de comunicação com o banco'}`);
+        return null;
       }
 
       return fichaAtualizada;
     },
-    [fichas, todasFichasRaw, empresaIdEfetiva]
+    [fichas, todasFichasRaw, empresaIdEfetiva, avisarErro]
   );
 
   const salvarFichaExtra = useCallback(
@@ -1211,7 +1282,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       for (const item of leadsParaImportar) {
         try {
           await criarLead({
-            empresaId: empresaIdEfetiva,
+            empresaId: empresaIdRef.current,
             nome: item.nome,
             situacao: item.situacao || 'Em captação',
             etapaInicial: item.etapaInicial,
@@ -1227,7 +1298,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               dataNascimento: item.dataNascimento,
               endereco: item.endereco,
             },
-          });
+          }, { silencioso: true });
           criados++;
         } catch (e: any) {
           erros++;
@@ -1235,15 +1306,24 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       }
 
-      return {
+      const resultado: ResultadoImportacao = {
+        ok: erros === 0,
         totalCriados: criados,
         totalAtualizados: 0,
         totalIgnorados: 0,
         totalErros: erros,
         errosDetalhes,
       };
+      if (erros > 0) {
+        resultado.erro =
+          criados === 0
+            ? `Nenhum paciente foi importado: ${erros} falharam ao gravar.`
+            : `${criados} importados e ${erros} falharam ao gravar. Confira a lista de erros.`;
+        avisarErro(resultado.erro);
+      }
+      return resultado;
     },
-    [criarLead, empresaIdEfetiva]
+    [criarLead, avisarErro]
   );
 
   const importarLeadsEmMassa = useCallback(
@@ -1279,14 +1359,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       dataAgendada: string;
       horaAgendada?: string;
       prioridade?: PrioridadeTarefa;
-    }): Promise<Tarefa> => {
-      const nova = await supabaseService.criarTarefa({
-        ...payload,
-        empresaId: empresaIdEfetiva,
-      });
-
-      setTodasTarefasRaw((prev) => [nova, ...prev.filter((t) => t.id !== nova.id)]);
-      return nova;
+    }): Promise<ResultadoGravacao<Tarefa>> => {
+      try {
+        const nova = await supabaseService.criarTarefa({
+          ...payload,
+          empresaId: empresaIdEfetiva,
+        });
+        setTodasTarefasRaw((prev) => [nova, ...prev.filter((t) => t.id !== nova.id)]);
+        return { ok: true, dados: nova };
+      } catch (e: any) {
+        console.error('Erro ao criar tarefa:', e);
+        return { ok: false, erro: e?.message || 'Falha ao gravar a tarefa.' };
+      }
     },
     [empresaIdEfetiva]
   );
@@ -1311,7 +1395,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return {
               ...t,
               status,
-              dataConclusao: status === 'concluida' ? nowIso : null,
+              dataConclusao: status === 'CONCLUIDA' ? nowIso : null,
               observacaoConclusao: observacaoConclusao || t.observacaoConclusao,
               updated_at: nowIso,
             };
@@ -1428,6 +1512,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         estatisticasProcedimentos,
 
         carregarDadosCompletos,
+        avisarErro,
         criarLead,
         adicionarLead,
         atualizarLead,
@@ -1462,6 +1547,23 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }}
     >
       {children}
+      {avisoErro && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="fixed bottom-4 right-4 z-[100] max-w-sm bg-white border border-red-300 border-l-4 border-l-red-600 shadow-xl rounded-sm p-3 flex items-start gap-3 text-sm text-[#1A1A1A]"
+        >
+          <span className="flex-1">{avisoErro}</span>
+          <button
+            type="button"
+            onClick={fecharAvisoErro}
+            aria-label="Fechar aviso"
+            className="text-xs font-bold text-[#6E6E6E] hover:text-[#1A1A1A] cursor-pointer"
+          >
+            Fechar
+          </button>
+        </div>
+      )}
     </CrmContext.Provider>
   );
 };

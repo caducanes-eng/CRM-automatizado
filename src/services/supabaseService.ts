@@ -1,3 +1,4 @@
+import { normalizarStatusTarefa, normalizarPrioridadeTarefa } from '../utils/tarefas';
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
 import { firestoreService } from './firestoreService';
 import {
@@ -781,70 +782,63 @@ export const supabaseService = {
     const client = getSupabaseClient();
     if (!client) return true;
 
+    const uuid = normalizarUuid(leadId);
+    const nowIso = new Date().toISOString();
+
+    const execCascade = async (): Promise<boolean> => {
+      // 1. Soft delete no próprio Lead (se falhar, nada foi apagado: erro sobe)
+      const { error } = await client
+        .from('leads')
+        .update({ deleted_at: nowIso, updated_at: nowIso })
+        .eq('id', uuid);
+      if (error) {
+        console.error('Erro ao efetuar soft delete no Lead:', error);
+        throw new Error(error.message || 'Falha ao excluir o lead.');
+      }
+
+      // 2 a 5. Cascata. Cada passo lê o erro; falhas são somadas e reportadas, nunca engolidas.
+      const falhas: string[] = [];
+
+      try {
+        await this.softDeleteFichaByLeadId(uuid);
+      } catch (e: any) {
+        falhas.push(`ficha (${e?.message || 'erro'})`);
+      }
+
+      try {
+        await this.softDeleteComprasByLeadId(uuid);
+      } catch (e: any) {
+        falhas.push(`compras (${e?.message || 'erro'})`);
+      }
+
+      const { error: errTarefas } = await client
+        .from('tarefas')
+        .update({ deleted_at: nowIso, updated_at: nowIso })
+        .eq('lead_id', uuid);
+      if (errTarefas) falhas.push(`tarefas (${errTarefas.message})`);
+
+      const { error: errHist } = await client
+        .from('historico_atendimentos')
+        .update({ deleted_at: nowIso, updated_at: nowIso })
+        .eq('lead_id', uuid);
+      if (errHist) falhas.push(`histórico (${errHist.message})`);
+
+      if (falhas.length > 0) {
+        console.error('Exclusão do lead concluída, mas a cascata falhou em:', falhas);
+        throw new Error(`O lead foi excluído, mas não foi possível limpar: ${falhas.join('; ')}.`);
+      }
+      return true;
+    };
+
+    // Espera limitada, mas sem mentir: estourar o tempo é falha, não sucesso.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const limite = new Promise<boolean>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('O banco demorou demais para responder. A exclusão pode não ter sido concluída.')), 15000);
+    });
     try {
-      const uuid = normalizarUuid(leadId);
-      const nowIso = new Date().toISOString();
-
-      const execCascade = async () => {
-        // 1. Soft delete no próprio Lead
-        const { error } = await client
-          .from('leads')
-          .update({
-            deleted_at: nowIso,
-            updated_at: nowIso,
-          })
-          .eq('id', uuid);
-
-        if (error) {
-          console.error('Erro ao efetuar soft delete no Lead:', error);
-          throw error;
-        }
-
-        // 2. Soft delete em cascata na Ficha do Lead
-        try {
-          await this.softDeleteFichaByLeadId(uuid);
-        } catch (e) {
-          console.warn('Aviso: Não foi possível atualizar soft delete na Ficha do Lead:', e);
-        }
-
-        // 3. Soft delete em cascata nas Compras do Lead
-        try {
-          await this.softDeleteComprasByLeadId(uuid);
-        } catch (e) {
-          console.warn('Aviso: Não foi possível atualizar soft delete nas Compras do Lead:', e);
-        }
-
-        // 4. Soft delete em cascata em Tarefas associadas ao Lead
-        try {
-          await client
-            .from('tarefas')
-            .update({ deleted_at: nowIso, updated_at: nowIso })
-            .eq('lead_id', uuid);
-        } catch (e) {
-          console.warn('Aviso: Não foi possível atualizar soft delete nas Tarefas do Lead:', e);
-        }
-
-        // 5. Soft delete em cascata em Histórico de Atendimentos
-        try {
-          await client
-            .from('historico_atendimentos')
-            .update({ deleted_at: nowIso, updated_at: nowIso })
-            .eq('lead_id', uuid);
-        } catch (e) {
-          console.warn('Aviso: Não foi possível atualizar soft delete no Histórico do Lead:', e);
-        }
-
-        return true;
-      };
-
-      // Limita a espera de rede a 4 segundos para evitar travamento da interface
-      return await Promise.race([
-        execCascade(),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 4000)),
-      ]);
-    } catch (e) {
-      console.warn('Aviso ao sincronizar exclusão com o Supabase:', e);
-      return false;
+      return await Promise.race([execCascade(), limite]);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   },
 
@@ -1178,86 +1172,15 @@ export const supabaseService = {
     const client = getSupabaseClient();
     if (!client) return true;
 
-    try {
-      const row = supabaseMapper.empresaToDb(empresa, idCustom);
-      const { error } = await client.from('empresas').upsert(row, { onConflict: 'id' });
-      if (!error) return true;
-
-      console.warn('Erro com payload completo de empresa no Supabase, tentando com fallback de estética:', error.message);
-      
-      // Tentativa 2: Payload seguro contendo configurações estéticas e cadastrais
-      const rowFallbackEstetica = {
-        id: idEfetivo,
-        nome: row.nome,
-        subtitulo: row.subtitulo,
-        cnpj: row.cnpj,
-        telefone: row.telefone,
-        email: row.email,
-        endereco: row.endereco,
-        unidade_padrao: row.unidade_padrao,
-        status: row.status,
-        tipo_logo: row.tipo_logo,
-        logo_url: row.logo_url,
-        monograma_iniciais: row.monograma_iniciais,
-        estetica_config: row.estetica_config,
-        esteticas_salvas: row.esteticas_salvas,
-        ativa: row.ativa,
-        updated_at: row.updated_at,
-      };
-
-      const res2 = await client.from('empresas').upsert(rowFallbackEstetica, { onConflict: 'id' });
-      if (!res2.error) return true;
-
-      // Tentativa 3: Se esteticas_salvas não existir na tabela, tenta apenas estetica_config
-      console.warn('Tentando fallback apenas com estetica_config:', res2.error.message);
-      const rowFallbackEsteticaConfig = {
-        id: idEfetivo,
-        nome: row.nome,
-        subtitulo: row.subtitulo,
-        cnpj: row.cnpj,
-        telefone: row.telefone,
-        email: row.email,
-        endereco: row.endereco,
-        unidade_padrao: row.unidade_padrao,
-        status: row.status,
-        tipo_logo: row.tipo_logo,
-        logo_url: row.logo_url,
-        monograma_iniciais: row.monograma_iniciais,
-        estetica_config: row.estetica_config,
-        ativa: row.ativa,
-        updated_at: row.updated_at,
-      };
-
-      const res3 = await client.from('empresas').upsert(rowFallbackEsteticaConfig, { onConflict: 'id' });
-      if (!res3.error) return true;
-
-      console.warn('Tentando fallback básico cadastral:', res3.error.message);
-      const rowFallbackBasico = {
-        id: idEfetivo,
-        nome: row.nome,
-        subtitulo: row.subtitulo,
-        cnpj: row.cnpj,
-        telefone: row.telefone,
-        email: row.email,
-        endereco: row.endereco,
-        unidade_padrao: row.unidade_padrao,
-        status: row.status,
-        tipo_logo: row.tipo_logo,
-        logo_url: row.logo_url,
-        monograma_iniciais: row.monograma_iniciais,
-        ativa: row.ativa,
-        updated_at: row.updated_at,
-      };
-      const res4 = await client.from('empresas').upsert(rowFallbackBasico, { onConflict: 'id' });
-      if (res4.error) {
-        console.error('Erro ao salvar empresa no Supabase (fallback básico):', res4.error);
-        return false;
-      }
-      return true;
-    } catch (e) {
-      console.error('Exceção ao salvar empresa no Supabase:', e);
-      return false;
+    // Uma única tentativa: todas as colunas do mapper existem em public.empresas. Se o banco recusar,
+    // o erro sobe para a tela em vez de ser mascarado por gravações parciais.
+    const row = supabaseMapper.empresaToDb(empresa, idCustom);
+    const { error } = await client.from('empresas').upsert(row, { onConflict: 'id' });
+    if (error) {
+      console.error('Erro ao salvar empresa no Supabase:', error);
+      throw new Error(error.message || 'O banco recusou os dados da clínica.');
     }
+    return true;
   },
 
   /**
@@ -2029,7 +1952,6 @@ export function calcularRegraComissao(params: ParametrosCalculoKpi): ResultadoCa
   };
 }
 
-const STORAGE_KEY_KPIS_HISTORICO = 'crm_kpis_secretaria_snapshots_v1';
 
 /**
  * Busca e calcula em tempo real os 4 KPIs para o mês/ano selecionado (ex: '2026-08')
@@ -2259,274 +2181,123 @@ export async function fetchKpisMesAtual(
   };
 }
 
-function obterSeedSnapshotsHistoricos(empresaId: string): KpiSecretariaMensal[] {
-  const empUuid = normalizarUuid(empresaId);
-  return [
-    {
-      id: `kpi-snap-2026-07`,
-      empresaId: empUuid,
-      empresa_id: empUuid,
-      mesAno: '2026-07',
-      mes_ano: '2026-07',
-      consultasRealizadas: 48,
-      consultas_realizadas: 48,
-      totalAgendamentos: 52,
-      total_agendamentos: 52,
-      taxaComparecimento: 92.3,
-      taxa_comparecimento: 92.3,
-      travaComparecimentoOk: true,
-      trava_comparecimento_ok: true,
-      leadsPosConsulta: 40,
-      leads_pos_consulta: 40,
-      leadsVendaFeita: 24,
-      leads_venda_feita: 24,
-      taxaFechamento: 60.0,
-      taxa_fechamento: 60.0,
-      faturamentoRealizado: 92000,
-      faturamento_realizado: 92000,
-      metaFaturamento: 80000,
-      meta_faturamento: 80000,
-      percentualMetaFaturamento: 115.0,
-      percentual_meta_faturamento: 115.0,
-      bonusCaptacao: 400,
-      bonus_captacao: 400,
-      bonusComparecimento: 500,
-      bonus_comparecimento: 500,
-      bonusFechamento: 700,
-      bonus_fechamento: 700,
-      bonusFaturamento: 2000,
-      bonus_faturamento: 2000,
-      comissaoTotal: 3600,
-      comissao_total: 3600,
-      fechado: true,
-      fechadoEm: '2026-08-01T08:00:00.000Z',
-      fechado_em: '2026-08-01T08:00:00.000Z',
-      observacoes: 'Mês encerrado com alta performance em faturamento e comparecimento.',
-    },
-    {
-      id: `kpi-snap-2026-06`,
-      empresaId: empUuid,
-      empresa_id: empUuid,
-      mesAno: '2026-06',
-      mes_ano: '2026-06',
-      consultasRealizadas: 54,
-      consultas_realizadas: 54,
-      totalAgendamentos: 58,
-      total_agendamentos: 58,
-      taxaComparecimento: 93.1,
-      taxa_comparecimento: 93.1,
-      travaComparecimentoOk: true,
-      trava_comparecimento_ok: true,
-      leadsPosConsulta: 42,
-      leads_pos_consulta: 42,
-      leadsVendaFeita: 27,
-      leads_venda_feita: 27,
-      taxaFechamento: 64.3,
-      taxa_fechamento: 64.3,
-      faturamentoRealizado: 98500,
-      faturamento_realizado: 98500,
-      metaFaturamento: 80000,
-      meta_faturamento: 80000,
-      percentualMetaFaturamento: 123.1,
-      percentual_meta_faturamento: 123.1,
-      bonusCaptacao: 500,
-      bonus_captacao: 500,
-      bonusComparecimento: 500,
-      bonus_comparecimento: 500,
-      bonusFechamento: 1000,
-      bonus_fechamento: 1000,
-      bonusFaturamento: 3000,
-      bonus_faturamento: 3000,
-      comissaoTotal: 5000,
-      comissao_total: 5000,
-      fechado: true,
-      fechadoEm: '2026-07-01T08:00:00.000Z',
-      fechado_em: '2026-07-01T08:00:00.000Z',
-      observacoes: 'Recorde de faturamento no semestre. Todos os bônus atingidos no teto.',
-    },
-    {
-      id: `kpi-snap-2026-05`,
-      empresaId: empUuid,
-      empresa_id: empUuid,
-      mesAno: '2026-05',
-      mes_ano: '2026-05',
-      consultasRealizadas: 38,
-      consultas_realizadas: 38,
-      totalAgendamentos: 44,
-      total_agendamentos: 44,
-      taxaComparecimento: 86.4,
-      taxa_comparecimento: 86.4,
-      travaComparecimentoOk: true,
-      trava_comparecimento_ok: true,
-      leadsPosConsulta: 32,
-      leads_pos_consulta: 32,
-      leadsVendaFeita: 14,
-      leads_venda_feita: 14,
-      taxaFechamento: 43.8,
-      taxa_fechamento: 43.8,
-      faturamentoRealizado: 72000,
-      faturamento_realizado: 72000,
-      metaFaturamento: 80000,
-      meta_faturamento: 80000,
-      percentualMetaFaturamento: 90.0,
-      percentual_meta_faturamento: 90.0,
-      bonusCaptacao: 300,
-      bonus_captacao: 300,
-      bonusComparecimento: 500,
-      bonus_comparecimento: 500,
-      bonusFechamento: 400,
-      bonus_fechamento: 400,
-      bonusFaturamento: 1400,
-      bonus_faturamento: 1400,
-      comissaoTotal: 2600,
-      comissao_total: 2600,
-      fechado: true,
-      fechadoEm: '2026-06-01T08:00:00.000Z',
-      fechado_em: '2026-06-01T08:00:00.000Z',
-      observacoes: 'Mês de maio concluído dentro da faixa intermediária da meta.',
-    },
-  ];
+// Histórico de KPIs: lê somente o que está gravado em public.kpis_secretaria_mensal.
+// Sem histórico inventado e sem cache local que esconda falha: se o banco falhar, o erro sobe e a tela avisa.
+function kpiLinhaParaModelo(d: any): KpiSecretariaMensal {
+  const mesAno = String(d.mes_referencia || '').slice(0, 7);
+  const fechado = d.status_fechamento === 'fechado';
+  return {
+    id: d.id,
+    empresaId: d.empresa_id,
+    empresa_id: d.empresa_id,
+    mesAno,
+    mes_ano: mesAno,
+    consultasRealizadas: Number(d.consultas_realizadas) || 0,
+    consultas_realizadas: Number(d.consultas_realizadas) || 0,
+    totalAgendamentos: Number(d.total_agendamentos) || 0,
+    total_agendamentos: Number(d.total_agendamentos) || 0,
+    taxaComparecimento: Number(d.taxa_comparecimento) || 0,
+    taxa_comparecimento: Number(d.taxa_comparecimento) || 0,
+    travaComparecimentoOk: Boolean(d.trava_comparecimento_ok),
+    trava_comparecimento_ok: Boolean(d.trava_comparecimento_ok),
+    leadsPosConsulta: Number(d.orcamentos_pos_consulta) || 0,
+    leads_pos_consulta: Number(d.orcamentos_pos_consulta) || 0,
+    leadsVendaFeita: Number(d.vendas_fechadas) || 0,
+    leads_venda_feita: Number(d.vendas_fechadas) || 0,
+    taxaFechamento: Number(d.taxa_fechamento) || 0,
+    taxa_fechamento: Number(d.taxa_fechamento) || 0,
+    faturamentoRealizado: Number(d.faturamento_total) || 0,
+    faturamento_realizado: Number(d.faturamento_total) || 0,
+    metaFaturamento: Number(d.meta_faturamento) || 0,
+    meta_faturamento: Number(d.meta_faturamento) || 0,
+    percentualMetaFaturamento: Number(d.percentual_meta) || 0,
+    percentual_meta_faturamento: Number(d.percentual_meta) || 0,
+    bonusCaptacao: Number(d.bonus_captacao) || 0,
+    bonus_captacao: Number(d.bonus_captacao) || 0,
+    bonusComparecimento: Number(d.bonus_comparecimento) || 0,
+    bonus_comparecimento: Number(d.bonus_comparecimento) || 0,
+    bonusFechamento: Number(d.bonus_fechamento) || 0,
+    bonus_fechamento: Number(d.bonus_fechamento) || 0,
+    bonusFaturamento: Number(d.bonus_faturamento) || 0,
+    bonus_faturamento: Number(d.bonus_faturamento) || 0,
+    comissaoTotal: Number(d.comissao_total) || 0,
+    comissao_total: Number(d.comissao_total) || 0,
+    fechado,
+    fechadoEm: fechado ? d.updated_at : null,
+    fechado_em: fechado ? d.updated_at : null,
+    created_at: d.created_at,
+    updated_at: d.updated_at,
+  };
 }
 
+/** Devolve só o histórico realmente gravado. Lança erro se o banco falhar; lista vazia significa "nada gravado". */
 export async function fetchHistoricoKpis(empresaId: string): Promise<KpiSecretariaMensal[]> {
   const empUuid = normalizarUuid(empresaId);
   const client = getSupabaseClient();
+  if (!client) return [];
 
-  if (client) {
-    try {
-      const { data, error } = await client
-        .from('kpis_secretaria_mensal')
-        .select('*')
-        .eq('empresa_id', empUuid)
-        .order('mes_ano', { ascending: false });
+  const { data, error } = await client
+    .from('kpis_secretaria_mensal')
+    .select('*')
+    .eq('empresa_id', empUuid)
+    .order('mes_referencia', { ascending: false });
 
-      if (!error && data && data.length > 0) {
-        return data.map((d: any) => ({
-          id: d.id,
-          empresaId: d.empresa_id,
-          empresa_id: d.empresa_id,
-          mesAno: d.mes_ano,
-          mes_ano: d.mes_ano,
-          consultasRealizadas: d.consultas_realizadas,
-          consultas_realizadas: d.consultas_realizadas,
-          totalAgendamentos: d.total_agendamentos,
-          total_agendamentos: d.total_agendamentos,
-          taxaComparecimento: Number(d.taxa_comparecimento),
-          taxa_comparecimento: Number(d.taxa_comparecimento),
-          travaComparecimentoOk: Boolean(d.trava_comparecimento_ok),
-          trava_comparecimento_ok: Boolean(d.trava_comparecimento_ok),
-          leadsPosConsulta: d.leads_pos_consulta,
-          leads_pos_consulta: d.leads_pos_consulta,
-          leadsVendaFeita: d.leads_venda_feita,
-          leads_venda_feita: d.leads_venda_feita,
-          taxaFechamento: Number(d.taxa_fechamento),
-          taxa_fechamento: Number(d.taxa_fechamento),
-          faturamentoRealizado: Number(d.faturamento_realizado),
-          faturamento_realizado: Number(d.faturamento_realizado),
-          metaFaturamento: Number(d.meta_faturamento || 80000),
-          meta_faturamento: Number(d.meta_faturamento || 80000),
-          percentualMetaFaturamento: Number(d.percentual_meta_faturamento),
-          percentual_meta_faturamento: Number(d.percentual_meta_faturamento),
-          bonusCaptacao: Number(d.bonus_captacao),
-          bonus_captacao: Number(d.bonus_captacao),
-          bonusComparecimento: Number(d.bonus_comparecimento),
-          bonus_comparecimento: Number(d.bonus_comparecimento),
-          bonusFechamento: Number(d.bonus_fechamento),
-          bonus_fechamento: Number(d.bonus_fechamento),
-          bonusFaturamento: Number(d.bonus_faturamento),
-          bonus_faturamento: Number(d.bonus_faturamento),
-          comissaoTotal: Number(d.comissao_total),
-          comissao_total: Number(d.comissao_total),
-          fechado: Boolean(d.fechado),
-          fechadoEm: d.fechado_em,
-          fechado_em: d.fechado_em,
-          observacoes: d.observacoes || '',
-          created_at: d.created_at,
-          updated_at: d.updated_at,
-        }));
-      }
-    } catch (e) {
-      console.warn('Tabela kpis_secretaria_mensal não encontrada ou sem dados no Supabase, usando cache local:', e);
-    }
+  if (error) {
+    console.error('Erro ao ler kpis_secretaria_mensal:', error);
+    throw new Error(error.message || 'Falha ao ler o histórico de KPIs.');
   }
-
-  try {
-    const key = `${STORAGE_KEY_KPIS_HISTORICO}_${empUuid}`;
-    const salvo = localStorage.getItem(key);
-    if (salvo) {
-      const parsed = JSON.parse(salvo);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-  } catch (e) {}
-
-  const seeds = obterSeedSnapshotsHistoricos(empUuid);
-  try {
-    const key = `${STORAGE_KEY_KPIS_HISTORICO}_${empUuid}`;
-    localStorage.setItem(key, JSON.stringify(seeds));
-  } catch (e) {}
-
-  return seeds;
+  return (data || []).map(kpiLinhaParaModelo);
 }
 
+/** Grava o fechamento do mês. Lança erro se o banco recusar; nunca devolve sucesso sem gravar. */
 export async function salvarSnapshotKpi(
   kpiData: KpiSecretariaMensal
 ): Promise<KpiSecretariaMensal> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error('Banco de dados não configurado. O fechamento não foi gravado.');
+  }
+
   const empUuid = normalizarUuid(kpiData.empresaId || kpiData.empresa_id || ID_EMPRESA_PADRAO);
   const mesAno = kpiData.mesAno || kpiData.mes_ano || new Date().toISOString().slice(0, 7);
+  const consultas = kpiData.consultasRealizadas ?? kpiData.consultas_realizadas ?? 0;
 
-  const payload: any = {
-    id: kpiData.id || normalizarUuid(),
+  // Somente colunas que existem na tabela. mes_referencia é date (primeiro dia do mês).
+  const payload = {
     empresa_id: empUuid,
-    mes_ano: mesAno,
-    consultas_realizadas: kpiData.consultasRealizadas ?? kpiData.consultas_realizadas ?? 0,
+    mes_referencia: `${mesAno}-01`,
+    consultas_realizadas: consultas,
     total_agendamentos: kpiData.totalAgendamentos ?? kpiData.total_agendamentos ?? 0,
+    comparecimentos_efetivos: consultas,
     taxa_comparecimento: kpiData.taxaComparecimento ?? kpiData.taxa_comparecimento ?? 0,
     trava_comparecimento_ok: kpiData.travaComparecimentoOk ?? kpiData.trava_comparecimento_ok ?? false,
-    leads_pos_consulta: kpiData.leadsPosConsulta ?? kpiData.leads_pos_consulta ?? 0,
-    leads_venda_feita: kpiData.leadsVendaFeita ?? kpiData.leads_venda_feita ?? 0,
+    orcamentos_pos_consulta: kpiData.leadsPosConsulta ?? kpiData.leads_pos_consulta ?? 0,
+    vendas_fechadas: kpiData.leadsVendaFeita ?? kpiData.leads_venda_feita ?? 0,
     taxa_fechamento: kpiData.taxaFechamento ?? kpiData.taxa_fechamento ?? 0,
-    faturamento_realizado: kpiData.faturamentoRealizado ?? kpiData.faturamento_realizado ?? 0,
-    meta_faturamento: kpiData.metaFaturamento ?? kpiData.meta_faturamento ?? 80000,
-    percentual_meta_faturamento: kpiData.percentualMetaFaturamento ?? kpiData.percentual_meta_faturamento ?? 0,
+    faturamento_total: kpiData.faturamentoRealizado ?? kpiData.faturamento_realizado ?? 0,
+    meta_faturamento: kpiData.metaFaturamento ?? kpiData.meta_faturamento ?? 0,
+    percentual_meta: kpiData.percentualMetaFaturamento ?? kpiData.percentual_meta_faturamento ?? 0,
     bonus_captacao: kpiData.bonusCaptacao ?? kpiData.bonus_captacao ?? 0,
     bonus_comparecimento: kpiData.bonusComparecimento ?? kpiData.bonus_comparecimento ?? 0,
     bonus_fechamento: kpiData.bonusFechamento ?? kpiData.bonus_fechamento ?? 0,
     bonus_faturamento: kpiData.bonusFaturamento ?? kpiData.bonus_faturamento ?? 0,
     comissao_total: kpiData.comissaoTotal ?? kpiData.comissao_total ?? 0,
-    fechado: kpiData.fechado ?? true,
-    fechado_em: kpiData.fechadoEm || kpiData.fechado_em || new Date().toISOString(),
-    observacoes: kpiData.observacoes || 'Snapshot mensal congelado e salvo.',
+    status_fechamento: (kpiData.fechado ?? true) ? 'fechado' : 'em_aberto',
     updated_at: new Date().toISOString(),
   };
 
-  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('kpis_secretaria_mensal')
+    .upsert(payload, { onConflict: 'empresa_id,mes_referencia' })
+    .select()
+    .single();
 
-  if (client) {
-    try {
-      await client
-        .from('kpis_secretaria_mensal')
-        .upsert(payload, { onConflict: 'empresa_id,mes_ano' });
-    } catch (e) {
-      console.warn('Erro ao salvar snapshot em kpis_secretaria_mensal no Supabase:', e);
-    }
+  if (error) {
+    console.error('Erro ao salvar fechamento em kpis_secretaria_mensal:', error);
+    throw new Error(error.message || 'Falha ao gravar o fechamento do mês.');
   }
 
-  // Espelhamento resiliente no Firestore
-  try {
-    await firestoreService.salvarSnapshotKpi(payload);
-  } catch (e) {}
-
-  try {
-    const key = `${STORAGE_KEY_KPIS_HISTORICO}_${empUuid}`;
-    const historicoAtual = await fetchHistoricoKpis(empUuid);
-    const filtrado = historicoAtual.filter((h) => (h.mesAno || h.mes_ano) !== mesAno);
-    const atualizado = [kpiData, ...filtrado];
-    localStorage.setItem(key, JSON.stringify(atualizado));
-  } catch (e) {}
-
-  return kpiData;
+  return kpiLinhaParaModelo(data);
 }
 
 // ============================================================================
@@ -2587,14 +2358,8 @@ export async function fetchTarefasPorEmpresa(empresaId?: string): Promise<Tarefa
           const rawVencimento = t.data_agendada || t.data_vencimento || t.created_at || new Date().toISOString();
           const dataAgendadaVal = typeof rawVencimento === 'string' ? rawVencimento.split('T')[0] : new Date().toISOString().split('T')[0];
           const horaAgendadaVal = t.hora_agendada || (typeof rawVencimento === 'string' && rawVencimento.includes('T') ? rawVencimento.split('T')[1].slice(0, 5) : '14:00');
-          const statusLower = (t.status ? String(t.status).toLowerCase() : 'pendente') as StatusTarefa;
-          const prioridadeLower: PrioridadeTarefa = (() => {
-            const p = t.prioridade ? String(t.prioridade).toLowerCase() : 'normal';
-            if (p === 'baixa') return 'baixa';
-            if (p === 'alta') return 'alta';
-            if (p === 'urgente') return 'urgente';
-            return 'normal';
-          })();
+          const statusNorm = normalizarStatusTarefa(t.status);
+          const prioridadeNorm = normalizarPrioridadeTarefa(t.prioridade);
 
           tarefasMap.set(t.id, {
             id: t.id,
@@ -2618,8 +2383,8 @@ export async function fetchTarefasPorEmpresa(empresaId?: string): Promise<Tarefa
             data_agendada: dataAgendadaVal,
             horaAgendada: horaAgendadaVal,
             hora_agendada: horaAgendadaVal,
-            status: statusLower === 'concluida' ? 'concluida' : statusLower === 'cancelada' ? 'cancelada' : 'pendente',
-            prioridade: prioridadeLower,
+            status: statusNorm,
+            prioridade: prioridadeNorm,
             dataConclusao: t.data_conclusao || null,
             data_conclusao: t.data_conclusao || null,
             usuarioConclusaoId: t.usuario_conclusao_id || null,
@@ -2657,7 +2422,11 @@ export async function fetchTarefasPorEmpresa(empresaId?: string): Promise<Tarefa
         const localList: Tarefa[] = JSON.parse(raw);
         for (const lt of localList) {
           if (!tarefasMap.has(lt.id)) {
-            tarefasMap.set(lt.id, lt);
+            tarefasMap.set(lt.id, {
+              ...lt,
+              status: normalizarStatusTarefa(lt.status),
+              prioridade: normalizarPrioridadeTarefa(lt.prioridade),
+            });
           }
         }
       }
@@ -2695,6 +2464,11 @@ export async function criarTarefaSupabase(
   const nowIso = new Date().toISOString();
   const id = crypto.randomUUID();
 
+  // A coluna tarefas.lead_id é obrigatória no banco: avisa antes de tentar, em vez de gravar só no espelho.
+  if (!payload.leadId && getSupabaseClient()) {
+    throw new Error('Escolha o paciente da tarefa: o banco exige um paciente vinculado.');
+  }
+
   const dataAgendadaVal = payload.dataAgendada ? payload.dataAgendada.slice(0, 10) : nowIso.slice(0, 10);
   const horaAgendadaVal = payload.horaAgendada ? payload.horaAgendada.slice(0, 5) : '14:00';
   let dataVencimentoVal = nowIso;
@@ -2705,13 +2479,7 @@ export async function criarTarefaSupabase(
     }
   } catch (e) {}
 
-  const prioridadeUpper = (() => {
-    const p = String(payload.prioridade || '').toUpperCase();
-    if (p === 'ALTA') return 'ALTA';
-    if (p === 'URGENTE') return 'URGENTE';
-    if (p === 'BAIXA') return 'BAIXA';
-    return 'MEDIA';
-  })();
+  const prioridadeUpper = normalizarPrioridadeTarefa(payload.prioridade);
 
   const novaTarefa: Tarefa = {
     id,
@@ -2735,8 +2503,8 @@ export async function criarTarefaSupabase(
     data_agendada: dataAgendadaVal,
     horaAgendada: horaAgendadaVal,
     hora_agendada: horaAgendadaVal,
-    status: 'pendente',
-    prioridade: payload.prioridade || 'normal',
+    status: 'PENDENTE',
+    prioridade: prioridadeUpper,
   };
 
   // 1. Gravação direta no Firestore (banco de dados em nuvem central)
@@ -2773,6 +2541,14 @@ export async function criarTarefaSupabase(
 
       let { error } = await client.from('tarefas').insert([dbPayload]);
 
+      // D11: o id do usuário logado pode não existir em public.usuarios (FK). A tarefa é gravada sem responsável
+      // em vez de falhar por um vínculo que o usuário nem vê.
+      if (error && error.code === '23503' && /usuario/i.test(`${error.message} ${error.details || ''}`)) {
+        dbPayload.usuario_id = null;
+        dbPayload.usuario_responsavel_id = null;
+        ({ error } = await client.from('tarefas').insert([dbPayload]));
+      }
+
       // Fallback para campos canônicos básicos
       if (error && (error.code === '42703' || error.message?.includes('does not exist') || error.message?.includes('column') || error.message?.includes('schema'))) {
         const canonicalPayload: Record<string, any> = {
@@ -2800,11 +2576,13 @@ export async function criarTarefaSupabase(
 
       if (error) {
         console.error('Erro ao inserir tarefa no Supabase:', error);
-      } else {
-        console.log('✅ Tarefa gravada com sucesso no Supabase:', novaTarefa.id);
+        throw new Error(error.message || 'O banco recusou a tarefa.');
       }
-    } catch (e) {
-      console.warn('Falha na comunicação de tarefas com Supabase:', e);
+    } catch (e: any) {
+      console.warn('Falha ao gravar tarefa no Supabase:', e);
+      // Desfaz o espelho no Firestore para não sobrar tarefa fantasma.
+      firestoreService.excluirTarefa(novaTarefa.id).catch(() => {});
+      throw new Error(e?.message || 'Falha de comunicação ao gravar a tarefa.');
     }
   }
 
@@ -2844,7 +2622,7 @@ export async function atualizarStatusTarefaSupabase(
 ): Promise<boolean> {
   const client = getSupabaseClient();
   const nowIso = new Date().toISOString();
-  const statusUpper = status === 'concluida' ? 'CONCLUIDA' : status === 'cancelada' ? 'CANCELADA' : 'PENDENTE';
+  const statusUpper = normalizarStatusTarefa(status);
 
   // 1. Atualizar no Firestore
   try {
@@ -2859,8 +2637,8 @@ export async function atualizarStatusTarefaSupabase(
       const updates: any = {
         status: statusUpper,
         updated_at: nowIso,
-        data_conclusao: status === 'concluida' ? nowIso : null,
-        usuario_conclusao_id: status === 'concluida' ? (usuarioId ? normalizarUuid(usuarioId) : null) : null,
+        data_conclusao: status === 'CONCLUIDA' ? nowIso : null,
+        usuario_conclusao_id: status === 'CONCLUIDA' ? (usuarioId ? normalizarUuid(usuarioId) : null) : null,
         observacao_conclusao: observacaoConclusao || null,
       };
 
@@ -2895,9 +2673,9 @@ export async function atualizarStatusTarefaSupabase(
           if (idx >= 0) {
             list[idx] = {
               ...list[idx],
-              status,
-              dataConclusao: status === 'concluida' ? nowIso : null,
-              data_conclusao: status === 'concluida' ? nowIso : null,
+              status: normalizarStatusTarefa(status),
+              dataConclusao: status === 'CONCLUIDA' ? nowIso : null,
+              data_conclusao: status === 'CONCLUIDA' ? nowIso : null,
               observacaoConclusao: observacaoConclusao || list[idx].observacaoConclusao,
               observacao_conclusao: observacaoConclusao || list[idx].observacao_conclusao,
               updated_at: nowIso,
@@ -2964,12 +2742,12 @@ export function calcularIndicadoresTarefas(tarefas: Tarefa[]): IndicadoresTarefa
   for (const t of tarefas) {
     if (t.deleted_at) continue;
 
-    if (t.status === 'concluida') {
+    if (t.status === 'CONCLUIDA') {
       tarefasConcluidas++;
       continue;
     }
 
-    if (t.status === 'pendente') {
+    if (t.status === 'PENDENTE') {
       totalPendentes++;
       const dataAgendada = (t.dataAgendada || t.data_agendada || '').slice(0, 10);
       if (!dataAgendada || dataAgendada === hoje) {

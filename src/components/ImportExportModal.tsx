@@ -903,10 +903,21 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
 
               {/* Resultado pós-importação */}
               {resultadoImportacao && (
-                <div className="p-4 bg-emerald-50 border border-emerald-300 text-emerald-950 rounded-sm text-xs space-y-2">
-                  <div className="flex items-center gap-2 font-bold text-sm text-emerald-900">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                    <span>Importação concluída com sucesso!</span>
+                <div
+                  role={resultadoImportacao.ok === false ? 'alert' : 'status'}
+                  className={`p-4 border rounded-sm text-xs space-y-2 ${
+                    resultadoImportacao.ok === false
+                      ? 'bg-rose-50 border-rose-300 text-rose-950'
+                      : 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                  }`}
+                >
+                  <div className={`flex items-center gap-2 font-bold text-sm ${resultadoImportacao.ok === false ? 'text-rose-900' : 'text-emerald-900'}`}>
+                    <CheckCircle2 className={`w-5 h-5 shrink-0 ${resultadoImportacao.ok === false ? 'text-rose-600' : 'text-emerald-600'}`} />
+                    <span>
+                      {resultadoImportacao.ok === false
+                        ? resultadoImportacao.erro || 'A importação teve falhas.'
+                        : 'Importação concluída com sucesso!'}
+                    </span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-emerald-200/80 font-mono text-[11px]">
                     <div className="p-2 bg-white rounded-xs border border-emerald-200">

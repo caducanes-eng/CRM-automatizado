@@ -773,7 +773,16 @@ export interface ImportarLeadItem {
   endereco?: string;
 }
 
+/** Resultado padrão de uma gravação: nunca finge sucesso. `erro` vem em português, pronto para mostrar. */
+export interface ResultadoGravacao<T = unknown> {
+  ok: boolean;
+  erro?: string;
+  dados?: T;
+}
+
 export interface ResultadoImportacao {
+  ok?: boolean;
+  erro?: string;
   totalCriados: number;
   totalAtualizados: number;
   totalIgnorados: number;
@@ -895,8 +904,9 @@ export interface KpiSecretariaMensal {
 /**
  * ENTIDADE "Tarefa" (Agendamento de tarefas e cadências operacionais)
  */
-export type StatusTarefa = 'pendente' | 'concluida' | 'cancelada';
-export type PrioridadeTarefa = 'baixa' | 'normal' | 'alta' | 'urgente';
+// Mesmo vocabulário do banco (public.tarefas), em maiúsculas. Conversão de valores antigos: utils/tarefas.ts
+export type StatusTarefa = 'PENDENTE' | 'CONCLUIDA' | 'CANCELADA';
+export type PrioridadeTarefa = 'BAIXA' | 'MEDIA' | 'ALTA' | 'URGENTE';
 
 export interface Tarefa extends BaseEntity {
   empresaId?: string;
