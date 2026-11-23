@@ -428,11 +428,12 @@ export function calcularStatusCadencia(
 }
 
 /**
- * Lead Perdido ou com Venda feita não segue mais cadência: sai das telas de cadência
- * e da lista "Contatar hoje" (T-05).
+ * Lead Perdido não segue mais cadência. Lead com Venda feita também sai, exceto na
+ * situação "Pós procedimento": quem comprou ainda precisa do acompanhamento pós.
  */
-export function estaForaDaCadencia(statusVenda?: string | null): boolean {
-  return statusVenda === 'Perdido' || statusVenda === 'Venda feita';
+export function estaForaDaCadencia(statusVenda?: string | null, situacao?: string | null): boolean {
+  if (statusVenda === 'Perdido') return true;
+  return statusVenda === 'Venda feita' && situacao !== 'Pós procedimento';
 }
 
 /**
@@ -454,7 +455,7 @@ export function verificarSeDeveContatarHoje(
   dataUltimaAcao?: string | null,
   statusVenda?: string | null
 ): boolean {
-  if (estaForaDaCadencia(statusVenda)) {
+  if (estaForaDaCadencia(statusVenda, situacao)) {
     return false;
   }
 

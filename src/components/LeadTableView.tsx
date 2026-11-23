@@ -225,7 +225,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
     if (!modalEtapaLead || !etapaManualSelecionada) return;
     const leadAtual = leads.find((l) => l.id === modalEtapaLead.id) || modalEtapaLead;
     const situacao = leadAtual.situacao;
-    const r = await definirEtapaPorSituacao(leadAtual.id, situacao, etapaManualSelecionada);
+    const r = await definirEtapaPorSituacao(leadAtual.id, situacao, etapaManualSelecionada, false);
     if (!r.ok) {
       setFeedbackToast(`Não foi possível salvar: ${(r as any)?.erro || 'tente novamente'}`);
       setTimeout(() => setFeedbackToast(null), 4500);
@@ -242,7 +242,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
     const leadAtual = leads.find((l) => l.id === modalEtapaLead.id) || modalEtapaLead;
     const situacao = leadAtual.situacao;
     const primeira = reiniciarCadencia(situacao);
-    const r = await definirEtapaPorSituacao(leadAtual.id, situacao, primeira);
+    const r = await definirEtapaPorSituacao(leadAtual.id, situacao, primeira, false);
     if (!r.ok) {
       setFeedbackToast(`Não foi possível salvar: ${(r as any)?.erro || 'tente novamente'}`);
       setTimeout(() => setFeedbackToast(null), 4500);
@@ -414,7 +414,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
 
       return {
         ...lead,
-        foraDaCadencia: estaForaDaCadencia(lead.statusVenda),
+        foraDaCadencia: estaForaDaCadencia(lead.statusVenda, lead.situacao),
         diasCorridos,
         etapaAtual,
         etapaEsperada,

@@ -663,7 +663,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
     const primeira = reiniciarCadencia(situacao);
     const etapaAnterior = etapa;
     setEtapa(primeira);
-    const r = await definirEtapaPorSituacao(activeLeadId, situacao, primeira);
+    const r = await definirEtapaPorSituacao(activeLeadId, situacao, primeira, false);
     if (!r.ok) {
       setEtapa(etapaAnterior);
       dispararFeedback(`Não foi possível salvar: ${r.erro || 'tente novamente'}`);
@@ -1109,7 +1109,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                               if (!novaEtapa || !activeLeadId) return;
                               const etapaAnterior = etapa;
                               setEtapa(novaEtapa);
-                              const r = await definirEtapaPorSituacao(activeLeadId, situacao, novaEtapa);
+                              const r = await definirEtapaPorSituacao(activeLeadId, situacao, novaEtapa, false);
                               if (!r.ok) {
                                 setEtapa(etapaAnterior);
                                 dispararFeedback(`Não foi possível salvar: ${r.erro || 'tente novamente'}`);

@@ -102,7 +102,7 @@ export const supabaseMapper = {
   // EMPRESA / CLÍNICA
   empresaToDb: (empresa: Partial<Empresa> | Partial<ConfiguracoesEmpresa>, idCustom?: string) => {
     const idEfetivo = normalizarUuid(idCustom || (empresa as any).id || ID_EMPRESA_PADRAO);
-    const nome = (empresa as any).nome || (empresa as any).nomeEmpresa || 'Dra. Agda Rodrigues';
+    const nome = (empresa as any).nome || (empresa as any).nomeEmpresa || 'Minha empresa';
     const statusVal: StatusEmpresa = (empresa as any).status === 'suspensa' ? 'suspensa' : 'ativa';
 
     return {
@@ -922,18 +922,6 @@ export const supabaseService = {
         .is('deleted_at', null)
         .maybeSingle();
 
-      if (error && (error.code === 'PGRST205' || error.message?.includes('fichas_leads'))) {
-        cachedFichasTableName = 'fichas_lead';
-        const resFallback = await client
-          .from('fichas_lead')
-          .select('*')
-          .eq('lead_id', uuid)
-          .is('deleted_at', null)
-          .maybeSingle();
-        data = resFallback.data;
-        error = resFallback.error;
-      }
-
       if (error) {
         console.error('Erro ao buscar ficha do lead:', error);
         throw error;
@@ -1018,17 +1006,6 @@ export const supabaseService = {
         .select()
         .single();
 
-      if (error && (error.code === 'PGRST205' || error.message?.includes('fichas_leads'))) {
-        cachedFichasTableName = 'fichas_lead';
-        const resFallback = await client
-          .from('fichas_lead')
-          .upsert(row, { onConflict: 'id' })
-          .select()
-          .single();
-        data = resFallback.data;
-        error = resFallback.error;
-      }
-
       if (error) {
         console.error('Erro ao salvar ficha do lead no Supabase:', error);
         throw error;
@@ -1068,15 +1045,6 @@ export const supabaseService = {
         .update({ deleted_at: nowIso, updated_at: nowIso })
         .eq('id', uuid);
 
-      if (error && (error.code === 'PGRST205' || error.message?.includes('fichas_leads'))) {
-        cachedFichasTableName = 'fichas_lead';
-        const resFallback = await client
-          .from('fichas_lead')
-          .update({ deleted_at: nowIso, updated_at: nowIso })
-          .eq('id', uuid);
-        error = resFallback.error;
-      }
-
       if (error) {
         console.error('Erro ao efetuar soft delete na Ficha do Lead:', error);
         throw error;
@@ -1104,15 +1072,6 @@ export const supabaseService = {
         .from(tableName)
         .update({ deleted_at: nowIso, updated_at: nowIso })
         .eq('lead_id', uuid);
-
-      if (error && (error.code === 'PGRST205' || error.message?.includes('fichas_leads'))) {
-        cachedFichasTableName = 'fichas_lead';
-        const resFallback = await client
-          .from('fichas_lead')
-          .update({ deleted_at: nowIso, updated_at: nowIso })
-          .eq('lead_id', uuid);
-        error = resFallback.error;
-      }
 
       if (error) {
         console.error('Erro ao efetuar soft delete na Ficha do Lead (por lead_id):', error);
@@ -1409,11 +1368,6 @@ export const supabaseService = {
         ]);
 
         let resFichas = resFichasRaw;
-        if (resFichas.error && (resFichas.error.code === 'PGRST205' || resFichas.error.message?.includes('fichas_leads'))) {
-          cachedFichasTableName = 'fichas_lead';
-          resFichas = await client.from('fichas_lead').select('*').is('deleted_at', null);
-        }
-
         const rowsEmpresas = resEmpresas.data || [];
         const rowsLeads = resLeads.data || [];
         const rowsFichas = resFichas.data || [];
@@ -1554,11 +1508,6 @@ export const supabaseService = {
         const rowsFichas = params.fichas.map((f) => supabaseMapper.fichaToDb(f));
         let tableName = await getFichasTableName();
         let { error: errF } = await client.from(tableName).upsert(rowsFichas, { onConflict: 'id' });
-        if (errF && (errF.code === 'PGRST205' || errF.message?.includes('fichas_leads'))) {
-          cachedFichasTableName = 'fichas_lead';
-          const resF = await client.from('fichas_lead').upsert(rowsFichas, { onConflict: 'id' });
-          errF = resF.error;
-        }
         if (errF) {
           erros.push(`Erro em fichas: ${errF.message}`);
         } else {
@@ -1642,14 +1591,6 @@ export const supabaseService = {
         .from(tableNameFichas)
         .delete()
         .neq('id', '00000000-0000-0000-0000-000000000000');
-      if (errF && (errF.code === 'PGRST205' || errF.message?.includes('fichas_leads'))) {
-        cachedFichasTableName = 'fichas_lead';
-        const resF = await client
-          .from('fichas_lead')
-          .delete()
-          .neq('id', '00000000-0000-0000-0000-000000000000');
-        errF = resF.error;
-      }
       if (errF) erros.push(`Erro ao limpar fichas: ${errF.message}`);
 
       const { error: errL } = await client
@@ -2648,16 +2589,19 @@ export async function atualizarStatusTarefaSupabase(
         .eq('id', tarefaId);
 
       if (error && (error.code === '42703' || error.message?.includes('does not exist') || error.message?.includes('column'))) {
-        await client
+        const retry = await client
           .from('tarefas')
           .update({
             status: statusUpper,
             updated_at: nowIso,
           })
           .eq('id', tarefaId);
+        error = retry.error;
       }
+      if (error) throw error;
     } catch (e) {
-      console.warn('Erro ao atualizar tarefa no Supabase:', e);
+      console.error('Erro ao atualizar tarefa no Supabase:', e);
+      throw e;
     }
   }
 
@@ -2704,12 +2648,14 @@ export async function excluirTarefaSupabase(tarefaId: string): Promise<boolean> 
   // 2. Soft-delete no Supabase
   if (client) {
     try {
-      await client
+      const { error } = await client
         .from('tarefas')
         .update({ deleted_at: nowIso, updated_at: nowIso })
         .eq('id', tarefaId);
+      if (error) throw error;
     } catch (e) {
-      console.warn('Erro ao fazer soft delete de tarefa no Supabase:', e);
+      console.error('Erro ao fazer soft delete de tarefa no Supabase:', e);
+      throw e;
     }
   }
 
