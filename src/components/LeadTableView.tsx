@@ -205,7 +205,12 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
     const situacao = leadAtual.situacao;
     const etapaArmazenada = leadAtual.etapaPorSituacao?.[situacao];
     const res = avancarProximaEtapa(situacao, etapaArmazenada);
-    await definirEtapaPorSituacao(leadAtual.id, situacao, res.proximaEtapa);
+    const r = await definirEtapaPorSituacao(leadAtual.id, situacao, res.proximaEtapa);
+    if (!r.ok) {
+      setFeedbackToast(`Não foi possível salvar: ${(r as any)?.erro || 'tente novamente'}`);
+      setTimeout(() => setFeedbackToast(null), 4500);
+      return;
+    }
     setModalEtapaLead(null);
     setFeedbackToast(
       res.todasConcluidas
@@ -220,7 +225,12 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
     if (!modalEtapaLead || !etapaManualSelecionada) return;
     const leadAtual = leads.find((l) => l.id === modalEtapaLead.id) || modalEtapaLead;
     const situacao = leadAtual.situacao;
-    await definirEtapaPorSituacao(leadAtual.id, situacao, etapaManualSelecionada);
+    const r = await definirEtapaPorSituacao(leadAtual.id, situacao, etapaManualSelecionada);
+    if (!r.ok) {
+      setFeedbackToast(`Não foi possível salvar: ${(r as any)?.erro || 'tente novamente'}`);
+      setTimeout(() => setFeedbackToast(null), 4500);
+      return;
+    }
     setModalEtapaLead(null);
     setFeedbackToast(`Etapa de ${leadAtual.nome} alterada para: ${etapaManualSelecionada}`);
     setTimeout(() => setFeedbackToast(null), 3200);
@@ -232,7 +242,12 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
     const leadAtual = leads.find((l) => l.id === modalEtapaLead.id) || modalEtapaLead;
     const situacao = leadAtual.situacao;
     const primeira = reiniciarCadencia(situacao);
-    await definirEtapaPorSituacao(leadAtual.id, situacao, primeira);
+    const r = await definirEtapaPorSituacao(leadAtual.id, situacao, primeira);
+    if (!r.ok) {
+      setFeedbackToast(`Não foi possível salvar: ${(r as any)?.erro || 'tente novamente'}`);
+      setTimeout(() => setFeedbackToast(null), 4500);
+      return;
+    }
     setModalEtapaLead(null);
     setFeedbackToast(`Cadência reiniciada para ${leadAtual.nome}.`);
     setTimeout(() => setFeedbackToast(null), 3200);

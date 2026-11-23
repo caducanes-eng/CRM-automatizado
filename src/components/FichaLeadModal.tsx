@@ -643,8 +643,14 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
   const handleConcluirProximaEtapa = async () => {
     if (!activeLeadId || isSemEtapa) return;
     const res = avancarProximaEtapa(situacao, etapaArmazenada);
+    const etapaAnterior = etapa;
     setEtapa(res.proximaEtapa);
-    await definirEtapaPorSituacao(activeLeadId, situacao, res.proximaEtapa);
+    const r = await definirEtapaPorSituacao(activeLeadId, situacao, res.proximaEtapa);
+    if (!r.ok) {
+      setEtapa(etapaAnterior);
+      dispararFeedback(`Não foi possível salvar: ${r.erro || 'tente novamente'}`);
+      return;
+    }
     if (res.todasConcluidas) {
       dispararFeedback('Todas as etapas da cadência foram concluídas!');
     } else {
@@ -655,8 +661,14 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
   const handleReiniciarCadencia = async () => {
     if (!activeLeadId || isSemEtapa) return;
     const primeira = reiniciarCadencia(situacao);
+    const etapaAnterior = etapa;
     setEtapa(primeira);
-    await definirEtapaPorSituacao(activeLeadId, situacao, primeira);
+    const r = await definirEtapaPorSituacao(activeLeadId, situacao, primeira);
+    if (!r.ok) {
+      setEtapa(etapaAnterior);
+      dispararFeedback(`Não foi possível salvar: ${r.erro || 'tente novamente'}`);
+      return;
+    }
     dispararFeedback('Cadência reiniciada a partir do primeiro contato.');
   };
 
@@ -1095,8 +1107,14 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                             onChange={async (e) => {
                               const novaEtapa = e.target.value;
                               if (!novaEtapa || !activeLeadId) return;
+                              const etapaAnterior = etapa;
                               setEtapa(novaEtapa);
-                              await definirEtapaPorSituacao(activeLeadId, situacao, novaEtapa);
+                              const r = await definirEtapaPorSituacao(activeLeadId, situacao, novaEtapa);
+                              if (!r.ok) {
+                                setEtapa(etapaAnterior);
+                                dispararFeedback(`Não foi possível salvar: ${r.erro || 'tente novamente'}`);
+                                return;
+                              }
                               dispararFeedback(`Etapa atualizada para: ${novaEtapa}`);
                             }}
                             className="w-full h-7 px-1.5 text-xs font-semibold rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:ring-1 focus:ring-[#5C3A22] focus:outline-hidden cursor-pointer shadow-2xs truncate"
@@ -2261,10 +2279,10 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                         onChange={(e) => setTarefaFichaPrioridade(e.target.value as any)}
                         className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:outline-hidden cursor-pointer"
                       >
-                        <option value="baixa">Baixa</option>
+                        <option value="BAIXA">Baixa</option>
                         <option value="MEDIA">Média</option>
-                        <option value="alta">Alta</option>
-                        <option value="urgente">Urgente</option>
+                        <option value="ALTA">Alta</option>
+                        <option value="URGENTE">Urgente</option>
                       </select>
                     </div>
                   </div>

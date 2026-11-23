@@ -609,15 +609,16 @@ export const TarefasView: React.FC = () => {
 
                 <div>
                   <label htmlFor="select-lead-tarefa" className="block text-xs font-bold uppercase tracking-wider text-[#1A1A1A] mb-1">
-                    Vincular a Paciente (Opcional)
+                    Paciente *
                   </label>
                   <select
                     id="select-lead-tarefa"
+                    required
                     value={leadIdNova}
                     onChange={(e) => setLeadIdNova(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-[#F8F7F4] border border-[#D9D6D0] rounded-sm focus:outline-hidden focus:bg-white focus:border-[#5C3A22]"
                   >
-                    <option value="">Nenhum (Tarefa geral da clínica)</option>
+                    <option value="" disabled>Escolha o paciente</option>
                     {leads.map((l) => (
                       <option key={l.id} value={l.id}>
                         {l.nome} ({l.situacao})

@@ -102,7 +102,12 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
     const leadAtual = leads.find((l) => l.id === modalEtapaLead.id) || modalEtapaLead;
     const etapaArmazenada = leadAtual.etapaPorSituacao?.[situacao];
     const res = avancarProximaEtapa(situacao, etapaArmazenada);
-    await definirEtapaPorSituacao(leadAtual.id, situacao, res.proximaEtapa);
+    const r = await definirEtapaPorSituacao(leadAtual.id, situacao, res.proximaEtapa);
+    if (!r.ok) {
+      setFeedbackToast(`Não foi possível salvar: ${(r as any)?.erro || 'tente novamente'}`);
+      setTimeout(() => setFeedbackToast(null), 4500);
+      return;
+    }
     setModalEtapaLead(null);
     setFeedbackToast(
       res.todasConcluidas
@@ -117,7 +122,12 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
     if (!modalEtapaLead) return;
     const leadAtual = leads.find((l) => l.id === modalEtapaLead.id) || modalEtapaLead;
     const primeira = reiniciarCadencia(situacao);
-    await definirEtapaPorSituacao(leadAtual.id, situacao, primeira);
+    const r = await definirEtapaPorSituacao(leadAtual.id, situacao, primeira);
+    if (!r.ok) {
+      setFeedbackToast(`Não foi possível salvar: ${(r as any)?.erro || 'tente novamente'}`);
+      setTimeout(() => setFeedbackToast(null), 4500);
+      return;
+    }
     setModalEtapaLead(null);
     setFeedbackToast(`Cadência reiniciada para ${leadAtual.nome}.`);
     setTimeout(() => setFeedbackToast(null), 3200);
