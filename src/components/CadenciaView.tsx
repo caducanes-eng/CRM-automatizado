@@ -35,6 +35,7 @@ import {
   calcularEtapaEsperada,
   calcularStatusCadencia,
   verificarSeDeveContatarHoje,
+  estaForaDaCadencia,
   obterOpcoesCadenciaPorSituacao,
   obterDataEntradaEfetiva,
   StatusCadencia,
@@ -145,7 +146,9 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
 
   // 1. Filtrar SOMENTE leads cuja situação atual seja a situação da tela
   const leadsDaSituacao = useMemo(() => {
-    return leads.filter((lead) => lead.situacao === situacao && !lead.deleted_at);
+    return leads.filter(
+      (lead) => lead.situacao === situacao && !lead.deleted_at && !estaForaDaCadencia(lead.statusVenda)
+    );
   }, [leads, situacao]);
 
   // 2. Mapeamento enriquecido com cálculos de cadência para cada lead
@@ -164,7 +167,8 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
         statusCadencia,
         etapaArmazenada,
         dataUltimoContatoEfetiva,
-        lead.dataUltimaAcao
+        lead.dataUltimaAcao,
+        lead.statusVenda
       );
 
       return {

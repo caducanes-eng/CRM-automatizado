@@ -50,6 +50,7 @@ import {
   calcularEtapaEsperada,
   calcularStatusCadencia,
   verificarSeDeveContatarHoje,
+  estaForaDaCadencia,
   obterDataEntradaEfetiva,
   StatusCadencia,
   obterOpcoesCadenciaPorSituacao,
@@ -392,11 +393,13 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
         statusCadencia,
         etapaAtual,
         dataUltimoContatoEfetiva,
-        lead.dataUltimaAcao
+        lead.dataUltimaAcao,
+        lead.statusVenda
       );
 
       return {
         ...lead,
+        foraDaCadencia: estaForaDaCadencia(lead.statusVenda),
         diasCorridos,
         etapaAtual,
         etapaEsperada,
@@ -407,7 +410,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
   }, [leads]);
 
   const contagensCadencia = useMemo(() => {
-    const validos = leadsComCadencia.filter((l) => !l.deleted_at);
+    const validos = leadsComCadencia.filter((l) => !l.deleted_at && !l.foraDaCadencia);
     const total = validos.length;
     const contatarHoje = validos.filter((l) => l.deveContatarHoje).length;
     const emDia = validos.filter((l) => l.statusCadencia === 'Em dia').length;
@@ -483,6 +486,9 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
 
         // Filtro por Cadência (Contatar hoje / Em dia / Atrasados / Adiantados / Sem etapa)
         if (filtroCadencia !== 'todos') {
+          if (lead.foraDaCadencia) {
+            return false;
+          }
           if (filtroCadencia === 'contatar_hoje' && !lead.deveContatarHoje) {
             return false;
           }

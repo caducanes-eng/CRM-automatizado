@@ -428,6 +428,14 @@ export function calcularStatusCadencia(
 }
 
 /**
+ * Lead Perdido ou com Venda feita não segue mais cadência: sai das telas de cadência
+ * e da lista "Contatar hoje" (T-05).
+ */
+export function estaForaDaCadencia(statusVenda?: string | null): boolean {
+  return statusVenda === 'Perdido' || statusVenda === 'Venda feita';
+}
+
+/**
  * Verifica se a paciente deve ser contatada no dia de hoje.
  * Considera:
  * - Se a paciente JÁ recebeu contato ou ação hoje (dataUltimoContato / dataUltimaAcao === hoje; ambos só mudam em "Concluir etapa" e "Registrar contato") -> NÃO deve contatar de novo hoje
@@ -443,8 +451,13 @@ export function verificarSeDeveContatarHoje(
   statusCadencia: StatusCadencia,
   etapaAtual?: string | null,
   dataUltimoContato?: string | null,
-  dataUltimaAcao?: string | null
+  dataUltimaAcao?: string | null,
+  statusVenda?: string | null
 ): boolean {
+  if (estaForaDaCadencia(statusVenda)) {
+    return false;
+  }
+
   // Situações sem fluxo de cadência (atendimento já agendado na agenda)
   if (situacao === 'Consulta agendada' || situacao === 'Procedimento agendado') {
     return false;
