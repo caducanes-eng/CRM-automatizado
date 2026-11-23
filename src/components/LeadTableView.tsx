@@ -583,7 +583,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
     <div id="bloco-tabela-leads" className="bg-white rounded-sm border border-[#D9D6D0] shadow-xs overflow-hidden">
       {/* Indicadores Rápidos de Cadência e Contato */}
       <div className="p-4 sm:p-5 border-b border-[#D9D6D0] bg-[#FAF8F5]/60">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {/* Contatar Hoje */}
           <button
             id="card-filtro-leads-contatar-hoje"
@@ -671,28 +671,6 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({ onOpenFicha, onOpe
             </div>
             <p className="text-xl sm:text-2xl font-bold text-[#5C3A22] mt-1">
               {contagensCadencia.adiantados}
-            </p>
-          </button>
-
-          {/* Sem Etapa */}
-          <button
-            id="card-filtro-leads-sem-etapa"
-            type="button"
-            onClick={() => setFiltroCadencia(filtroCadencia === 'sem_etapa' ? 'todos' : 'sem_etapa')}
-            className={`p-3 rounded-sm border text-left transition-all cursor-pointer ${
-              filtroCadencia === 'sem_etapa'
-                ? 'bg-white border-[#8F887E] ring-1 ring-[#8F887E] shadow-xs'
-                : 'bg-white/80 border-[#D9D6D0] hover:bg-[#F2EFEA]'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-[#8F887E] uppercase tracking-wider">
-                Sem Etapa
-              </span>
-              <AlertTriangle className="w-4 h-4 text-[#8F887E]" />
-            </div>
-            <p className="text-xl sm:text-2xl font-bold text-[#1A1A1A] mt-1">
-              {contagensCadencia.semEtapa}
             </p>
           </button>
         </div>

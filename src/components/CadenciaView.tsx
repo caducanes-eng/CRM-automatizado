@@ -323,7 +323,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
     >
       {/* RESUMO DE STATUS DA CADÊNCIA */}
       <div className="bg-white rounded-sm p-4 sm:p-5 border border-[#D9D6D0] shadow-xs">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {/* Contatar Hoje */}
           <button
             id="card-filtro-contatar-hoje"
@@ -411,32 +411,6 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
               {metricas.adiantados}
             </p>
           </button>
-
-          {/* Sem Etapa */}
-          <button
-            id="card-filtro-sem-etapa"
-            type="button"
-            onClick={() =>
-              setFiltroStatus(
-                filtroStatus === 'Sem etapa selecionada' ? 'Todos' : 'Sem etapa selecionada'
-              )
-            }
-            className={`p-3 rounded-sm border text-left transition-all cursor-pointer ${
-              filtroStatus === 'Sem etapa selecionada'
-                ? 'bg-white border-[#8F887E] ring-1 ring-[#8F887E] shadow-xs'
-                : 'bg-[#F2EFEA]/40 border-[#D9D6D0] hover:bg-[#F2EFEA]'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-[#8F887E] uppercase tracking-wider">
-                Sem Etapa
-              </span>
-              <AlertTriangle className="w-4 h-4 text-[#8F887E]" />
-            </div>
-            <p className="text-xl sm:text-2xl font-bold text-[#1A1A1A] mt-1">
-              {metricas.semEtapa}
-            </p>
-          </button>
         </div>
       </div>
 
@@ -480,7 +454,6 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
             <option value="Em dia">Em dia ({metricas.emDia})</option>
             <option value="Atrasado">Atrasados ({metricas.atrasados})</option>
             <option value="Adiantado">Adiantados ({metricas.adiantados})</option>
-            <option value="Sem etapa selecionada">Sem etapa ({metricas.semEtapa})</option>
           </select>
         </div>
       </div>
@@ -717,7 +690,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
                             type="button"
                             onClick={() => {
                               setModalAgendarTarefaLead(lead);
-                              setDescTarefaAgendada(`Acompanhamento da cadência [${situacao}] - ${lead.etapaAtual || 'Contato'}`);
+                              setDescTarefaAgendada(`Acompanhamento da cadência [${situacao}] - ${lead.proximaEtapa || 'Contato'}`);
                             }}
                             className="inline-flex items-center gap-1 px-2 py-1 rounded-sm bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[10px] uppercase tracking-wider transition-colors cursor-pointer"
                             title="Agendar tarefa no Supabase para este paciente"
