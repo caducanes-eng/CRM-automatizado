@@ -160,23 +160,20 @@ function calcularLeadAtualizado(
     dataEntradaReativacao = lead.dataEntradaSituacao?.['Reativação'] || lead.dataEntrada || hoje;
   }
 
-  // Rastreamento de data do último contato / ação
-  const stepChanged = Boolean(dados.etapaPorSituacao);
+  // Rastreamento de data do último contato / ação (regra em utils/cadencia.ts).
+  // Mudar a etapa, o telefone, o responsável ou salvar a ficha NÃO conta como contato:
+  // só quem passa dataUltimoContato/dataUltimaAcao de forma explícita ("Concluir etapa" e "Registrar contato").
   const dataUltimoContato =
-    dados.dataUltimoContato !== undefined
-      ? dados.dataUltimoContato
-      : stepChanged
-      ? hoje
-      : lead.dataUltimoContato;
+    dados.dataUltimoContato !== undefined ? dados.dataUltimoContato : lead.dataUltimoContato;
 
   const currentSituacao = dados.situacao || lead.situacao;
   const dataUltimoContatoPorSituacao = {
     ...(lead.dataUltimoContatoPorSituacao || {}),
-    ...(stepChanged || dados.dataUltimoContato ? { [currentSituacao]: hoje } : {}),
+    ...(dados.dataUltimoContato ? { [currentSituacao]: hoje } : {}),
     ...(dados.dataUltimoContatoPorSituacao || {}),
   };
 
-  const dataUltimaAcao = dados.dataUltimaAcao || timestamp;
+  const dataUltimaAcao = dados.dataUltimaAcao !== undefined ? dados.dataUltimaAcao : lead.dataUltimaAcao;
 
   const eId = normalizarUuid(lead.empresaId || (lead as any).empresa_id || empresaIdFallback);
   const leadAtualizado: Lead = {

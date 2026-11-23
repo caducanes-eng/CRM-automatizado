@@ -1,6 +1,13 @@
 import { SituacaoLead } from '../types';
 
 /**
+ * REGRA DE CONTATO (confirmada pelo Carlos, 22/11/2026):
+ * só "Concluir etapa" e "Registrar contato" contam como contato e atualizam dataUltimoContato / dataUltimaAcao.
+ * Editar telefone, responsável, interesse, situação, etapa pela ficha ou apenas salvar a ficha NÃO conta,
+ * para que a lista "Contatar hoje" não esconda um atraso real.
+ */
+
+/**
  * Definições das Cadências Oficiais por Situação
  */
 
@@ -423,7 +430,7 @@ export function calcularStatusCadencia(
 /**
  * Verifica se a paciente deve ser contatada no dia de hoje.
  * Considera:
- * - Se a paciente JÁ recebeu contato ou ação hoje (dataUltimoContato / dataUltimaAcao === hoje) -> NÃO deve contatar de novo hoje
+ * - Se a paciente JÁ recebeu contato ou ação hoje (dataUltimoContato / dataUltimaAcao === hoje; ambos só mudam em "Concluir etapa" e "Registrar contato") -> NÃO deve contatar de novo hoje
  * - Situações com agendamento direto (Consulta/Procedimento agendado) não dependem de cadência diária
  * - Leads com todas as etapas concluídas -> false
  * - Leads atrasados que ainda NÃO foram contatados hoje -> true

@@ -420,7 +420,14 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
     if (e) e.preventDefault();
     if (!activeLeadId || !nome.trim()) return;
 
+    // Mudar a etapa pela ficha só grava a etapa; NÃO conta como contato (ver regra em utils/cadencia.ts).
+    const etapaSemContato =
+      situacao !== 'Consulta agendada' &&
+      situacao !== 'Procedimento agendado' &&
+      etapa.trim() !== '' &&
+      etapa.trim() !== (lead?.etapaPorSituacao?.[situacao] || '');
     const resLead = await atualizarLead(activeLeadId, {
+      ...(etapaSemContato ? { etapaPorSituacao: { [situacao]: etapa.trim() } } : {}),
       nome: nome.trim(),
       situacao,
       interesse: interesse.trim(),
@@ -440,12 +447,6 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
       mensagemLembrete24hEnviadaPor: mensagemLembrete24hEnviadaPor || undefined,
     });
     if (!resLead.ok) return; // aviso já mostrado; mantém a ficha aberta em edição
-
-    const isSemEtapa =
-      situacao === 'Consulta agendada' || situacao === 'Procedimento agendado';
-    if (!isSemEtapa) {
-      await definirEtapaPorSituacao(activeLeadId, situacao, etapa.trim());
-    }
 
     // Se mudou para Perdido e já tiver campos preenchidos, sincroniza
     if (statusVenda === 'Perdido') {
@@ -465,7 +466,14 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
     if (!activeLeadId || !nome.trim()) return;
 
     // 1. Atualizar Lead
+    // Mudar a etapa pela ficha só grava a etapa; NÃO conta como contato (ver regra em utils/cadencia.ts).
+    const etapaSemContato =
+      situacao !== 'Consulta agendada' &&
+      situacao !== 'Procedimento agendado' &&
+      etapa.trim() !== '' &&
+      etapa.trim() !== (lead?.etapaPorSituacao?.[situacao] || '');
     const resLead = await atualizarLead(activeLeadId, {
+      ...(etapaSemContato ? { etapaPorSituacao: { [situacao]: etapa.trim() } } : {}),
       nome: nome.trim(),
       situacao,
       interesse: interesse.trim(),
@@ -485,13 +493,6 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
       mensagemLembrete24hEnviadaPor: mensagemLembrete24hEnviadaPor || undefined,
     });
     if (!resLead.ok) return; // aviso já mostrado; mantém a ficha aberta em edição
-
-    // 2. Atualizar Etapa
-    const isSemEtapa =
-      situacao === 'Consulta agendada' || situacao === 'Procedimento agendado';
-    if (!isSemEtapa) {
-      definirEtapaPorSituacao(activeLeadId, situacao, etapa.trim());
-    }
 
     // 3. Atualizar FichaLead
     const resFicha = await atualizarFichaLead(activeLeadId, {
