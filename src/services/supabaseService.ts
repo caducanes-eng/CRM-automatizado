@@ -1,3 +1,4 @@
+import { normalizarStatusTarefa, normalizarPrioridadeTarefa } from '../utils/tarefas';
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
 import { firestoreService } from './firestoreService';
 import {
@@ -2357,14 +2358,8 @@ export async function fetchTarefasPorEmpresa(empresaId?: string): Promise<Tarefa
           const rawVencimento = t.data_agendada || t.data_vencimento || t.created_at || new Date().toISOString();
           const dataAgendadaVal = typeof rawVencimento === 'string' ? rawVencimento.split('T')[0] : new Date().toISOString().split('T')[0];
           const horaAgendadaVal = t.hora_agendada || (typeof rawVencimento === 'string' && rawVencimento.includes('T') ? rawVencimento.split('T')[1].slice(0, 5) : '14:00');
-          const statusLower = (t.status ? String(t.status).toLowerCase() : 'pendente') as StatusTarefa;
-          const prioridadeLower: PrioridadeTarefa = (() => {
-            const p = t.prioridade ? String(t.prioridade).toLowerCase() : 'normal';
-            if (p === 'baixa') return 'baixa';
-            if (p === 'alta') return 'alta';
-            if (p === 'urgente') return 'urgente';
-            return 'normal';
-          })();
+          const statusNorm = normalizarStatusTarefa(t.status);
+          const prioridadeNorm = normalizarPrioridadeTarefa(t.prioridade);
 
           tarefasMap.set(t.id, {
             id: t.id,
@@ -2388,8 +2383,8 @@ export async function fetchTarefasPorEmpresa(empresaId?: string): Promise<Tarefa
             data_agendada: dataAgendadaVal,
             horaAgendada: horaAgendadaVal,
             hora_agendada: horaAgendadaVal,
-            status: statusLower === 'concluida' ? 'concluida' : statusLower === 'cancelada' ? 'cancelada' : 'pendente',
-            prioridade: prioridadeLower,
+            status: statusNorm,
+            prioridade: prioridadeNorm,
             dataConclusao: t.data_conclusao || null,
             data_conclusao: t.data_conclusao || null,
             usuarioConclusaoId: t.usuario_conclusao_id || null,
@@ -2427,7 +2422,11 @@ export async function fetchTarefasPorEmpresa(empresaId?: string): Promise<Tarefa
         const localList: Tarefa[] = JSON.parse(raw);
         for (const lt of localList) {
           if (!tarefasMap.has(lt.id)) {
-            tarefasMap.set(lt.id, lt);
+            tarefasMap.set(lt.id, {
+              ...lt,
+              status: normalizarStatusTarefa(lt.status),
+              prioridade: normalizarPrioridadeTarefa(lt.prioridade),
+            });
           }
         }
       }
@@ -2480,13 +2479,7 @@ export async function criarTarefaSupabase(
     }
   } catch (e) {}
 
-  const prioridadeUpper = (() => {
-    const p = String(payload.prioridade || '').toUpperCase();
-    if (p === 'ALTA') return 'ALTA';
-    if (p === 'URGENTE') return 'URGENTE';
-    if (p === 'BAIXA') return 'BAIXA';
-    return 'MEDIA';
-  })();
+  const prioridadeUpper = normalizarPrioridadeTarefa(payload.prioridade);
 
   const novaTarefa: Tarefa = {
     id,
@@ -2510,8 +2503,8 @@ export async function criarTarefaSupabase(
     data_agendada: dataAgendadaVal,
     horaAgendada: horaAgendadaVal,
     hora_agendada: horaAgendadaVal,
-    status: 'pendente',
-    prioridade: payload.prioridade || 'normal',
+    status: 'PENDENTE',
+    prioridade: prioridadeUpper,
   };
 
   // 1. Gravação direta no Firestore (banco de dados em nuvem central)
@@ -2629,7 +2622,7 @@ export async function atualizarStatusTarefaSupabase(
 ): Promise<boolean> {
   const client = getSupabaseClient();
   const nowIso = new Date().toISOString();
-  const statusUpper = status === 'concluida' ? 'CONCLUIDA' : status === 'cancelada' ? 'CANCELADA' : 'PENDENTE';
+  const statusUpper = normalizarStatusTarefa(status);
 
   // 1. Atualizar no Firestore
   try {
@@ -2644,8 +2637,8 @@ export async function atualizarStatusTarefaSupabase(
       const updates: any = {
         status: statusUpper,
         updated_at: nowIso,
-        data_conclusao: status === 'concluida' ? nowIso : null,
-        usuario_conclusao_id: status === 'concluida' ? (usuarioId ? normalizarUuid(usuarioId) : null) : null,
+        data_conclusao: status === 'CONCLUIDA' ? nowIso : null,
+        usuario_conclusao_id: status === 'CONCLUIDA' ? (usuarioId ? normalizarUuid(usuarioId) : null) : null,
         observacao_conclusao: observacaoConclusao || null,
       };
 
@@ -2680,9 +2673,9 @@ export async function atualizarStatusTarefaSupabase(
           if (idx >= 0) {
             list[idx] = {
               ...list[idx],
-              status,
-              dataConclusao: status === 'concluida' ? nowIso : null,
-              data_conclusao: status === 'concluida' ? nowIso : null,
+              status: normalizarStatusTarefa(status),
+              dataConclusao: status === 'CONCLUIDA' ? nowIso : null,
+              data_conclusao: status === 'CONCLUIDA' ? nowIso : null,
               observacaoConclusao: observacaoConclusao || list[idx].observacaoConclusao,
               observacao_conclusao: observacaoConclusao || list[idx].observacao_conclusao,
               updated_at: nowIso,
@@ -2749,12 +2742,12 @@ export function calcularIndicadoresTarefas(tarefas: Tarefa[]): IndicadoresTarefa
   for (const t of tarefas) {
     if (t.deleted_at) continue;
 
-    if (t.status === 'concluida') {
+    if (t.status === 'CONCLUIDA') {
       tarefasConcluidas++;
       continue;
     }
 
-    if (t.status === 'pendente') {
+    if (t.status === 'PENDENTE') {
       totalPendentes++;
       const dataAgendada = (t.dataAgendada || t.data_agendada || '').slice(0, 10);
       if (!dataAgendada || dataAgendada === hoje) {

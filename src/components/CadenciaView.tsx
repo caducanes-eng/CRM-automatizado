@@ -926,7 +926,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
                     etapaCadencia: modalAgendarTarefaLead.etapaPorSituacao?.[situacao] || 'Cadência',
                     dataAgendada: dataTarefaAgendada,
                     horaAgendada: horaTarefaAgendada || undefined,
-                    prioridade: 'alta',
+                    prioridade: 'ALTA',
                   });
                   if (!resTarefa.ok) {
                     setFeedbackToast(`A tarefa NÃO foi salva: ${resTarefa.erro}`);

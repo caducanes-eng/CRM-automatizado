@@ -53,6 +53,7 @@ import {
 import { SEED_USUARIOS } from '../data/seedData';
 import { ID_EMPRESA_PADRAO, normalizarUuid } from '../services/supabaseService';
 import { formatarMoeda, formatarDataBR, obterDataHoje } from '../utils/formatters';
+import type { PrioridadeTarefa } from '../types';
 import {
   obterOpcoesCadenciaPorSituacao,
   obterProximaEtapa,
@@ -174,7 +175,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
   const [tarefaFichaDesc, setTarefaFichaDesc] = useState('');
   const [tarefaFichaData, setTarefaFichaData] = useState(() => new Date().toISOString().slice(0, 10));
   const [tarefaFichaHora, setTarefaFichaHora] = useState('14:00');
-  const [tarefaFichaPrioridade, setTarefaFichaPrioridade] = useState<'baixa' | 'media' | 'alta' | 'urgente'>('alta');
+  const [tarefaFichaPrioridade, setTarefaFichaPrioridade] = useState<PrioridadeTarefa>('ALTA');
   const [salvandoTarefaFicha, setSalvandoTarefaFicha] = useState(false);
 
   // Modo de visualização expandida (tela cheia)
@@ -847,7 +848,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
               <CheckSquare className="w-4 h-4" />
               <span>Tarefas & Agendamentos</span>
               <span className="px-2 py-0.5 rounded-sm text-[10px] sm:text-[11px] bg-amber-100 text-amber-900 border border-amber-300 font-bold">
-                {tarefasDoLead.filter(t => t.status === 'pendente').length}
+                {tarefasDoLead.filter(t => t.status === 'PENDENTE').length}
               </span>
             </button>
           </div>
@@ -2123,8 +2124,8 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                     Tarefas e Agendamentos no Banco de Dados
                   </span>
                   <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                    {tarefasDoLead.filter((t) => t.status === 'pendente').length} pendente(s) •{' '}
-                    {tarefasDoLead.filter((t) => t.status === 'concluida').length} concluída(s)
+                    {tarefasDoLead.filter((t) => t.status === 'PENDENTE').length} pendente(s) •{' '}
+                    {tarefasDoLead.filter((t) => t.status === 'CONCLUIDA').length} concluída(s)
                   </h3>
                   <p className="text-xs text-[#D9D6D0]">
                     Controle de rotinas operacionais, contatos de follow-up e compromissos deste paciente salvos na nuvem
@@ -2261,7 +2262,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                         className="w-full h-9 px-3 text-xs rounded-sm border border-[#D9D6D0] bg-white text-[#1A1A1A] focus:border-[#5C3A22] focus:outline-hidden cursor-pointer"
                       >
                         <option value="baixa">Baixa</option>
-                        <option value="media">Média</option>
+                        <option value="MEDIA">Média</option>
                         <option value="alta">Alta</option>
                         <option value="urgente">Urgente</option>
                       </select>
@@ -2313,8 +2314,8 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                 ) : (
                   <div className="divide-y divide-[#D9D6D0] border border-[#D9D6D0] rounded-sm overflow-hidden bg-white">
                     {tarefasDoLead.map((t) => {
-                      const isConcluida = t.status === 'concluida';
-                      const isCancelada = t.status === 'cancelada';
+                      const isConcluida = t.status === 'CONCLUIDA';
+                      const isCancelada = t.status === 'CANCELADA';
 
                       return (
                         <div
@@ -2334,9 +2335,9 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                               </span>
                               <span
                                 className={`px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase ${
-                                  t.prioridade === 'urgente'
+                                  t.prioridade === 'URGENTE'
                                     ? 'bg-rose-100 text-rose-800'
-                                    : t.prioridade === 'alta'
+                                    : t.prioridade === 'ALTA'
                                     ? 'bg-amber-100 text-amber-800'
                                     : 'bg-zinc-100 text-zinc-700'
                                 }`}
@@ -2368,10 +2369,10 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
-                            {t.status === 'pendente' && (
+                            {t.status === 'PENDENTE' && (
                               <button
                                 type="button"
-                                onClick={() => atualizarStatusTarefa(t.id, 'concluida')}
+                                onClick={() => atualizarStatusTarefa(t.id, 'CONCLUIDA')}
                                 className="px-2.5 py-1 text-[11px] font-bold bg-emerald-700 hover:bg-emerald-800 text-white rounded-sm transition-colors cursor-pointer flex items-center gap-1"
                               >
                                 <Check className="w-3 h-3" />
@@ -2379,10 +2380,10 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                               </button>
                             )}
 
-                            {t.status === 'concluida' && (
+                            {t.status === 'CONCLUIDA' && (
                               <button
                                 type="button"
-                                onClick={() => atualizarStatusTarefa(t.id, 'pendente')}
+                                onClick={() => atualizarStatusTarefa(t.id, 'PENDENTE')}
                                 className="px-2 py-1 text-[11px] font-bold text-[#6E6E6E] hover:text-[#1A1A1A] border border-[#D9D6D0] rounded-sm transition-colors cursor-pointer"
                               >
                                 Reabrir

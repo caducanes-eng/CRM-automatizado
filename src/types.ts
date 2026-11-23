@@ -904,8 +904,9 @@ export interface KpiSecretariaMensal {
 /**
  * ENTIDADE "Tarefa" (Agendamento de tarefas e cadências operacionais)
  */
-export type StatusTarefa = 'pendente' | 'concluida' | 'cancelada';
-export type PrioridadeTarefa = 'baixa' | 'normal' | 'alta' | 'urgente';
+// Mesmo vocabulário do banco (public.tarefas), em maiúsculas. Conversão de valores antigos: utils/tarefas.ts
+export type StatusTarefa = 'PENDENTE' | 'CONCLUIDA' | 'CANCELADA';
+export type PrioridadeTarefa = 'BAIXA' | 'MEDIA' | 'ALTA' | 'URGENTE';
 
 export interface Tarefa extends BaseEntity {
   empresaId?: string;

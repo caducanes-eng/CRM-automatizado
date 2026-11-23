@@ -57,7 +57,7 @@ export const TarefasView: React.FC = () => {
   const [descricaoNova, setDescricaoNova] = useState('');
   const [dataNova, setDataNova] = useState(() => new Date().toISOString().slice(0, 10));
   const [horaNova, setHoraNova] = useState('14:00');
-  const [prioridadeNova, setPrioridadeNova] = useState<PrioridadeTarefa>('normal');
+  const [prioridadeNova, setPrioridadeNova] = useState<PrioridadeTarefa>('MEDIA');
   const [leadIdNova, setLeadIdNova] = useState<string>('');
   const [salvandoTarefa, setSalvandoTarefa] = useState(false);
 
@@ -104,13 +104,13 @@ export const TarefasView: React.FC = () => {
     return tarefasProcessadas.filter((t) => {
       // 1. Filtro de Abas
       if (filtroData === 'hoje') {
-        if (t.status !== 'pendente' || t.categoriaTempo !== 'hoje') return false;
+        if (t.status !== 'PENDENTE' || t.categoriaTempo !== 'hoje') return false;
       } else if (filtroData === 'atrasadas') {
-        if (t.status !== 'pendente' || t.categoriaTempo !== 'atrasada') return false;
+        if (t.status !== 'PENDENTE' || t.categoriaTempo !== 'atrasada') return false;
       } else if (filtroData === 'futuras') {
-        if (t.status !== 'pendente' || t.categoriaTempo !== 'futura') return false;
+        if (t.status !== 'PENDENTE' || t.categoriaTempo !== 'futura') return false;
       } else if (filtroData === 'concluidas') {
-        if (t.status !== 'concluida') return false;
+        if (t.status !== 'CONCLUIDA') return false;
       }
 
       // 2. Filtro de prioridade
@@ -170,7 +170,7 @@ export const TarefasView: React.FC = () => {
     if (!tarefaConcluindo) return;
     await atualizarStatusTarefa(
       tarefaConcluindo.id,
-      'concluida',
+      'CONCLUIDA',
       observacaoConclusao.trim() || undefined
     );
     setTarefaConcluindo(null);
@@ -180,7 +180,7 @@ export const TarefasView: React.FC = () => {
 
   // Reabrir tarefa
   const handleReabrirTarefa = async (tarefa: Tarefa) => {
-    await atualizarStatusTarefa(tarefa.id, 'pendente');
+    await atualizarStatusTarefa(tarefa.id, 'PENDENTE');
     dispararFeedback('Tarefa reaberta como pendente.');
   };
 
@@ -194,25 +194,25 @@ export const TarefasView: React.FC = () => {
 
   const getBadgePrioridade = (p: PrioridadeTarefa) => {
     switch (p) {
-      case 'urgente':
+      case 'URGENTE':
         return (
           <span className="px-2 py-0.5 rounded-xs text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-200">
             Urgente
           </span>
         );
-      case 'alta':
+      case 'ALTA':
         return (
           <span className="px-2 py-0.5 rounded-xs text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
             Alta
           </span>
         );
-      case 'baixa':
+      case 'BAIXA':
         return (
           <span className="px-2 py-0.5 rounded-xs text-[10px] font-bold uppercase tracking-wider bg-neutral-100 text-neutral-600 border border-neutral-200">
             Baixa
           </span>
         );
-      case 'normal':
+      case 'MEDIA':
       default:
         return (
           <span className="px-2 py-0.5 rounded-xs text-[10px] font-bold uppercase tracking-wider bg-sky-50 text-sky-800 border border-sky-200">
@@ -401,10 +401,10 @@ export const TarefasView: React.FC = () => {
             className="text-xs py-1.5 px-2 bg-[#F8F7F4] border border-[#D9D6D0] rounded-sm focus:outline-hidden focus:bg-white focus:border-[#5C3A22]"
           >
             <option value="todas">Todas</option>
-            <option value="urgente">Urgente</option>
-            <option value="alta">Alta</option>
-            <option value="normal">Normal</option>
-            <option value="baixa">Baixa</option>
+            <option value="URGENTE">Urgente</option>
+            <option value="ALTA">Alta</option>
+            <option value="MEDIA">Normal</option>
+            <option value="BAIXA">Baixa</option>
           </select>
         </div>
       </div>
@@ -424,7 +424,7 @@ export const TarefasView: React.FC = () => {
         ) : (
           <div className="divide-y divide-[#E5E2DC]">
             {tarefasFiltradas.map((tarefa) => {
-              const isConcluida = tarefa.status === 'concluida';
+              const isConcluida = tarefa.status === 'CONCLUIDA';
               const isAtrasada = tarefa.categoriaTempo === 'atrasada' && !isConcluida;
               const isHoje = tarefa.categoriaTempo === 'hoje' && !isConcluida;
 
@@ -665,10 +665,10 @@ export const TarefasView: React.FC = () => {
                     onChange={(e) => setPrioridadeNova(e.target.value as PrioridadeTarefa)}
                     className="w-full px-3 py-2 text-xs bg-[#F8F7F4] border border-[#D9D6D0] rounded-sm focus:outline-hidden focus:bg-white focus:border-[#5C3A22]"
                   >
-                    <option value="baixa">Baixa</option>
-                    <option value="normal">Normal</option>
-                    <option value="alta">Alta</option>
-                    <option value="urgente">Urgente</option>
+                    <option value="BAIXA">Baixa</option>
+                    <option value="MEDIA">Normal</option>
+                    <option value="ALTA">Alta</option>
+                    <option value="URGENTE">Urgente</option>
                   </select>
                 </div>
 

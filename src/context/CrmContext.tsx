@@ -1395,7 +1395,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return {
               ...t,
               status,
-              dataConclusao: status === 'concluida' ? nowIso : null,
+              dataConclusao: status === 'CONCLUIDA' ? nowIso : null,
               observacaoConclusao: observacaoConclusao || t.observacaoConclusao,
               updated_at: nowIso,
             };
