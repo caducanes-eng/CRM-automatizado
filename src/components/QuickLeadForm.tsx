@@ -79,14 +79,20 @@ export const QuickLeadForm: React.FC<QuickLeadFormProps> = ({ onLeadCreated, onO
     const valorNumerico = possivelValor ? parseFloat(possivelValor.replace(',', '.')) : 0;
     const eId = normalizarUuid(empresaAtivaId || ID_EMPRESA_PADRAO);
 
-    const novoLead = await criarLead({
-      empresaId: eId,
-      nome: nome.trim(),
-      situacao,
-      interesse: interesse.trim(),
-      possivelValor: isNaN(valorNumerico) ? 0 : valorNumerico,
-      responsavel,
-    });
+    let novoLead;
+    try {
+      novoLead = await criarLead({
+        empresaId: eId,
+        nome: nome.trim(),
+        situacao,
+        interesse: interesse.trim(),
+        possivelValor: isNaN(valorNumerico) ? 0 : valorNumerico,
+        responsavel,
+      });
+    } catch {
+      // O aviso de erro já foi mostrado; mantém o formulário preenchido para tentar de novo.
+      return;
+    }
 
     // Resetar campos do formulário para o próximo lead
     setNome('');

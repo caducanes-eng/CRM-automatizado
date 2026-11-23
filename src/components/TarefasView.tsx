@@ -138,7 +138,7 @@ export const TarefasView: React.FC = () => {
 
     setSalvandoTarefa(true);
     try {
-      await criarTarefa({
+      const res = await criarTarefa({
         titulo: tituloNova.trim(),
         descricao: descricaoNova.trim(),
         dataAgendada: dataNova,
@@ -147,6 +147,10 @@ export const TarefasView: React.FC = () => {
         leadId: leadIdNova || null,
         usuarioResponsavelId: user?.uid || null,
       });
+      if (!res.ok) {
+        dispararFeedback(`A tarefa NÃO foi salva: ${res.erro}`);
+        return;
+      }
 
       setModalNovaTarefaAberto(false);
       setTituloNova('');

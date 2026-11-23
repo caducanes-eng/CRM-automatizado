@@ -941,7 +941,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
                 e.preventDefault();
                 setSalvandoTarefaRapida(true);
                 try {
-                  await criarTarefa({
+                  const resTarefa = await criarTarefa({
                     leadId: modalAgendarTarefaLead.id,
                     titulo: `Acompanhamento: ${modalAgendarTarefaLead.nome} (${situacao})`,
                     descricao: descTarefaAgendada.trim() || undefined,
@@ -951,6 +951,11 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
                     horaAgendada: horaTarefaAgendada || undefined,
                     prioridade: 'alta',
                   });
+                  if (!resTarefa.ok) {
+                    setFeedbackToast(`A tarefa NÃO foi salva: ${resTarefa.erro}`);
+                    setTimeout(() => setFeedbackToast(null), 6000);
+                    return;
+                  }
                   setModalAgendarTarefaLead(null);
                   setFeedbackToast(`Tarefa agendada para ${modalAgendarTarefaLead.nome} em ${formatarDataBR(dataTarefaAgendada)}!`);
                   setTimeout(() => setFeedbackToast(null), 3500);

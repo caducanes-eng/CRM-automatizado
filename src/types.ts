@@ -773,7 +773,16 @@ export interface ImportarLeadItem {
   endereco?: string;
 }
 
+/** Resultado padrão de uma gravação: nunca finge sucesso. `erro` vem em português, pronto para mostrar. */
+export interface ResultadoGravacao<T = unknown> {
+  ok: boolean;
+  erro?: string;
+  dados?: T;
+}
+
 export interface ResultadoImportacao {
+  ok?: boolean;
+  erro?: string;
   totalCriados: number;
   totalAtualizados: number;
   totalIgnorados: number;

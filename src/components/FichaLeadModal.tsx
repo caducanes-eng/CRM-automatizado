@@ -420,7 +420,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
     if (e) e.preventDefault();
     if (!activeLeadId || !nome.trim()) return;
 
-    await atualizarLead(activeLeadId, {
+    const resLead = await atualizarLead(activeLeadId, {
       nome: nome.trim(),
       situacao,
       interesse: interesse.trim(),
@@ -439,6 +439,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
       dataEnvioLembrete24h: dataEnvioLembrete24h || undefined,
       mensagemLembrete24hEnviadaPor: mensagemLembrete24hEnviadaPor || undefined,
     });
+    if (!resLead.ok) return; // aviso já mostrado; mantém a ficha aberta em edição
 
     const isSemEtapa =
       situacao === 'Consulta agendada' || situacao === 'Procedimento agendado';
@@ -464,7 +465,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
     if (!activeLeadId || !nome.trim()) return;
 
     // 1. Atualizar Lead
-    await atualizarLead(activeLeadId, {
+    const resLead = await atualizarLead(activeLeadId, {
       nome: nome.trim(),
       situacao,
       interesse: interesse.trim(),
@@ -483,6 +484,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
       dataEnvioLembrete24h: dataEnvioLembrete24h || undefined,
       mensagemLembrete24hEnviadaPor: mensagemLembrete24hEnviadaPor || undefined,
     });
+    if (!resLead.ok) return; // aviso já mostrado; mantém a ficha aberta em edição
 
     // 2. Atualizar Etapa
     const isSemEtapa =
@@ -492,7 +494,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
     }
 
     // 3. Atualizar FichaLead
-    await atualizarFichaLead(activeLeadId, {
+    const resFicha = await atualizarFichaLead(activeLeadId, {
       telefone: telefone.trim(),
       origemLead,
       dataNascimento,
@@ -501,6 +503,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
       motivoPerda: statusVenda === 'Perdido' ? motivoPerda.trim() : '',
       dataPerda: statusVenda === 'Perdido' ? dataPerda || obterDataHoje() : '',
     });
+    if (!resFicha) return; // aviso já mostrado
 
     setIsEditingDadosBasicos(false);
     dispararFeedback('Ficha completa e agendamento salvos com sucesso!');
@@ -2166,7 +2169,7 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
 
                     setSalvandoTarefaFicha(true);
                     try {
-                      await criarTarefa({
+                      const resTarefa = await criarTarefa({
                         leadId: idAlvo,
                         titulo: tarefaFichaTitulo.trim(),
                         descricao: tarefaFichaDesc.trim() || undefined,
@@ -2176,6 +2179,10 @@ export const FichaLeadModal: React.FC<FichaLeadModalProps> = ({
                         situacaoOrigem: situacao,
                         etapaCadencia: lead?.etapaPorSituacao?.[situacao] || 'Ficha',
                       });
+                      if (!resTarefa.ok) {
+                        dispararFeedback(`A tarefa NÃO foi salva: ${resTarefa.erro}`);
+                        return;
+                      }
                       setShowNovaTarefaFicha(false);
                       setTarefaFichaTitulo('');
                       setTarefaFichaDesc('');

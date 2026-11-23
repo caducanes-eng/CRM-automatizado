@@ -781,70 +781,63 @@ export const supabaseService = {
     const client = getSupabaseClient();
     if (!client) return true;
 
+    const uuid = normalizarUuid(leadId);
+    const nowIso = new Date().toISOString();
+
+    const execCascade = async (): Promise<boolean> => {
+      // 1. Soft delete no próprio Lead (se falhar, nada foi apagado: erro sobe)
+      const { error } = await client
+        .from('leads')
+        .update({ deleted_at: nowIso, updated_at: nowIso })
+        .eq('id', uuid);
+      if (error) {
+        console.error('Erro ao efetuar soft delete no Lead:', error);
+        throw new Error(error.message || 'Falha ao excluir o lead.');
+      }
+
+      // 2 a 5. Cascata. Cada passo lê o erro; falhas são somadas e reportadas, nunca engolidas.
+      const falhas: string[] = [];
+
+      try {
+        await this.softDeleteFichaByLeadId(uuid);
+      } catch (e: any) {
+        falhas.push(`ficha (${e?.message || 'erro'})`);
+      }
+
+      try {
+        await this.softDeleteComprasByLeadId(uuid);
+      } catch (e: any) {
+        falhas.push(`compras (${e?.message || 'erro'})`);
+      }
+
+      const { error: errTarefas } = await client
+        .from('tarefas')
+        .update({ deleted_at: nowIso, updated_at: nowIso })
+        .eq('lead_id', uuid);
+      if (errTarefas) falhas.push(`tarefas (${errTarefas.message})`);
+
+      const { error: errHist } = await client
+        .from('historico_atendimentos')
+        .update({ deleted_at: nowIso, updated_at: nowIso })
+        .eq('lead_id', uuid);
+      if (errHist) falhas.push(`histórico (${errHist.message})`);
+
+      if (falhas.length > 0) {
+        console.error('Exclusão do lead concluída, mas a cascata falhou em:', falhas);
+        throw new Error(`O lead foi excluído, mas não foi possível limpar: ${falhas.join('; ')}.`);
+      }
+      return true;
+    };
+
+    // Espera limitada, mas sem mentir: estourar o tempo é falha, não sucesso.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const limite = new Promise<boolean>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('O banco demorou demais para responder. A exclusão pode não ter sido concluída.')), 15000);
+    });
     try {
-      const uuid = normalizarUuid(leadId);
-      const nowIso = new Date().toISOString();
-
-      const execCascade = async () => {
-        // 1. Soft delete no próprio Lead
-        const { error } = await client
-          .from('leads')
-          .update({
-            deleted_at: nowIso,
-            updated_at: nowIso,
-          })
-          .eq('id', uuid);
-
-        if (error) {
-          console.error('Erro ao efetuar soft delete no Lead:', error);
-          throw error;
-        }
-
-        // 2. Soft delete em cascata na Ficha do Lead
-        try {
-          await this.softDeleteFichaByLeadId(uuid);
-        } catch (e) {
-          console.warn('Aviso: Não foi possível atualizar soft delete na Ficha do Lead:', e);
-        }
-
-        // 3. Soft delete em cascata nas Compras do Lead
-        try {
-          await this.softDeleteComprasByLeadId(uuid);
-        } catch (e) {
-          console.warn('Aviso: Não foi possível atualizar soft delete nas Compras do Lead:', e);
-        }
-
-        // 4. Soft delete em cascata em Tarefas associadas ao Lead
-        try {
-          await client
-            .from('tarefas')
-            .update({ deleted_at: nowIso, updated_at: nowIso })
-            .eq('lead_id', uuid);
-        } catch (e) {
-          console.warn('Aviso: Não foi possível atualizar soft delete nas Tarefas do Lead:', e);
-        }
-
-        // 5. Soft delete em cascata em Histórico de Atendimentos
-        try {
-          await client
-            .from('historico_atendimentos')
-            .update({ deleted_at: nowIso, updated_at: nowIso })
-            .eq('lead_id', uuid);
-        } catch (e) {
-          console.warn('Aviso: Não foi possível atualizar soft delete no Histórico do Lead:', e);
-        }
-
-        return true;
-      };
-
-      // Limita a espera de rede a 4 segundos para evitar travamento da interface
-      return await Promise.race([
-        execCascade(),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 4000)),
-      ]);
-    } catch (e) {
-      console.warn('Aviso ao sincronizar exclusão com o Supabase:', e);
-      return false;
+      return await Promise.race([execCascade(), limite]);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   },
 
@@ -2543,6 +2536,11 @@ export async function criarTarefaSupabase(
   const nowIso = new Date().toISOString();
   const id = crypto.randomUUID();
 
+  // A coluna tarefas.lead_id é obrigatória no banco: avisa antes de tentar, em vez de gravar só no espelho.
+  if (!payload.leadId && getSupabaseClient()) {
+    throw new Error('Escolha o paciente da tarefa: o banco exige um paciente vinculado.');
+  }
+
   const dataAgendadaVal = payload.dataAgendada ? payload.dataAgendada.slice(0, 10) : nowIso.slice(0, 10);
   const horaAgendadaVal = payload.horaAgendada ? payload.horaAgendada.slice(0, 5) : '14:00';
   let dataVencimentoVal = nowIso;
@@ -2621,6 +2619,14 @@ export async function criarTarefaSupabase(
 
       let { error } = await client.from('tarefas').insert([dbPayload]);
 
+      // D11: o id do usuário logado pode não existir em public.usuarios (FK). A tarefa é gravada sem responsável
+      // em vez de falhar por um vínculo que o usuário nem vê.
+      if (error && error.code === '23503' && /usuario/i.test(`${error.message} ${error.details || ''}`)) {
+        dbPayload.usuario_id = null;
+        dbPayload.usuario_responsavel_id = null;
+        ({ error } = await client.from('tarefas').insert([dbPayload]));
+      }
+
       // Fallback para campos canônicos básicos
       if (error && (error.code === '42703' || error.message?.includes('does not exist') || error.message?.includes('column') || error.message?.includes('schema'))) {
         const canonicalPayload: Record<string, any> = {
@@ -2648,11 +2654,13 @@ export async function criarTarefaSupabase(
 
       if (error) {
         console.error('Erro ao inserir tarefa no Supabase:', error);
-      } else {
-        console.log('✅ Tarefa gravada com sucesso no Supabase:', novaTarefa.id);
+        throw new Error(error.message || 'O banco recusou a tarefa.');
       }
-    } catch (e) {
-      console.warn('Falha na comunicação de tarefas com Supabase:', e);
+    } catch (e: any) {
+      console.warn('Falha ao gravar tarefa no Supabase:', e);
+      // Desfaz o espelho no Firestore para não sobrar tarefa fantasma.
+      firestoreService.excluirTarefa(novaTarefa.id).catch(() => {});
+      throw new Error(e?.message || 'Falha de comunicação ao gravar a tarefa.');
     }
   }
 

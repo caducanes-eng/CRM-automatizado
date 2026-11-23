@@ -337,11 +337,12 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
 
     // Registra o envio no Lead
     const agora = formatarDataHoraAgora();
-    await atualizarLead(leadItem.id, {
+    const res = await atualizarLead(leadItem.id, {
       lembrete24hEnviado: true,
       dataEnvioLembrete24h: agora,
       mensagemLembrete24hEnviadaPor: responsavelNome || 'Secretária',
     });
+    if (!res.ok) return; // o aviso de erro já foi mostrado e a tela voltou ao valor anterior
 
     dispararFeedback(`Lembrete 24h enviado e registrado para ${leadItem.nome}!`);
   };
@@ -349,11 +350,12 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
   // Marcar lembrete 24h como enviado manualmente
   const handleMarcarLembreteEnviado = async (leadId: string, leadNome: string) => {
     const agora = formatarDataHoraAgora();
-    await atualizarLead(leadId, {
+    const res = await atualizarLead(leadId, {
       lembrete24hEnviado: true,
       dataEnvioLembrete24h: agora,
       mensagemLembrete24hEnviadaPor: responsavelNome || 'Secretária',
     });
+    if (!res.ok) return;
     dispararFeedback(`Lembrete 24h marcado como enviado para ${leadNome}!`);
   };
 
@@ -363,9 +365,10 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
     novoStatus: StatusConfirmacaoAgendamento,
     leadNome: string
   ) => {
-    await atualizarLead(leadId, {
+    const res = await atualizarLead(leadId, {
       statusConfirmacaoAgendamento: novoStatus,
     });
+    if (!res.ok) return;
     dispararFeedback(`Status do agendamento de ${leadNome} alterado para "${novoStatus}"!`);
   };
 
@@ -453,7 +456,9 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
       // Criar Novo Paciente e Agendamento no Supabase
       const situacaoCriar = isProcedimento ? 'Procedimento agendado' : 'Consulta agendada';
       const eId = normalizarUuid(empresaAtivaId || ID_EMPRESA_PADRAO);
-      const novoLead = await criarLead({
+      let novoLead: Lead;
+      try {
+        novoLead = await criarLead({
         empresaId: eId,
         nome: formNome.trim(),
         situacao: situacaoCriar,
@@ -471,7 +476,10 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
         ficha: {
           telefone: formTelefone.trim(),
         },
-      });
+        });
+      } catch {
+        return; // aviso já mostrado; mantém o formulário aberto
+      }
 
       if (novoLead && formLembrete24hEnviado) {
         await atualizarLead(novoLead.id, {
@@ -499,7 +507,7 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
             : isProcedimento ? 'Procedimento agendado' : 'Consulta agendada')
         : (isProcedimento ? 'Procedimento agendado' : 'Consulta agendada');
 
-      await atualizarLead(targetLeadId, {
+      const resEdicao = await atualizarLead(targetLeadId, {
         nome: formNome.trim() || leadAlvo?.nome || 'Paciente',
         dataAgendamento: formDataAgendamento,
         horarioAgendamento: formHorarioAgendamento,
@@ -520,6 +528,7 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
             }
           : {}),
       });
+      if (!resEdicao.ok) return; // aviso já mostrado; mantém o formulário aberto
 
       if (formTelefone.trim()) {
         await atualizarFichaLead(targetLeadId, {
@@ -539,12 +548,13 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
   // Remover apenas o agendamento (manter o paciente)
   const handleRemoverApenasAgendamento = async () => {
     if (!leadExcluindo) return;
-    await atualizarLead(leadExcluindo.id, {
+    const res = await atualizarLead(leadExcluindo.id, {
       dataAgendamento: '',
       horarioAgendamento: '',
       situacao: 'Em captação',
       statusConfirmacaoAgendamento: undefined,
     });
+    if (!res.ok) return;
     dispararFeedback(`Agendamento de ${leadExcluindo.nome} removido. O paciente continua no CRM.`);
     setLeadExcluindo(null);
   };
@@ -552,7 +562,8 @@ export const ConsultasAgendadasView: React.FC<ConsultasAgendadasViewProps> = ({
   // Excluir paciente definitivamente do Supabase
   const handleConfirmarExcluirDefinitivo = async () => {
     if (!leadExcluindo) return;
-    await excluirLead(leadExcluindo.id, true);
+    const apagou = await excluirLead(leadExcluindo.id, true);
+    if (!apagou) return; // aviso já mostrado
     dispararFeedback(`Paciente e agendamento de ${leadExcluindo.nome} apagados do Supabase.`);
     setLeadExcluindo(null);
   };
