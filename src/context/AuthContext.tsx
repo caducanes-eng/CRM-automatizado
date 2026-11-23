@@ -799,8 +799,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (isSupabaseConfigured()) {
       try {
         await supabaseService.salvarUsuario(novoUsuario);
-      } catch (errSupabase) {
-        console.warn('Aviso: falha ao espelhar colaborador no Supabase:', errSupabase);
+      } catch (errSupabase: any) {
+        console.error('Falha ao gravar colaborador no Supabase:', errSupabase);
+        setUsuarios((prev) => prev.filter((u) => u.id !== novoUsuario.id));
+        throw new Error(`O colaborador não foi criado: ${errSupabase?.message || 'falha ao gravar no banco'}`);
       }
     }
 
@@ -884,8 +886,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (isSupabaseConfigured()) {
       try {
         await supabaseService.salvarUsuario(usuarioAtualizado);
-      } catch (eSupabase) {
-        console.warn('Aviso: falha ao atualizar colaborador no Supabase:', eSupabase);
+      } catch (eSupabase: any) {
+        console.error('Falha ao atualizar colaborador no Supabase:', eSupabase);
+        setUsuarios((prev) => prev.map((u) => (u.id === usuarioId ? usuarioAlvo : u)));
+        throw new Error(`As alterações não foram salvas: ${eSupabase?.message || 'falha ao gravar no banco'}`);
       }
     }
 
@@ -895,11 +899,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const alternarStatusColaborador = async (usuarioId: string, ativo: boolean): Promise<boolean> => {
-    return (await atualizarColaborador(usuarioId, { ativo })) !== null;
+    try {
+      return (await atualizarColaborador(usuarioId, { ativo })) !== null;
+    } catch {
+      return false;
+    }
   };
 
   const redefinirSenhaColaborador = async (usuarioId: string, novaSenha: string): Promise<boolean> => {
-    return (await atualizarColaborador(usuarioId, { senhaPadrao: novaSenha })) !== null;
+    try {
+      return (await atualizarColaborador(usuarioId, { senhaPadrao: novaSenha })) !== null;
+    } catch {
+      return false;
+    }
   };
 
   const excluirColaborador = async (usuarioId: string, hardDelete = false): Promise<boolean> => {
@@ -916,8 +928,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             updated_at: timestamp,
             ativo: false,
           });
-        } catch (eSupabase) {
-          console.warn('Aviso ao excluir colaborador no Supabase:', eSupabase);
+        } catch (eSupabase: any) {
+          console.error('Falha ao excluir colaborador no Supabase:', eSupabase);
+          if (usuarioAlvo) setUsuarios((prev) => [usuarioAlvo, ...prev.filter((u) => u.id !== usuarioId)]);
+          throw new Error(eSupabase?.message || 'falha ao gravar no banco');
         }
       }
     } else {
@@ -932,8 +946,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             updated_at: timestamp,
             ativo: false,
           });
-        } catch (eSupabase) {
-          console.warn('Aviso ao registrar soft-delete no Supabase:', eSupabase);
+        } catch (eSupabase: any) {
+          console.error('Falha ao registrar exclusão no Supabase:', eSupabase);
+          if (usuarioAlvo) setUsuarios((prev) => prev.map((u) => (u.id === usuarioId ? usuarioAlvo : u)));
+          throw new Error(eSupabase?.message || 'falha ao gravar no banco');
         }
       }
     }

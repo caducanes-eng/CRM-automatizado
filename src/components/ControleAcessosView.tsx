@@ -254,7 +254,7 @@ export const ControleAcessosView: React.FC = () => {
       setUsuarioEmEdicao(null);
     } catch (err: any) {
       console.error('Erro ao salvar usuário:', err);
-      setFormErro('Ocorreu um erro ao salvar o colaborador. Tente novamente.');
+      setFormErro(err?.message || 'Ocorreu um erro ao salvar o colaborador. Tente novamente.');
     } finally {
       setFormSalvando(false);
     }
@@ -267,8 +267,9 @@ export const ControleAcessosView: React.FC = () => {
       await excluirColaborador(usuarioExcluir.id);
       dispararFeedback(`Colaborador "${usuarioExcluir.nome}" removido do sistema.`);
       setUsuarioExcluir(null);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Erro ao excluir usuário:', e);
+      dispararFeedback(`O colaborador NÃO foi removido: ${e?.message || 'falha ao gravar no banco'}`);
     }
   };
 
@@ -276,7 +277,11 @@ export const ControleAcessosView: React.FC = () => {
   const handleConfirmarRedefinirSenha = async () => {
     if (!usuarioRedefinirSenha || !novaSenhaTemp.trim()) return;
     try {
-      await redefinirSenhaColaborador(usuarioRedefinirSenha.id, novaSenhaTemp.trim());
+      const okSenha = await redefinirSenhaColaborador(usuarioRedefinirSenha.id, novaSenhaTemp.trim());
+      if (!okSenha) {
+        dispararFeedback('A nova senha NÃO foi salva. Tente novamente.');
+        return;
+      }
       dispararFeedback(`Nova senha configurada para "${usuarioRedefinirSenha.nome}".`);
       setUsuarioRedefinirSenha(null);
     } catch (e) {
@@ -551,7 +556,10 @@ export const ControleAcessosView: React.FC = () => {
                   <button
                     id={`btn-toggle-status-${user.id}`}
                     type="button"
-                    onClick={() => alternarStatusColaborador(user.id, !user.ativo)}
+                    onClick={async () => {
+                      const okStatus = await alternarStatusColaborador(user.id, !user.ativo);
+                      if (!okStatus) dispararFeedback(`Não foi possível alterar o acesso de "${user.nome}". Nada foi gravado.`);
+                    }}
                     disabled={isEu} // Não desativa a si próprio
                     title={isEu ? 'Você não pode desativar seu próprio usuário' : user.ativo ? 'Clique para desativar' : 'Clique para ativar'}
                     className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden disabled:opacity-40 disabled:cursor-not-allowed ${

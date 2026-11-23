@@ -1171,86 +1171,15 @@ export const supabaseService = {
     const client = getSupabaseClient();
     if (!client) return true;
 
-    try {
-      const row = supabaseMapper.empresaToDb(empresa, idCustom);
-      const { error } = await client.from('empresas').upsert(row, { onConflict: 'id' });
-      if (!error) return true;
-
-      console.warn('Erro com payload completo de empresa no Supabase, tentando com fallback de estética:', error.message);
-      
-      // Tentativa 2: Payload seguro contendo configurações estéticas e cadastrais
-      const rowFallbackEstetica = {
-        id: idEfetivo,
-        nome: row.nome,
-        subtitulo: row.subtitulo,
-        cnpj: row.cnpj,
-        telefone: row.telefone,
-        email: row.email,
-        endereco: row.endereco,
-        unidade_padrao: row.unidade_padrao,
-        status: row.status,
-        tipo_logo: row.tipo_logo,
-        logo_url: row.logo_url,
-        monograma_iniciais: row.monograma_iniciais,
-        estetica_config: row.estetica_config,
-        esteticas_salvas: row.esteticas_salvas,
-        ativa: row.ativa,
-        updated_at: row.updated_at,
-      };
-
-      const res2 = await client.from('empresas').upsert(rowFallbackEstetica, { onConflict: 'id' });
-      if (!res2.error) return true;
-
-      // Tentativa 3: Se esteticas_salvas não existir na tabela, tenta apenas estetica_config
-      console.warn('Tentando fallback apenas com estetica_config:', res2.error.message);
-      const rowFallbackEsteticaConfig = {
-        id: idEfetivo,
-        nome: row.nome,
-        subtitulo: row.subtitulo,
-        cnpj: row.cnpj,
-        telefone: row.telefone,
-        email: row.email,
-        endereco: row.endereco,
-        unidade_padrao: row.unidade_padrao,
-        status: row.status,
-        tipo_logo: row.tipo_logo,
-        logo_url: row.logo_url,
-        monograma_iniciais: row.monograma_iniciais,
-        estetica_config: row.estetica_config,
-        ativa: row.ativa,
-        updated_at: row.updated_at,
-      };
-
-      const res3 = await client.from('empresas').upsert(rowFallbackEsteticaConfig, { onConflict: 'id' });
-      if (!res3.error) return true;
-
-      console.warn('Tentando fallback básico cadastral:', res3.error.message);
-      const rowFallbackBasico = {
-        id: idEfetivo,
-        nome: row.nome,
-        subtitulo: row.subtitulo,
-        cnpj: row.cnpj,
-        telefone: row.telefone,
-        email: row.email,
-        endereco: row.endereco,
-        unidade_padrao: row.unidade_padrao,
-        status: row.status,
-        tipo_logo: row.tipo_logo,
-        logo_url: row.logo_url,
-        monograma_iniciais: row.monograma_iniciais,
-        ativa: row.ativa,
-        updated_at: row.updated_at,
-      };
-      const res4 = await client.from('empresas').upsert(rowFallbackBasico, { onConflict: 'id' });
-      if (res4.error) {
-        console.error('Erro ao salvar empresa no Supabase (fallback básico):', res4.error);
-        return false;
-      }
-      return true;
-    } catch (e) {
-      console.error('Exceção ao salvar empresa no Supabase:', e);
-      return false;
+    // Uma única tentativa: todas as colunas do mapper existem em public.empresas. Se o banco recusar,
+    // o erro sobe para a tela em vez de ser mascarado por gravações parciais.
+    const row = supabaseMapper.empresaToDb(empresa, idCustom);
+    const { error } = await client.from('empresas').upsert(row, { onConflict: 'id' });
+    if (error) {
+      console.error('Erro ao salvar empresa no Supabase:', error);
+      throw new Error(error.message || 'O banco recusou os dados da clínica.');
     }
+    return true;
   },
 
   /**

@@ -530,8 +530,10 @@ export const EmpresaProvider: React.FC<{
       if (isSupabaseConfigured()) {
         try {
           await supabaseService.salvarEmpresa(novaEmpresa);
-        } catch (e) {
-          console.warn('Erro ao salvar empresa no Supabase:', e);
+        } catch (e: any) {
+          console.error('Erro ao salvar empresa no Supabase:', e);
+          setEmpresas((prev) => prev.filter((emp) => emp.id !== id));
+          throw new Error(`A clínica não foi criada: ${e?.message || 'falha ao gravar no banco'}`);
         }
       }
 
@@ -625,6 +627,8 @@ export const EmpresaProvider: React.FC<{
         version: (empresaBase.version || 1) + 1,
       };
 
+      const empresaExistia = empresas.some((e) => e.id === empresaId);
+
       // Atualiza o estado das empresas imediatamente
       setEmpresas((prev) => {
         const existe = prev.some((e) => e.id === empresaId);
@@ -643,8 +647,15 @@ export const EmpresaProvider: React.FC<{
       if (isSupabaseConfigured()) {
         try {
           await supabaseService.salvarEmpresa(empresaAtualizada);
-        } catch (e) {
-          console.warn('Erro ao atualizar empresa no Supabase:', e);
+        } catch (e: any) {
+          console.error('Erro ao atualizar empresa no Supabase:', e);
+          // Reverte para o que existia antes da edição
+          setEmpresas((prev) =>
+            empresaExistia
+              ? prev.map((emp) => (emp.id === empresaId ? empresaBase : emp))
+              : prev.filter((emp) => emp.id !== empresaId)
+          );
+          throw new Error(`As alterações não foram salvas: ${e?.message || 'falha ao gravar no banco'}`);
         }
       }
 
@@ -659,8 +670,12 @@ export const EmpresaProvider: React.FC<{
         console.warn('Acesso negado: Apenas o Gestor Master pode desligar/suspender empresas.');
         return false;
       }
-      const res = await atualizarEmpresa(empresaId, { status: 'suspensa' });
-      return res !== null;
+      try {
+        const res = await atualizarEmpresa(empresaId, { status: 'suspensa' });
+        return res !== null;
+      } catch {
+        return false;
+      }
     },
     [atualizarEmpresa, isPlataformaAdmin]
   );
@@ -671,8 +686,12 @@ export const EmpresaProvider: React.FC<{
         console.warn('Acesso negado: Apenas o Gestor Master pode reativar empresas.');
         return false;
       }
-      const res = await atualizarEmpresa(empresaId, { status: 'ativa' });
-      return res !== null;
+      try {
+        const res = await atualizarEmpresa(empresaId, { status: 'ativa' });
+        return res !== null;
+      } catch {
+        return false;
+      }
     },
     [atualizarEmpresa, isPlataformaAdmin]
   );
