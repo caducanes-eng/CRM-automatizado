@@ -265,7 +265,7 @@ interface CrmContextType {
   excluirLead: (leadId: string, hardDelete?: boolean) => Promise<boolean>;
   reativarLead: (leadId: string, novaSituacao?: SituacaoLead) => Promise<ResultadoGravacao<Lead>>;
   marcarComoPerdido: (leadId: string, motivo: string, dataPerda?: string) => Promise<ResultadoGravacao<Lead>>;
-  definirEtapaPorSituacao: (leadId: string, situacao: SituacaoLead, etapa: string) => Promise<ResultadoGravacao<Lead>>;
+  definirEtapaPorSituacao: (leadId: string, situacao: SituacaoLead, etapa: string, contaComoContato?: boolean) => Promise<ResultadoGravacao<Lead>>;
   definirEtapaSituacaoAtual: (leadId: string, etapa: string) => Promise<ResultadoGravacao<Lead>>;
   registrarContatoHoje: (leadId: string) => Promise<ResultadoGravacao<Lead>>;
   definirStatusGrupoNutricao: (leadId: string, status: StatusGrupoNutricao) => Promise<ResultadoGravacao<Lead>>;
@@ -908,7 +908,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 
   const definirEtapaPorSituacao = useCallback(
-    async (leadId: string, situacao: SituacaoLead, etapa: string): Promise<ResultadoGravacao<Lead>> => {
+    async (leadId: string, situacao: SituacaoLead, etapa: string, contaComoContato: boolean = true): Promise<ResultadoGravacao<Lead>> => {
       const target = leads.find((l) => l.id === leadId);
       const mapaAtualizado = { ...(target?.etapaPorSituacao || {}), [situacao]: etapa };
       const hoje = new Date().toISOString().split('T')[0];
@@ -928,25 +928,33 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           return atualizarLead(leadId, {
             situacao: 'Reativação',
             etapaPorSituacao: mapaAtualizado,
-            dataUltimoContato: hoje,
-            dataUltimoContatoPorSituacao: {
-              ...(target?.dataUltimoContatoPorSituacao || {}),
-              [situacao]: hoje,
-              Reativação: hoje,
-            },
-            dataUltimaAcao: timestamp,
+            ...(contaComoContato
+              ? {
+                  dataUltimoContato: hoje,
+                  dataUltimoContatoPorSituacao: {
+                    ...(target?.dataUltimoContatoPorSituacao || {}),
+                    [situacao]: hoje,
+                    Reativação: hoje,
+                  },
+                  dataUltimaAcao: timestamp,
+                }
+              : {}),
           });
         }
       }
 
       return atualizarLead(leadId, {
         etapaPorSituacao: mapaAtualizado,
-        dataUltimoContato: hoje,
-        dataUltimoContatoPorSituacao: {
-          ...(target?.dataUltimoContatoPorSituacao || {}),
-          [situacao]: hoje,
-        },
-        dataUltimaAcao: timestamp,
+        ...(contaComoContato
+          ? {
+              dataUltimoContato: hoje,
+              dataUltimoContatoPorSituacao: {
+                ...(target?.dataUltimoContatoPorSituacao || {}),
+                [situacao]: hoje,
+              },
+              dataUltimaAcao: timestamp,
+            }
+          : {}),
       });
     },
     [leads, atualizarLead]
@@ -1082,18 +1090,21 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       setTodasComprasRaw((prev) => [novaCompra, ...prev]);
 
-      // Ao lançar compra, muda o statusVenda do lead para 'Venda feita'
-      await atualizarLead(payload.leadId, { statusVenda: 'Venda feita' });
-
       try {
         await supabaseService.salvarCompra(novaCompra, eId);
-      } catch (e) {
+      } catch (e: any) {
         console.error('Erro ao salvar compra no Supabase:', e);
+        setTodasComprasRaw((prev) => prev.filter((c) => c.id !== novaCompra.id));
+        avisarErro(`A compra não foi salva. ${e?.message || 'Falha de comunicação com o banco.'}`);
+        throw e;
       }
+
+      // Só depois de a compra estar salva o lead passa para 'Venda feita'
+      await atualizarLead(payload.leadId, { statusVenda: 'Venda feita' });
 
       return novaCompra;
     },
-    [empresaIdEfetiva, todosLeadsRaw, atualizarLead]
+    [empresaIdEfetiva, todosLeadsRaw, atualizarLead, avisarErro]
   );
 
   const registrarCompra = useCallback(
@@ -1148,13 +1159,16 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       try {
         await supabaseService.salvarProcedimento(novoProc, eId);
-      } catch (e) {
+      } catch (e: any) {
         console.error('Erro ao criar procedimento no Supabase:', e);
+        setTodosProcedimentosRaw((prev) => prev.filter((p) => p.id !== novoProc.id));
+        avisarErro(`O procedimento não foi salvo. ${e?.message || 'Falha de comunicação com o banco.'}`);
+        throw e;
       }
 
       return novoProc;
     },
-    [empresaIdEfetiva]
+    [empresaIdEfetiva, avisarErro]
   );
 
   const salvarProcedimento = useCallback(
@@ -1172,11 +1186,13 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const atualizarProcedimento = useCallback(
     async (id: string, dados: AtualizarProcedimentoPayload): Promise<ProcedimentoClinica | null> => {
       let procAtualizado: ProcedimentoClinica | null = null;
+      let procAnterior: ProcedimentoClinica | null = null;
       const timestamp = new Date().toISOString();
 
       setTodosProcedimentosRaw((prev) =>
         prev.map((p) => {
           if (p.id !== id) return p;
+          procAnterior = p;
           const eId = normalizarUuid(p.empresaId || (p as any).empresa_id || empresaIdEfetiva);
           procAtualizado = {
             ...p,
@@ -1198,8 +1214,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         try {
           const procEid = normalizarUuid((procAtualizado as ProcedimentoClinica).empresaId || empresaIdEfetiva);
           await supabaseService.salvarProcedimento(procAtualizado, procEid);
-        } catch (e) {
+        } catch (e: any) {
           console.error('Erro ao atualizar procedimento no Supabase:', e);
+          const anterior = procAnterior as ProcedimentoClinica | null;
+          if (anterior) setTodosProcedimentosRaw((prev) => prev.map((p) => (p.id === id ? anterior : p)));
+          avisarErro(`A alteração do procedimento não foi salva. ${e?.message || 'Falha de comunicação com o banco.'}`);
+          return null;
         }
       }
 
@@ -1381,12 +1401,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       status: StatusTarefa,
       observacaoConclusao?: string
     ): Promise<boolean> => {
-      await supabaseService.atualizarStatusTarefa(
-        tarefaId,
-        status,
-        observacaoConclusao,
-        user?.uid
-      );
+      try {
+        await supabaseService.atualizarStatusTarefa(
+          tarefaId,
+          status,
+          observacaoConclusao,
+          user?.uid
+        );
+      } catch (e: any) {
+        console.error('Erro ao atualizar tarefa no Supabase:', e);
+        avisarErro(`A tarefa não foi atualizada. ${e?.message || 'Falha de comunicação com o banco.'}`);
+        return false;
+      }
 
       const nowIso = new Date().toISOString();
       setTodasTarefasRaw((prev) =>
@@ -1405,16 +1431,22 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       );
       return true;
     },
-    [user?.uid]
+    [user?.uid, avisarErro]
   );
 
   const excluirTarefa = useCallback(
     async (tarefaId: string): Promise<boolean> => {
+      try {
+        await supabaseService.excluirTarefa(tarefaId);
+      } catch (e: any) {
+        console.error('Erro ao excluir tarefa no Supabase:', e);
+        avisarErro(`A tarefa não foi excluída. ${e?.message || 'Falha de comunicação com o banco.'}`);
+        return false;
+      }
       setTodasTarefasRaw((prev) => prev.filter((t) => t.id !== tarefaId));
-      await supabaseService.excluirTarefa(tarefaId);
       return true;
     },
-    []
+    [avisarErro]
   );
 
   // Cálculo das estatísticas de procedimentos

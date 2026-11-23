@@ -122,7 +122,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
     if (!modalEtapaLead) return;
     const leadAtual = leads.find((l) => l.id === modalEtapaLead.id) || modalEtapaLead;
     const primeira = reiniciarCadencia(situacao);
-    const r = await definirEtapaPorSituacao(leadAtual.id, situacao, primeira);
+    const r = await definirEtapaPorSituacao(leadAtual.id, situacao, primeira, false);
     if (!r.ok) {
       setFeedbackToast(`Não foi possível salvar: ${(r as any)?.erro || 'tente novamente'}`);
       setTimeout(() => setFeedbackToast(null), 4500);
@@ -157,7 +157,7 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
   // 1. Filtrar SOMENTE leads cuja situação atual seja a situação da tela
   const leadsDaSituacao = useMemo(() => {
     return leads.filter(
-      (lead) => lead.situacao === situacao && !lead.deleted_at && !estaForaDaCadencia(lead.statusVenda)
+      (lead) => lead.situacao === situacao && !lead.deleted_at && !estaForaDaCadencia(lead.statusVenda, lead.situacao)
     );
   }, [leads, situacao]);
 
@@ -252,10 +252,6 @@ export const CadenciaView: React.FC<CadenciaViewProps> = ({
       });
   }, [leadsProcessados, termoBusca, filtroStatus, ordenacao]);
 
-  // Manipulador de mudança de etapa
-  const handleMudarEtapa = (leadId: string, novaEtapa: string) => {
-    definirEtapaPorSituacao(leadId, situacao, novaEtapa);
-  };
 
   // Alternar ordenação
   const handleToggleOrdenacao = (campo: 'nome' | 'dataEntrada' | 'diasCorridos' | 'status') => {
